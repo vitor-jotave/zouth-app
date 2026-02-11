@@ -7,6 +7,7 @@ use App\Models\Product;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\File;
 
 class ProductStoreRequest extends FormRequest
 {
@@ -69,6 +70,11 @@ class ProductStoreRequest extends FormRequest
             'variant_stocks.*.color_name' => ['nullable', 'string', 'max:50'],
             'variant_stocks.*.quantity' => ['required', 'integer', 'min:0'],
             'variant_stocks.*.sku_variant' => ['nullable', 'string', 'max:255'],
+
+            // Media (optional on create)
+            'images' => ['nullable', 'array', 'max:10'],
+            'images.*' => [File::image()->max(5120)],
+            'video' => ['nullable', File::types(['mp4', 'mov', 'webm'])->max(51200)],
         ];
     }
 
@@ -133,6 +139,7 @@ class ProductStoreRequest extends FormRequest
             if ($hasSizes || $hasColors) {
                 if ($stocks->isEmpty()) {
                     $validator->errors()->add('variant_stocks', 'Informe o estoque de todas as variacoes.');
+
                     return;
                 }
             }

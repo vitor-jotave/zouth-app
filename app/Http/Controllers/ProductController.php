@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ProductMediaType;
 use App\Enums\ProductSize;
 use App\Http\Requests\ProductStoreRequest;
 use App\Http\Requests\ProductUpdateRequest;
@@ -39,8 +40,8 @@ class ProductController extends Controller
             ->with(['category', 'media'])
             ->when($request->search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
-                    $q->where('name', 'like', '%' . $search . '%')
-                        ->orWhere('sku', 'like', '%' . $search . '%');
+                    $q->where('name', 'like', '%'.$search.'%')
+                        ->orWhere('sku', 'like', '%'.$search.'%');
                 });
             })
             ->when($request->category_id, function ($query, $categoryId) {
@@ -94,6 +95,15 @@ class ProductController extends Controller
         ]);
 
         $product = $this->upsertService->createProduct($payload);
+
+        // Upload media files if provided during creation
+        foreach ($request->file('images', []) as $image) {
+            $this->upsertService->storeMedia($product, $image, ProductMediaType::Image);
+        }
+
+        if ($request->hasFile('video')) {
+            $this->upsertService->storeMedia($product, $request->file('video'), ProductMediaType::Video);
+        }
 
         return redirect()
             ->route('manufacturer.products.edit', $product)

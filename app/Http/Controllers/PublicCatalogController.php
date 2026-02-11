@@ -22,15 +22,25 @@ class PublicCatalogController extends Controller
             ->whereHas('manufacturer', fn ($query) => $query->where('is_active', true))
             ->firstOrFail();
 
-        CatalogVisit::create([
-            'catalog_setting_id' => $setting->id,
-            'manufacturer_id' => $setting->manufacturer_id,
-            'public_token' => $setting->public_token,
-            'ip_address' => $request->ip(),
-            'user_agent' => $request->userAgent(),
-            'referer' => $request->header('referer'),
-            'visited_at' => now(),
-        ]);
+        // Track visit without breaking the render if it fails
+        try {
+            CatalogVisit::create([
+                'catalog_setting_id' => $setting->id,
+                'manufacturer_id' => $setting->manufacturer_id,
+                'public_token' => $setting->public_token,
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'referer' => $request->header('referer'),
+                'utm_source' => $request->query('utm_source'),
+                'utm_medium' => $request->query('utm_medium'),
+                'utm_campaign' => $request->query('utm_campaign'),
+                'utm_term' => $request->query('utm_term'),
+                'utm_content' => $request->query('utm_content'),
+                'visited_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         $products = Product::where('manufacturer_id', $setting->manufacturer_id)
             ->where('is_active', true)
@@ -46,7 +56,7 @@ class PublicCatalogController extends Controller
                 'name' => $setting->manufacturer->name,
                 'slug' => $setting->manufacturer->slug,
             ],
-            'catalog_settings' => new CatalogSettingResource($setting),
+            'catalog_settings' => (new CatalogSettingResource($setting))->resolve(request()),
             'products' => ProductCatalogResource::collection($products),
         ]);
     }

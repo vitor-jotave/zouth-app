@@ -38,6 +38,24 @@ class CatalogSettingUpdateRequest extends FormRequest
             'background_color' => ['required', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'font_family' => ['required', 'in:space-grotesk,fraunces,ibm-plex'],
             'public_link_active' => ['required', 'boolean'],
+
+            // Premium customization
+            'layout_preset' => ['sometimes', 'in:minimal,playful,boutique'],
+            'layout_density' => ['sometimes', 'in:comfortable,compact'],
+            'card_style' => ['sometimes', 'in:flat,soft'],
+            'background_mode' => ['sometimes', 'in:solid,image,pattern,gradient'],
+            'background_image_opacity' => ['sometimes', 'integer', 'min:0', 'max:100'],
+            'background_overlay_color' => ['sometimes', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'background_overlay_opacity' => ['sometimes', 'integer', 'min:0', 'max:100'],
+            'background_blur' => ['sometimes', 'integer', 'min:0', 'max:12'],
+            'pattern_id' => ['nullable', 'in:confetti,stars,clouds,dots'],
+            'pattern_color' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'pattern_opacity' => ['sometimes', 'integer', 'min:0', 'max:100'],
+            'gradient_id' => ['nullable', 'in:sunset,soft-sky,mint,ocean,lavender,peach'],
+            'sections' => ['sometimes', 'array'],
+            'sections.*.type' => ['required', 'in:hero,collections,product_grid'],
+            'sections.*.enabled' => ['required', 'boolean'],
+            'sections.*.props' => ['sometimes', 'array'],
         ];
     }
 

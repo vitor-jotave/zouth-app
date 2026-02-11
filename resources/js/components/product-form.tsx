@@ -1,5 +1,5 @@
 import { router, useForm } from '@inertiajs/react';
-import { ArrowDown, ArrowUp, ImagePlus, Palette, Package, Shirt } from 'lucide-react';
+import { ArrowDown, ArrowUp, ImagePlus, Package, Palette, Shirt, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
@@ -155,7 +155,22 @@ export function ProductForm({
           }))
         : product?.variant_stocks ?? [];
 
-    const { data, setData, post, put, processing, errors } = useForm({
+    const { data, setData, post, put, processing, errors } = useForm<{
+        name: string;
+        sku: string;
+        description: string;
+        product_category_id: string | number;
+        has_size_variants: boolean;
+        has_color_variants: boolean;
+        base_quantity: number;
+        is_active: boolean;
+        sort_order: number;
+        sizes: string[];
+        colors: ProductColor[];
+        variant_stocks: ProductVariantStock[];
+        images: File[];
+        video: File | null;
+    }>({
         name: product?.name ?? '',
         sku: product?.sku ?? '',
         description: product?.description ?? '',
@@ -168,6 +183,8 @@ export function ProductForm({
         sizes: initialSizes,
         colors: initialColors,
         variant_stocks: initialStocks,
+        images: [],
+        video: null,
     });
 
     const [step, setStep] = useState(0);
@@ -213,7 +230,7 @@ export function ProductForm({
         event.preventDefault();
 
         if (mode === 'create') {
-            post('/manufacturer/products');
+            post('/manufacturer/products', { forceFormData: true });
             return;
         }
 
@@ -559,44 +576,46 @@ export function ProductForm({
                         <CardTitle>Midia</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        {mode === 'create' && (
-                            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                                Salve o produto para adicionar fotos e video.
-                            </div>
-                        )}
-
-                        {mode === 'edit' && (
-                            <div className="space-y-4">
-                                <div className="grid gap-4 md:grid-cols-2">
-                                    <div className="space-y-2">
-                                        <Label>Adicionar fotos</Label>
-                                        <Input
-                                            ref={imagesInputRef}
-                                            type="file"
-                                            accept="image/*"
-                                            multiple
-                                            onChange={(event) =>
-                                                setImagesToUpload(
-                                                    Array.from(event.target.files ?? []),
-                                                )
+                        <div className="space-y-4">
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label>Adicionar fotos</Label>
+                                    <Input
+                                        ref={imagesInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        onChange={(event) => {
+                                            const files = Array.from(event.target.files ?? []);
+                                            if (mode === 'create') {
+                                                setData('images', [...data.images, ...files]);
+                                            } else {
+                                                setImagesToUpload(files);
                                             }
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Adicionar video</Label>
-                                        <Input
-                                            ref={videoInputRef}
-                                            type="file"
-                                            accept="video/mp4,video/quicktime,video/webm"
-                                            onChange={(event) =>
-                                                setVideoToUpload(
-                                                    event.target.files?.[0] ?? null,
-                                                )
-                                            }
-                                        />
-                                    </div>
+                                        }}
+                                    />
+                                    <InputError message={errors.images} />
                                 </div>
+                                <div className="space-y-2">
+                                    <Label>Adicionar video</Label>
+                                    <Input
+                                        ref={videoInputRef}
+                                        type="file"
+                                        accept="video/mp4,video/quicktime,video/webm"
+                                        onChange={(event) => {
+                                            const file = event.target.files?.[0] ?? null;
+                                            if (mode === 'create') {
+                                                setData('video', file);
+                                            } else {
+                                                setVideoToUpload(file);
+                                            }
+                                        }}
+                                    />
+                                    <InputError message={errors.video} />
+                                </div>
+                            </div>
 
+                            {mode === 'edit' && (
                                 <Button
                                     type="button"
                                     onClick={handleMediaUpload}
@@ -607,8 +626,55 @@ export function ProductForm({
                                 >
                                     Enviar midia
                                 </Button>
-                            </div>
-                        )}
+                            )}
+
+                            {mode === 'create' && data.images.length > 0 && (
+                                <div className="space-y-2">
+                                    <Label className="text-xs text-muted-foreground">
+                                        {data.images.length} foto(s) selecionada(s)
+                                    </Label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {data.images.map((file, index) => (
+                                            <div key={index} className="relative">
+                                                <img
+                                                    src={URL.createObjectURL(file)}
+                                                    alt={`Preview ${index + 1}`}
+                                                    className="h-16 w-16 rounded-md object-cover"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    className="absolute -top-1.5 -right-1.5 rounded-full bg-destructive p-0.5 text-destructive-foreground"
+                                                    onClick={() =>
+                                                        setData('images', data.images.filter((_, i) => i !== index))
+                                                    }
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {mode === 'create' && data.video && (
+                                <div className="flex items-center gap-2 rounded-md border p-2 text-sm">
+                                    <span className="text-muted-foreground">Video:</span>
+                                    <span>{data.video.name}</span>
+                                    <button
+                                        type="button"
+                                        className="ml-auto rounded-full bg-destructive p-0.5 text-destructive-foreground"
+                                        onClick={() => {
+                                            setData('video', null);
+                                            if (videoInputRef.current) {
+                                                videoInputRef.current.value = '';
+                                            }
+                                        }}
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
 
                         {mediaItems.length === 0 ? (
                             <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">

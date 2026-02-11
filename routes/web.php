@@ -5,10 +5,10 @@ use App\Http\Controllers\Admin\ManufacturerController;
 use App\Http\Controllers\AffiliationController;
 use App\Http\Controllers\CatalogSettingsController;
 use App\Http\Controllers\Manufacturer\UserController as ManufacturerUserController;
-use App\Http\Controllers\PublicCatalogController;
 use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductMediaController;
+use App\Http\Controllers\PublicCatalogController;
 use App\Http\Controllers\Rep\DashboardController as RepDashboardController;
 use App\Http\Controllers\Rep\ManufacturerController as RepManufacturerController;
 use Illuminate\Support\Facades\Route;
@@ -52,7 +52,10 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
                 Route::put('/', 'update')->name('update');
                 Route::post('logo', 'uploadLogo')->name('logo');
                 Route::delete('logo', 'destroyLogo')->name('logo.destroy');
+                Route::post('background', 'uploadBackground')->name('background');
+                Route::delete('background', 'destroyBackground')->name('background.destroy');
                 Route::post('rotate-link', 'rotateLink')->name('rotate-link');
+                Route::post('reset-defaults', 'resetDefaults')->name('reset-defaults');
             });
 
         Route::controller(ProductCategoryController::class)->prefix('categories')->name('categories.')->group(function () {

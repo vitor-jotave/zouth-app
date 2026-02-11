@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\CatalogSettingBackgroundRequest;
 use App\Http\Requests\CatalogSettingLogoRequest;
 use App\Http\Requests\CatalogSettingUpdateRequest;
 use App\Http\Resources\CatalogSettingResource;
 use App\Models\CatalogSetting;
 use App\Models\CatalogVisit;
+use App\Models\Product;
 use App\Services\TenantManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,10 +24,31 @@ class CatalogSettingsController extends Controller
 
         $this->authorize('view', $setting);
 
+        $manufacturer = $tenantManager->get();
+
+        // Get sample products for preview
+        $sampleProducts = Product::where('manufacturer_id', $manufacturer->id)
+            ->where('is_active', true)
+            ->with(['category', 'media'])
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->limit(3)
+            ->get()
+            ->map(fn ($product) => [
+                'id' => $product->id,
+                'name' => $product->name,
+                'sku' => $product->sku,
+                'category' => $product->category?->name,
+                'primary_image' => $product->media->where('type', 'image')->sortBy('sort_order')->first()?->path,
+                'total_stock' => $product->variantStocks->sum('quantity'),
+            ]);
+
         return Inertia::render('manufacturer/catalog-settings/index', [
-            'catalog_settings' => new CatalogSettingResource($setting),
+            'catalog_settings' => (new CatalogSettingResource($setting))->resolve(request()),
             'public_link' => route('public.catalog.show', ['token' => $setting->public_token]),
             'stats' => $this->buildStats($setting),
+            'sample_products' => $sampleProducts,
+            'manufacturer_name' => $manufacturer->name,
         ]);
     }
 
@@ -77,6 +100,41 @@ class CatalogSettingsController extends Controller
             ->with('success', 'Logo removido com sucesso.');
     }
 
+    public function uploadBackground(CatalogSettingBackgroundRequest $request, TenantManager $tenantManager): RedirectResponse
+    {
+        $setting = $this->resolveSetting($tenantManager);
+
+        $this->authorize('update', $setting);
+
+        if ($setting->background_image_path) {
+            Storage::disk('public')->delete($setting->background_image_path);
+        }
+
+        $path = $request->file('background_image')->store('catalog-backgrounds', 'public');
+
+        $setting->update(['background_image_path' => $path]);
+
+        return redirect()
+            ->back()
+            ->with('success', 'Imagem de fundo atualizada com sucesso.');
+    }
+
+    public function destroyBackground(Request $request, TenantManager $tenantManager): RedirectResponse
+    {
+        $setting = $this->resolveSetting($tenantManager);
+
+        $this->authorize('update', $setting);
+
+        if ($setting->background_image_path) {
+            Storage::disk('public')->delete($setting->background_image_path);
+            $setting->update(['background_image_path' => null]);
+        }
+
+        return redirect()
+            ->back()
+            ->with('success', 'Imagem de fundo removida com sucesso.');
+    }
+
     public function rotateLink(Request $request, TenantManager $tenantManager): RedirectResponse
     {
         $setting = $this->resolveSetting($tenantManager);
@@ -93,6 +151,21 @@ class CatalogSettingsController extends Controller
             ->with('success', 'Link publico rotacionado com sucesso.');
     }
 
+    public function resetDefaults(Request $request, TenantManager $tenantManager): RedirectResponse
+    {
+        $setting = $this->resolveSetting($tenantManager);
+
+        $this->authorize('update', $setting);
+
+        $manufacturer = $tenantManager->get();
+
+        $setting->update(CatalogSetting::defaults($manufacturer?->name));
+
+        return redirect()
+            ->back()
+            ->with('success', 'Configuracoes restauradas para os valores padrao.');
+    }
+
     private function resolveSetting(TenantManager $tenantManager): CatalogSetting
     {
         $manufacturer = $tenantManager->get();
@@ -103,17 +176,7 @@ class CatalogSettingsController extends Controller
 
         return CatalogSetting::firstOrCreate(
             ['manufacturer_id' => $manufacturer->id],
-            [
-                'brand_name' => $manufacturer->name,
-                'tagline' => null,
-                'description' => null,
-                'primary_color' => '#0F766E',
-                'secondary_color' => '#0F172A',
-                'accent_color' => '#F97316',
-                'background_color' => '#F8FAFC',
-                'font_family' => 'space-grotesk',
-                'public_link_active' => true,
-            ]
+            CatalogSetting::defaults($manufacturer->name)
         );
     }
 

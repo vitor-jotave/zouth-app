@@ -32,7 +32,7 @@ export function Pagination({ links }: PaginationProps) {
     }
 
     return (
-        <div className="flex flex-wrap items-center justify-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2 mt-8">
             {resolvedLinks.map((link, index) => {
                 const label = normalizeLabel(link.label);
                 const isDisabled = !link.url;

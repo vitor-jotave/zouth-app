@@ -23,6 +23,11 @@ class CatalogVisit extends Model
         'ip_address',
         'user_agent',
         'referer',
+        'utm_source',
+        'utm_medium',
+        'utm_campaign',
+        'utm_term',
+        'utm_content',
         'visited_at',
     ];
 
