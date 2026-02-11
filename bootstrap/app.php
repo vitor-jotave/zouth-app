@@ -1,5 +1,6 @@
 <?php
 
+
 use App\Http\Middleware\EnsureManufacturerTenant;
 use App\Http\Middleware\EnsureSalesRep;
 use App\Http\Middleware\EnsureSuperadmin;
@@ -10,6 +11,8 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+use Illuminate\Http\Request;
+
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -20,11 +23,22 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
+        // Configurar trust proxies para Cloudflare
+        $middleware->trustProxies(
+            at: '**',
+            headers: Request::HEADER_X_FORWARDED_FOR | 
+                     Request::HEADER_X_FORWARDED_HOST | 
+                     Request::HEADER_X_FORWARDED_PORT | 
+                     Request::HEADER_X_FORWARDED_PROTO |
+                     Request::HEADER_X_FORWARDED_AWS_ELB
+        );
+
         $middleware->web(append: [
             HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);
+
 
         $middleware->alias([
             'superadmin' => EnsureSuperadmin::class,
