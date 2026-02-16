@@ -726,7 +726,7 @@ export default function CatalogSettings({
                                             />
                                         </div>
 
-                                        <p className="text-xs text-amber-600 dark:text-amber-500">
+                                        <p className="text-xs text-amber-600">
                                             ⚠️ Use overlay para manter legibilidade dos textos
                                         </p>
                                     </TabsContent>
