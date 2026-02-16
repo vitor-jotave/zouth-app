@@ -30,7 +30,20 @@ class ProductUpdateRequest extends FormRequest
             'sizes' => $this->input('sizes', []),
             'colors' => $this->input('colors', []),
             'variant_stocks' => $this->input('variant_stocks', []),
+            'price' => $this->normalizePrice($this->input('price')),
         ]);
+    }
+
+    /**
+     * Normalize price input: accept comma or dot as decimal separator.
+     */
+    private function normalizePrice(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return str_replace(',', '.', (string) $value);
     }
 
     /**
@@ -65,6 +78,7 @@ class ProductUpdateRequest extends FormRequest
             'base_quantity' => ['nullable', 'integer', 'min:0'],
             'is_active' => ['sometimes', 'boolean'],
             'sort_order' => ['sometimes', 'integer'],
+            'price' => ['nullable', 'numeric', 'min:0', 'max:999999.99'],
             'sizes' => ['array'],
             'sizes.*' => ['distinct', Rule::enum(ProductSize::class)],
             'colors' => ['array'],
@@ -89,6 +103,9 @@ class ProductUpdateRequest extends FormRequest
             'colors.*.name.distinct' => 'As cores nao podem se repetir.',
             'sizes.*.distinct' => 'Os tamanhos nao podem se repetir.',
             'variant_stocks.*.quantity.required' => 'Informe a quantidade de estoque para cada variacao.',
+            'price.numeric' => 'O preco deve ser um numero valido.',
+            'price.min' => 'O preco nao pode ser negativo.',
+            'price.max' => 'O preco maximo e R$ 999.999,99.',
         ];
     }
 
@@ -139,6 +156,7 @@ class ProductUpdateRequest extends FormRequest
             if ($hasSizes || $hasColors) {
                 if ($stocks->isEmpty()) {
                     $validator->errors()->add('variant_stocks', 'Informe o estoque de todas as variacoes.');
+
                     return;
                 }
             }

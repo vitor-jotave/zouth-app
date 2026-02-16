@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, Building2, Folder, LayoutGrid, Package, Palette, Tags, UserCheck, Users } from 'lucide-react';
+import { BookOpen, Building2, Folder, LayoutGrid, Package, Palette, ShoppingCart, Tags, UserCheck, Users } from 'lucide-react';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -64,6 +64,11 @@ function useMainNavItems(): NavItem[] {
             icon: Package,
         });
         items.push({
+            title: 'Pedidos',
+            href: '/manufacturer/orders',
+            icon: ShoppingCart,
+        });
+        items.push({
             title: 'Categorias',
             href: '/manufacturer/categories',
             icon: Tags,
@@ -86,6 +91,11 @@ function useMainNavItems(): NavItem[] {
             title: 'Fabricantes',
             href: '/rep/manufacturers',
             icon: Building2,
+        });
+        items.push({
+            title: 'Pedidos',
+            href: '/rep/orders',
+            icon: ShoppingCart,
         });
     }
 

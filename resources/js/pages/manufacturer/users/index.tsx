@@ -1,7 +1,8 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { useState } from 'react';
 import { Users as UsersIcon } from 'lucide-react';
-import AppLayout from '@/layouts/app-layout';
+import { useState } from 'react';
+import InputError from '@/components/input-error';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -28,8 +29,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import InputError from '@/components/input-error';
+import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem } from '@/types';
 
 interface User {
@@ -170,10 +170,10 @@ export default function UsersIndex({ users, manufacturer }: Props) {
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="staff">
-                                                Staff
+                                                Equipe
                                             </SelectItem>
                                             <SelectItem value="owner">
-                                                Owner
+                                                Proprietário
                                             </SelectItem>
                                         </SelectContent>
                                     </Select>

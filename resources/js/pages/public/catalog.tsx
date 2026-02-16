@@ -1,7 +1,26 @@
-import { Head } from '@inertiajs/react';
-import { Box, Package, Sparkles, Star, Heart, Zap } from 'lucide-react';
+import { Head, router } from '@inertiajs/react';
+import { Box, Check, ClipboardCopy, Minus, Package, Plus, ShoppingCart, Sparkles, Star, Heart, Trash2, X, Zap } from 'lucide-react';
+import { useCallback, useState } from 'react';
 import { Pagination } from '@/components/pagination';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+    Sheet,
+    SheetContent,
+    SheetFooter,
+    SheetHeader,
+    SheetTitle,
+} from '@/components/ui/sheet';
 import { LAYOUT_TOKENS, PATTERNS, GRADIENTS } from '@/lib/catalog-theming';
 
 interface Manufacturer {
@@ -54,6 +73,7 @@ interface Product {
     colors: Array<{ name: string; hex?: string | null }>;
     variant_stocks: Array<{ size?: string | null; color?: string | null; quantity: number }>;
     total_stock: number;
+    price_cents?: number | null;
 }
 
 interface Paginated<T> {
@@ -70,6 +90,14 @@ interface Props {
     manufacturer: Manufacturer;
     catalog_settings: CatalogSettings;
     products: Paginated<Product>;
+    catalog_token: string;
+}
+
+interface CartItem {
+    product: Product;
+    quantity: number;
+    size?: string | null;
+    color?: string | null;
 }
 
 interface LayoutProps {
@@ -77,6 +105,18 @@ interface LayoutProps {
     settings: CatalogSettings;
     products: Paginated<Product>;
     tokens: typeof LAYOUT_TOKENS.minimal;
+    onAddToCart: (product: Product) => void;
+}
+
+function formatPrice(priceCents?: number | null): string {
+    if (priceCents == null) {
+        return 'Sob consulta';
+    }
+
+    return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+    }).format(priceCents / 100);
 }
 
 const fontMap: Record<string, string> = {
@@ -86,7 +126,7 @@ const fontMap: Record<string, string> = {
 };
 
 // Layout Minimal: Moderno, limpo, espaçoso
-function MinimalLayout({ manufacturer, settings, products, tokens }: LayoutProps) {
+function MinimalLayout({ manufacturer, settings, products, tokens, onAddToCart }: LayoutProps) {
     const heroEnabled = settings.sections?.find(s => s.type === 'hero')?.enabled ?? true;
     const productGridEnabled = settings.sections?.find(s => s.type === 'product_grid')?.enabled ?? true;
 
@@ -164,11 +204,24 @@ function MinimalLayout({ manufacturer, settings, products, tokens }: LayoutProps
                             <div style={{ padding: tokens.cardPadding }} className="space-y-2">
                                 <h3 className="font-semibold">{product.name}</h3>
                                 <p className="text-xs opacity-60">SKU {product.sku}</p>
-                                {product.category && (
-                                    <Badge variant="outline" className="text-xs">
-                                        {product.category}
-                                    </Badge>
-                                )}
+                                <p className={`text-sm font-semibold ${product.price_cents == null ? 'italic opacity-50' : ''}`} style={product.price_cents != null ? { color: 'var(--brand-primary)' } : {}}>
+                                    {formatPrice(product.price_cents)}
+                                </p>
+                                <div className="flex items-center justify-between">
+                                    {product.category && (
+                                        <Badge variant="outline" className="text-xs">
+                                            {product.category}
+                                        </Badge>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => onAddToCart(product)}
+                                        className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80"
+                                        style={{ backgroundColor: 'var(--brand-primary)' }}
+                                    >
+                                        <Plus className="h-3 w-3" /> Adicionar
+                                    </button>
+                                </div>
                             </div>
                         </article>
                     ))}
@@ -181,7 +234,7 @@ function MinimalLayout({ manufacturer, settings, products, tokens }: LayoutProps
 }
 
 // Layout Playful: Divertido, colorido, dinâmico
-function PlayfulLayout({ manufacturer, settings, products, tokens }: LayoutProps) {
+function PlayfulLayout({ manufacturer, settings, products, tokens, onAddToCart }: LayoutProps) {
     const heroEnabled = settings.sections?.find(s => s.type === 'hero')?.enabled ?? true;
     const productGridEnabled = settings.sections?.find(s => s.type === 'product_grid')?.enabled ?? true;
 
@@ -301,6 +354,9 @@ function PlayfulLayout({ manufacturer, settings, products, tokens }: LayoutProps
                                 <p className="text-xs font-semibold uppercase tracking-wide opacity-50">
                                     SKU {product.sku}
                                 </p>
+                                <p className={`text-base font-bold ${product.price_cents == null ? 'italic opacity-50' : ''}`} style={product.price_cents != null ? { color: settings.accent_color } : {}}>
+                                    {formatPrice(product.price_cents)}
+                                </p>
                                 <div className="flex flex-wrap gap-2">
                                     {product.category && (
                                         <Badge
@@ -316,6 +372,14 @@ function PlayfulLayout({ manufacturer, settings, products, tokens }: LayoutProps
                                         </Badge>
                                     )}
                                 </div>
+                                <button
+                                    type="button"
+                                    onClick={() => onAddToCart(product)}
+                                    className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-full px-4 py-2 text-sm font-bold text-white shadow-md transition-transform hover:scale-105"
+                                    style={{ backgroundColor: settings.accent_color }}
+                                >
+                                    <Plus className="h-4 w-4" /> Adicionar
+                                </button>
                             </div>
                         </article>
                     ))}
@@ -328,7 +392,7 @@ function PlayfulLayout({ manufacturer, settings, products, tokens }: LayoutProps
 }
 
 // Layout Boutique: Elegante, sofisticado, tipo magazine
-function BoutiqueLayout({ manufacturer, settings, products, tokens }: LayoutProps) {
+function BoutiqueLayout({ manufacturer, settings, products, tokens, onAddToCart }: LayoutProps) {
     const heroEnabled = settings.sections?.find(s => s.type === 'hero')?.enabled ?? true;
     const productGridEnabled = settings.sections?.find(s => s.type === 'product_grid')?.enabled ?? true;
     return (
@@ -440,6 +504,9 @@ function BoutiqueLayout({ manufacturer, settings, products, tokens }: LayoutProp
                                     <h3 className="font-serif text-xl font-light tracking-wide">
                                         {product.name}
                                     </h3>
+                                    <p className={`mt-1 text-base font-semibold ${product.price_cents == null ? 'font-light italic opacity-50' : ''}`} style={product.price_cents != null ? { color: 'var(--brand-primary)' } : {}}>
+                                        {formatPrice(product.price_cents)}
+                                    </p>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <span className="text-xs opacity-40">SKU {product.sku}</span>
@@ -466,6 +533,14 @@ function BoutiqueLayout({ manufacturer, settings, products, tokens }: LayoutProp
                                         ))}
                                     </div>
                                 )}
+                                <button
+                                    type="button"
+                                    onClick={() => onAddToCart(product)}
+                                    className="mt-1 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider opacity-60 transition-opacity hover:opacity-100"
+                                    style={{ color: 'var(--brand-primary)' }}
+                                >
+                                    <Plus className="h-3 w-3" /> Adicionar ao pedido
+                                </button>
                             </div>
                         </article>
                     ))}
@@ -477,10 +552,116 @@ function BoutiqueLayout({ manufacturer, settings, products, tokens }: LayoutProp
     );
 }
 
-export default function PublicCatalog({ manufacturer, catalog_settings, products }: Props) {
+export default function PublicCatalog({ manufacturer, catalog_settings, products, catalog_token }: Props) {
     const brandFont = fontMap[catalog_settings.font_family] ?? fontMap['space-grotesk'];
     const preset = catalog_settings.layout_preset ?? 'minimal';
     const tokens = LAYOUT_TOKENS[preset as keyof typeof LAYOUT_TOKENS] ?? LAYOUT_TOKENS.minimal;
+
+    // Cart state
+    const [cart, setCart] = useState<CartItem[]>([]);
+    const [cartOpen, setCartOpen] = useState(false);
+    const [checkoutOpen, setCheckoutOpen] = useState(false);
+    const [orderSuccess, setOrderSuccess] = useState<{ token: string; url: string } | null>(null);
+    const [checkoutErrors, setCheckoutErrors] = useState<Record<string, string>>({});
+    const [submitting, setSubmitting] = useState(false);
+
+    // Checkout form
+    const [customerName, setCustomerName] = useState('');
+    const [customerPhone, setCustomerPhone] = useState('');
+    const [customerEmail, setCustomerEmail] = useState('');
+    const [customerNotes, setCustomerNotes] = useState('');
+    const [copied, setCopied] = useState(false);
+
+    const cartTotal = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+    const cartPriceTotal = cart.reduce((sum, item) => {
+        if (item.product.price_cents == null) return sum;
+        return sum + item.product.price_cents * item.quantity;
+    }, 0);
+
+    const hasAnyPriced = cart.some(item => item.product.price_cents != null);
+
+    const addToCart = useCallback((product: Product) => {
+        setCart(prev => {
+            const existing = prev.find(item => item.product.id === product.id);
+            if (existing) {
+                return prev.map(item =>
+                    item.product.id === product.id
+                        ? { ...item, quantity: item.quantity + 1 }
+                        : item,
+                );
+            }
+            return [...prev, { product, quantity: 1 }];
+        });
+    }, []);
+
+    const updateQuantity = (productId: number, quantity: number) => {
+        if (quantity <= 0) {
+            setCart(prev => prev.filter(item => item.product.id !== productId));
+            return;
+        }
+        setCart(prev =>
+            prev.map(item =>
+                item.product.id === productId ? { ...item, quantity } : item,
+            ),
+        );
+    };
+
+    const removeFromCart = (productId: number) => {
+        setCart(prev => prev.filter(item => item.product.id !== productId));
+    };
+
+    const handleCheckout = () => {
+        setCheckoutErrors({});
+        setSubmitting(true);
+
+        const url = new URL(window.location.href);
+        const params = new URLSearchParams(url.search);
+
+        router.post(
+            `/catalog/${catalog_token}/orders`,
+            {
+                customer_name: customerName,
+                customer_phone: customerPhone || null,
+                customer_email: customerEmail || null,
+                customer_notes: customerNotes || null,
+                items: cart.map(item => ({
+                    product_id: item.product.id,
+                    quantity: item.quantity,
+                    size: item.size ?? null,
+                    color: item.color ?? null,
+                })),
+                utm_source: params.get('utm_source'),
+                utm_medium: params.get('utm_medium'),
+                utm_campaign: params.get('utm_campaign'),
+                utm_content: params.get('utm_content'),
+                utm_term: params.get('utm_term'),
+            },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                onSuccess: (page) => {
+                    // The controller returns Inertia::location, so on success we get redirected
+                    // But if we get a flash, it means the order was created
+                },
+                onError: (errors) => {
+                    setCheckoutErrors(errors);
+                    setSubmitting(false);
+                },
+                onFinish: () => {
+                    setSubmitting(false);
+                },
+            },
+        );
+    };
+
+    const copyTrackingLink = () => {
+        if (orderSuccess?.url) {
+            navigator.clipboard.writeText(orderSuccess.url);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
+    };
 
     const backgroundStyle: React.CSSProperties = {};
     
@@ -546,6 +727,7 @@ export default function PublicCatalog({ manufacturer, catalog_settings, products
                         settings={catalog_settings}
                         products={products}
                         tokens={tokens}
+                        onAddToCart={addToCart}
                     />
                 )}
                 {preset === 'boutique' && (
@@ -554,6 +736,7 @@ export default function PublicCatalog({ manufacturer, catalog_settings, products
                         settings={catalog_settings}
                         products={products}
                         tokens={tokens}
+                        onAddToCart={addToCart}
                     />
                 )}
                 {preset === 'minimal' && (
@@ -562,9 +745,263 @@ export default function PublicCatalog({ manufacturer, catalog_settings, products
                         settings={catalog_settings}
                         products={products}
                         tokens={tokens}
+                        onAddToCart={addToCart}
                     />
                 )}
             </div>
+
+            {/* Floating cart button */}
+            {cartTotal > 0 && (
+                <button
+                    type="button"
+                    onClick={() => setCartOpen(true)}
+                    className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full px-5 py-3 text-white shadow-xl transition-transform hover:scale-105"
+                    style={{ backgroundColor: catalog_settings.primary_color }}
+                >
+                    <ShoppingCart className="h-5 w-5" />
+                    <span className="font-bold">{cartTotal}</span>
+                </button>
+            )}
+
+            {/* Cart Sheet */}
+            <Sheet open={cartOpen} onOpenChange={setCartOpen}>
+                <SheetContent side="right" className="flex flex-col">
+                    <SheetHeader>
+                        <SheetTitle>Seu pedido ({cartTotal} itens)</SheetTitle>
+                    </SheetHeader>
+
+                    <div className="flex-1 overflow-y-auto">
+                        {cart.length === 0 ? (
+                            <p className="px-4 text-sm text-muted-foreground">
+                                Nenhum item adicionado.
+                            </p>
+                        ) : (
+                            <div className="space-y-3 px-4">
+                                {cart.map(item => (
+                                    <div
+                                        key={item.product.id}
+                                        className="flex items-center gap-3 rounded-lg border p-3"
+                                    >
+                                        <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-md bg-gray-100">
+                                            {item.product.primary_image ? (
+                                                <img
+                                                    src={`/storage/${item.product.primary_image}`}
+                                                    alt={item.product.name}
+                                                    className="h-full w-full object-cover"
+                                                />
+                                            ) : (
+                                                <div className="flex h-full items-center justify-center">
+                                                    <Package className="h-4 w-4 text-gray-400" />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-medium">
+                                                {item.product.name}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                SKU {item.product.sku}
+                                            </p>
+                                            <p className="text-xs font-medium">
+                                                {formatPrice(item.product.price_cents)}
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <Button
+                                                variant="outline"
+                                                size="icon"
+                                                className="h-7 w-7"
+                                                onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
+                                            >
+                                                <Minus className="h-3 w-3" />
+                                            </Button>
+                                            <span className="w-8 text-center text-sm font-medium">
+                                                {item.quantity}
+                                            </span>
+                                            <Button
+                                                variant="outline"
+                                                size="icon"
+                                                className="h-7 w-7"
+                                                onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
+                                            >
+                                                <Plus className="h-3 w-3" />
+                                            </Button>
+                                        </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7 text-destructive"
+                                            onClick={() => removeFromCart(item.product.id)}
+                                        >
+                                            <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {cart.length > 0 && (
+                        <SheetFooter className="flex-col gap-2">
+                            {hasAnyPriced && (
+                                <div className="flex w-full items-center justify-between px-1 text-sm">
+                                    <span className="font-medium">Total estimado:</span>
+                                    <span className="font-bold">{formatPrice(cartPriceTotal)}</span>
+                                </div>
+                            )}
+                            <Button
+                                className="w-full"
+                                onClick={() => {
+                                    setCartOpen(false);
+                                    setCheckoutOpen(true);
+                                }}
+                                style={{ backgroundColor: catalog_settings.primary_color }}
+                            >
+                                Finalizar pedido
+                            </Button>
+                        </SheetFooter>
+                    )}
+                </SheetContent>
+            </Sheet>
+
+            {/* Checkout Dialog */}
+            <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Finalizar pedido</DialogTitle>
+                        <DialogDescription>
+                            Preencha seus dados para enviar o pedido.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="customer_name">Nome *</Label>
+                            <Input
+                                id="customer_name"
+                                value={customerName}
+                                onChange={e => setCustomerName(e.target.value)}
+                                placeholder="Seu nome completo"
+                            />
+                            {checkoutErrors.customer_name && (
+                                <p className="text-xs text-destructive">{checkoutErrors.customer_name}</p>
+                            )}
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="customer_phone">Telefone</Label>
+                            <Input
+                                id="customer_phone"
+                                value={customerPhone}
+                                onChange={e => setCustomerPhone(e.target.value)}
+                                placeholder="(XX) XXXXX-XXXX"
+                            />
+                            {checkoutErrors.customer_phone && (
+                                <p className="text-xs text-destructive">{checkoutErrors.customer_phone}</p>
+                            )}
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="customer_email">E-mail</Label>
+                            <Input
+                                id="customer_email"
+                                type="email"
+                                value={customerEmail}
+                                onChange={e => setCustomerEmail(e.target.value)}
+                                placeholder="seu@email.com"
+                            />
+                            {checkoutErrors.customer_email && (
+                                <p className="text-xs text-destructive">{checkoutErrors.customer_email}</p>
+                            )}
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="customer_notes">Observacoes</Label>
+                            <textarea
+                                id="customer_notes"
+                                value={customerNotes}
+                                onChange={e => setCustomerNotes(e.target.value)}
+                                placeholder="Alguma observacao sobre o pedido?"
+                                rows={3}
+                                className="border-input bg-background placeholder:text-muted-foreground w-full rounded-md border px-3 py-2 text-sm"
+                            />
+                        </div>
+
+                        {checkoutErrors.items && (
+                            <p className="text-xs text-destructive">{checkoutErrors.items}</p>
+                        )}
+
+                        <div className="rounded-md bg-muted p-3">
+                            <p className="text-xs text-muted-foreground">
+                                {cart.length} produto(s) - {cartTotal} item(ns) no total
+                            </p>
+                            {hasAnyPriced && (
+                                <p className="mt-1 text-sm font-semibold">
+                                    Total estimado: {formatPrice(cartPriceTotal)}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setCheckoutOpen(false)}>
+                            Voltar
+                        </Button>
+                        <Button
+                            onClick={handleCheckout}
+                            disabled={submitting || !customerName.trim()}
+                            style={{ backgroundColor: catalog_settings.primary_color }}
+                        >
+                            {submitting ? 'Enviando...' : 'Enviar pedido'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Order Success Dialog */}
+            <Dialog open={!!orderSuccess} onOpenChange={() => setOrderSuccess(null)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Check className="h-5 w-5 text-green-600" />
+                            Pedido enviado!
+                        </DialogTitle>
+                        <DialogDescription>
+                            Seu pedido foi recebido com sucesso. Use o link abaixo para acompanhar o status.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-2 rounded-md border p-3">
+                            <Input
+                                readOnly
+                                value={orderSuccess?.url ?? ''}
+                                className="flex-1 text-xs"
+                            />
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={copyTrackingLink}
+                            >
+                                {copied ? <Check className="h-4 w-4" /> : <ClipboardCopy className="h-4 w-4" />}
+                            </Button>
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button
+                            onClick={() => {
+                                if (orderSuccess?.url) {
+                                    window.location.href = orderSuccess.url;
+                                }
+                            }}
+                            style={{ backgroundColor: catalog_settings.primary_color }}
+                        >
+                            Acompanhar pedido
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

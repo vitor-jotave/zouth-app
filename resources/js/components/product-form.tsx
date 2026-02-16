@@ -54,6 +54,7 @@ interface ProductPayload {
     base_quantity: number;
     is_active: boolean;
     sort_order: number;
+    price_cents?: number | null;
     colors?: ProductColor[];
     media?: MediaItem[];
     variant_stocks?: ProductVariantStock[];
@@ -165,6 +166,7 @@ export function ProductForm({
         base_quantity: number;
         is_active: boolean;
         sort_order: number;
+        price: string;
         sizes: string[];
         colors: ProductColor[];
         variant_stocks: ProductVariantStock[];
@@ -180,6 +182,7 @@ export function ProductForm({
         base_quantity: product?.base_quantity ?? 0,
         is_active: product?.is_active ?? true,
         sort_order: product?.sort_order ?? 0,
+        price: product?.price_cents != null ? String(product.price_cents / 100).replace('.', ',') : '',
         sizes: initialSizes,
         colors: initialColors,
         variant_stocks: initialStocks,
@@ -539,6 +542,24 @@ export function ProductForm({
                                         )
                                     }
                                 />
+                            </div>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-2">
+                                <Label htmlFor="price">Preco (R$)</Label>
+                                <Input
+                                    id="price"
+                                    placeholder="Ex: 12,90"
+                                    value={data.price}
+                                    onChange={(event) =>
+                                        setData('price', event.target.value)
+                                    }
+                                />
+                                <p className="text-muted-foreground text-xs">
+                                    Deixe em branco para exibir &ldquo;Sob consulta&rdquo;
+                                </p>
+                                <InputError message={errors.price} />
                             </div>
                         </div>
 

@@ -58,6 +58,7 @@ class PublicCatalogController extends Controller
             ],
             'catalog_settings' => (new CatalogSettingResource($setting))->resolve(request()),
             'products' => ProductCatalogResource::collection($products),
+            'catalog_token' => $setting->public_token,
         ]);
     }
 }

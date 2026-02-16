@@ -34,8 +34,20 @@ interface Product {
     sku: string;
     is_active: boolean;
     total_stock: number;
+    price_cents?: number | null;
     category?: { id: number; name: string } | null;
     media?: Array<{ id: number; type: 'image' | 'video'; path: string }>;
+}
+
+function formatPrice(priceCents?: number | null): string {
+    if (priceCents == null) {
+        return 'Sob consulta';
+    }
+
+    return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+    }).format(priceCents / 100);
 }
 
 interface Paginated<T> {
@@ -180,6 +192,7 @@ export default function ProductsIndex({ products, categories, filters }: Props) 
                                 <TableHead>Produto</TableHead>
                                 <TableHead>SKU</TableHead>
                                 <TableHead>Categoria</TableHead>
+                                <TableHead>Preco</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Estoque</TableHead>
                                 <TableHead className="text-right">Acoes</TableHead>
@@ -188,7 +201,7 @@ export default function ProductsIndex({ products, categories, filters }: Props) 
                         <TableBody>
                             {products.data.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="py-10 text-center">
+                                    <TableCell colSpan={7} className="py-10 text-center">
                                         Nenhum produto encontrado.
                                     </TableCell>
                                 </TableRow>
@@ -216,6 +229,11 @@ export default function ProductsIndex({ products, categories, filters }: Props) 
                                     <TableCell>{product.sku}</TableCell>
                                     <TableCell>
                                         {product.category?.name ?? 'Sem categoria'}
+                                    </TableCell>
+                                    <TableCell>
+                                        <span className={product.price_cents == null ? 'text-muted-foreground italic' : ''}>
+                                            {formatPrice(product.price_cents)}
+                                        </span>
                                     </TableCell>
                                     <TableCell>
                                         <Badge variant={product.is_active ? 'default' : 'secondary'}>

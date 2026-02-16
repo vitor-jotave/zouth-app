@@ -31,9 +31,21 @@ interface Props {
                 quantity: number;
             }>;
             total_stock: number;
+            price_cents?: number | null;
         }>;
         links?: Array<{ url: string | null; label: string; active: boolean }>;
     };
+}
+
+function formatPrice(priceCents?: number | null): string {
+    if (priceCents == null) {
+        return 'Sob consulta';
+    }
+
+    return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+    }).format(priceCents / 100);
 }
 
 export default function Catalog({ manufacturer, products }: Props) {
@@ -97,6 +109,9 @@ export default function Catalog({ manufacturer, products }: Props) {
                                                     </div>
                                                     <div className="text-xs text-muted-foreground">
                                                         SKU {product.sku}
+                                                    </div>
+                                                    <div className={`text-sm font-semibold ${product.price_cents == null ? 'italic text-muted-foreground' : ''}`}>
+                                                        {formatPrice(product.price_cents)}
                                                     </div>
                                                 </div>
                                                 <div className="flex flex-wrap gap-2">

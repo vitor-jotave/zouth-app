@@ -28,6 +28,7 @@ class Product extends Model
         'base_quantity',
         'is_active',
         'sort_order',
+        'price_cents',
     ];
 
     /**
@@ -43,6 +44,7 @@ class Product extends Model
             'is_active' => 'boolean',
             'base_quantity' => 'integer',
             'sort_order' => 'integer',
+            'price_cents' => 'integer',
         ];
     }
 

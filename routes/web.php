@@ -4,13 +4,16 @@ use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\ManufacturerController;
 use App\Http\Controllers\AffiliationController;
 use App\Http\Controllers\CatalogSettingsController;
+use App\Http\Controllers\Manufacturer\OrderController as ManufacturerOrderController;
 use App\Http\Controllers\Manufacturer\UserController as ManufacturerUserController;
 use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductMediaController;
 use App\Http\Controllers\PublicCatalogController;
+use App\Http\Controllers\PublicOrderController;
 use App\Http\Controllers\Rep\DashboardController as RepDashboardController;
 use App\Http\Controllers\Rep\ManufacturerController as RepManufacturerController;
+use App\Http\Controllers\Rep\OrderController as RepOrderController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
@@ -22,6 +25,12 @@ Route::get('/', function () {
 })->name('home');
 
 Route::get('catalog/{token}', [PublicCatalogController::class, 'show'])->name('public.catalog.show');
+
+// Public order routes
+Route::post('catalog/{catalogSetting:public_token}/orders', [PublicOrderController::class, 'store'])
+    ->name('public.order.store');
+Route::get('o/{publicToken}', [PublicOrderController::class, 'show'])
+    ->name('public.order.show');
 
 // Manufacturer User Routes (tenant via session)
 Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function () {
@@ -82,6 +91,13 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
                 Route::put('order', 'reorder')->name('order');
                 Route::delete('{media}', 'destroy')->name('destroy');
             });
+
+        Route::controller(ManufacturerOrderController::class)->prefix('orders')->name('orders.')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::get('{order}', 'show')->name('show');
+            Route::post('{order}/status', 'updateStatus')->name('update-status');
+            Route::put('{order}/notes', 'updateNotes')->name('update-notes');
+        });
     });
 });
 
@@ -106,6 +122,8 @@ Route::middleware(['auth', 'verified', 'sales.rep'])->prefix('rep')->name('rep.'
     });
 
     Route::get('m/{manufacturer:slug}/catalog', [RepManufacturerController::class, 'catalog'])->name('catalog');
+
+    Route::get('orders', [RepOrderController::class, 'index'])->name('orders.index');
 });
 
 require __DIR__.'/settings.php';

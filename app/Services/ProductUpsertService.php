@@ -104,7 +104,20 @@ class ProductUpsertService
             'base_quantity' => $hasVariants ? 0 : (int) ($data['base_quantity'] ?? 0),
             'is_active' => array_key_exists('is_active', $data) ? (bool) $data['is_active'] : true,
             'sort_order' => (int) ($data['sort_order'] ?? 0),
+            'price_cents' => $this->toCents($data['price'] ?? null),
         ];
+    }
+
+    /**
+     * Convert a decimal price string to cents (integer).
+     */
+    private function toCents(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return (int) round((float) $value * 100);
     }
 
     protected function syncColors(Product $product, array $data): array

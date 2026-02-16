@@ -48,6 +48,7 @@ class ProductCatalogResource extends JsonResource
                 'quantity' => $stock->quantity,
             ]) ?? [],
             'total_stock' => $this->getTotalStock(),
+            'price_cents' => $this->price_cents,
         ];
     }
 }

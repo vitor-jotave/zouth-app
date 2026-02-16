@@ -32,6 +32,7 @@ class ProductFactory extends Factory
             'base_quantity' => fake()->numberBetween(0, 50),
             'is_active' => true,
             'sort_order' => 0,
+            'price_cents' => fake()->numberBetween(990, 99900),
         ];
     }
 

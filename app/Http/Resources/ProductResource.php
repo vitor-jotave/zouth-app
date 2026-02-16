@@ -27,6 +27,7 @@ class ProductResource extends JsonResource
             'base_quantity' => $this->base_quantity,
             'is_active' => $this->is_active,
             'sort_order' => $this->sort_order,
+            'price_cents' => $this->price_cents,
             'total_stock' => $this->getTotalStock(),
             'category' => $this->whenLoaded('category', fn () => new ProductCategoryResource($this->category)),
             'media' => $this->whenLoaded('media', fn () => ProductMediaResource::collection($this->media)->resolve()),
