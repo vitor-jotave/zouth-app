@@ -1,10 +1,8 @@
 <?php
 
-
 use App\Http\Middleware\EnsureManufacturerTenant;
 use App\Http\Middleware\EnsureSalesRep;
 use App\Http\Middleware\EnsureSuperadmin;
-use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ResolveManufacturerFromRoute;
 use Illuminate\Foundation\Application;
@@ -13,7 +11,6 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 
-
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
@@ -21,24 +18,22 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
+        $middleware->encryptCookies(except: ['sidebar_state']);
 
         // Configurar trust proxies para Cloudflare
         $middleware->trustProxies(
             at: '**',
-            headers: Request::HEADER_X_FORWARDED_FOR | 
-                     Request::HEADER_X_FORWARDED_HOST | 
-                     Request::HEADER_X_FORWARDED_PORT | 
+            headers: Request::HEADER_X_FORWARDED_FOR |
+                     Request::HEADER_X_FORWARDED_HOST |
+                     Request::HEADER_X_FORWARDED_PORT |
                      Request::HEADER_X_FORWARDED_PROTO |
                      Request::HEADER_X_FORWARDED_AWS_ELB
         );
 
         $middleware->web(append: [
-            HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);
-
 
         $middleware->alias([
             'superadmin' => EnsureSuperadmin::class,
