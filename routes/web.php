@@ -2,8 +2,10 @@
 
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\ManufacturerController;
+use App\Http\Controllers\Admin\PlanController;
 use App\Http\Controllers\AffiliationController;
 use App\Http\Controllers\CatalogSettingsController;
+use App\Http\Controllers\Manufacturer\BillingController;
 use App\Http\Controllers\Manufacturer\OrderController as ManufacturerOrderController;
 use App\Http\Controllers\Manufacturer\UserController as ManufacturerUserController;
 use App\Http\Controllers\ProductCategoryController;
@@ -98,6 +100,17 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
             Route::post('{order}/status', 'updateStatus')->name('update-status');
             Route::put('{order}/notes', 'updateNotes')->name('update-notes');
         });
+
+        Route::controller(BillingController::class)->prefix('billing')->name('billing.')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::get('checkout/{plan}', 'checkout')->name('checkout');
+            Route::get('checkout/{plan}/success', 'checkoutSuccess')->name('checkout.success');
+            Route::post('swap', 'swap')->name('swap');
+            Route::post('upgrade', 'upgrade')->name('upgrade');
+            Route::post('cancel', 'cancel')->name('cancel');
+            Route::post('resume', 'resume')->name('resume');
+            Route::get('portal', 'portal')->name('portal');
+        });
     });
 });
 
@@ -109,6 +122,15 @@ Route::middleware(['auth', 'verified', 'superadmin'])->prefix('admin')->name('ad
         Route::get('/', 'index')->name('index');
         Route::post('/', 'store')->name('store');
         Route::post('{manufacturer}/toggle', 'toggle')->name('toggle');
+    });
+
+    Route::controller(PlanController::class)->prefix('plans')->name('plans.')->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::get('create', 'create')->name('create');
+        Route::post('/', 'store')->name('store');
+        Route::get('{plan}/edit', 'edit')->name('edit');
+        Route::put('{plan}', 'update')->name('update');
+        Route::post('{plan}/toggle', 'toggle')->name('toggle');
     });
 });
 

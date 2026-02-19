@@ -9,6 +9,7 @@ use App\Http\Requests\ProductUpdateRequest;
 use App\Http\Resources\ProductResource;
 use App\Models\Product;
 use App\Models\ProductCategory;
+use App\Services\PlanLimitService;
 use App\Services\ProductStockService;
 use App\Services\ProductUpsertService;
 use App\Services\TenantManager;
@@ -23,7 +24,8 @@ class ProductController extends Controller
     public function __construct(
         protected ProductUpsertService $upsertService,
         protected ProductStockService $stockService,
-        protected TenantManager $tenantManager
+        protected TenantManager $tenantManager,
+        protected PlanLimitService $limitService
     ) {
         $this->authorizeResource(Product::class, 'product');
     }
@@ -90,6 +92,20 @@ class ProductController extends Controller
 
     public function store(ProductStoreRequest $request): RedirectResponse
     {
+        $manufacturer = $this->tenantManager->get();
+
+        if (! $this->limitService->canCreateProduct($manufacturer)) {
+            return redirect()->back()
+                ->withErrors(['limit' => 'Você atingiu o limite de produtos do seu plano.'])
+                ->with('limit_exceeded', $this->limitService->limitExceededPayload($manufacturer, 'products'));
+        }
+
+        if (! $this->limitService->canStoreData($manufacturer)) {
+            return redirect()->back()
+                ->withErrors(['limit' => 'Você atingiu o limite de armazenamento de dados do seu plano.'])
+                ->with('limit_exceeded', $this->limitService->limitExceededPayload($manufacturer, 'data_mb'));
+        }
+
         $payload = array_merge($request->validated(), [
             'manufacturer_id' => $request->user()->current_manufacturer_id,
         ]);
@@ -150,7 +166,7 @@ class ProductController extends Controller
     public function destroy(Product $product): RedirectResponse
     {
         foreach ($product->media as $media) {
-            Storage::disk('public')->delete($media->path);
+            Storage::delete($media->path);
         }
 
         $product->delete();

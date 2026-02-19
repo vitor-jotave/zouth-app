@@ -212,7 +212,7 @@ export default function ProductsIndex({ products, categories, filters }: Props) 
                                         <div className="flex items-center gap-3">
                                             {product.media?.[0]?.type === 'image' ? (
                                                 <img
-                                                    src={`/storage/${product.media[0].path}`}
+                                                    src={product.media[0].url}
                                                     alt={product.name}
                                                     className="h-10 w-10 rounded-md object-cover"
                                                 />

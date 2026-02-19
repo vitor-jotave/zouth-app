@@ -22,6 +22,7 @@ class ProductMedia extends Model
         'type',
         'path',
         'sort_order',
+        'file_size_bytes',
     ];
 
     /**
@@ -34,6 +35,7 @@ class ProductMedia extends Model
         return [
             'type' => ProductMediaType::class,
             'sort_order' => 'integer',
+            'file_size_bytes' => 'integer',
         ];
     }
 

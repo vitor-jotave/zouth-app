@@ -7,22 +7,35 @@ use App\Http\Requests\ProductMediaOrderRequest;
 use App\Http\Requests\ProductMediaStoreRequest;
 use App\Models\Product;
 use App\Models\ProductMedia;
+use App\Services\PlanLimitService;
 use App\Services\ProductUpsertService;
+use App\Services\TenantManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Storage;
 
 class ProductMediaController extends Controller
 {
-    public function __construct(protected ProductUpsertService $upsertService)
-    {
-    }
+    public function __construct(
+        protected ProductUpsertService $upsertService,
+        protected TenantManager $tenantManager,
+        protected PlanLimitService $limitService,
+    ) {}
 
     public function store(ProductMediaStoreRequest $request, Product $product): RedirectResponse
     {
+        $manufacturer = $this->tenantManager->get();
         $type = ProductMediaType::from($request->input('type'));
 
         if ($type === ProductMediaType::Image) {
             $files = $request->file('files', []);
+
+            $totalSize = array_sum(array_map(fn ($f) => $f->getSize(), $files));
+
+            if (! $this->limitService->canUploadFile($manufacturer, $totalSize)) {
+                return redirect()->back()
+                    ->withErrors(['limit' => 'Você atingiu o limite de armazenamento de arquivos do seu plano.'])
+                    ->with('limit_exceeded', $this->limitService->limitExceededPayload($manufacturer, 'files_gb'));
+            }
 
             foreach ($files as $file) {
                 $this->upsertService->storeMedia(
@@ -33,9 +46,17 @@ class ProductMediaController extends Controller
                 );
             }
         } else {
+            $file = $request->file('file');
+
+            if (! $this->limitService->canUploadFile($manufacturer, $file->getSize())) {
+                return redirect()->back()
+                    ->withErrors(['limit' => 'Você atingiu o limite de armazenamento de arquivos do seu plano.'])
+                    ->with('limit_exceeded', $this->limitService->limitExceededPayload($manufacturer, 'files_gb'));
+            }
+
             $this->upsertService->storeMedia(
                 $product,
-                $request->file('file'),
+                $file,
                 $type,
                 $request->input('sort_order')
             );
@@ -65,7 +86,7 @@ class ProductMediaController extends Controller
             abort(404);
         }
 
-        Storage::disk('public')->delete($media->path);
+        Storage::delete($media->path);
         $media->delete();
 
         return redirect()

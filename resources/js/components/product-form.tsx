@@ -711,7 +711,7 @@ export function ProductForm({
                                         <div className="flex items-center gap-3">
                                             {media.type === 'image' ? (
                                                 <img
-                                                    src={`/storage/${media.path}`}
+                                                    src={media.url}
                                                     alt="Preview"
                                                     className="h-16 w-16 rounded-md object-cover"
                                                 />

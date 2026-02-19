@@ -4,13 +4,17 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Laravel\Cashier\Billable;
 
 class Manufacturer extends Model
 {
     /** @use HasFactory<\Database\Factories\ManufacturerFactory> */
+    use Billable;
+
     use HasFactory;
 
     /**
@@ -22,6 +26,7 @@ class Manufacturer extends Model
         'name',
         'slug',
         'is_active',
+        'current_plan_id',
     ];
 
     /**
@@ -34,6 +39,22 @@ class Manufacturer extends Model
         return [
             'is_active' => 'boolean',
         ];
+    }
+
+    /**
+     * Get the Stripe customer name for this manufacturer.
+     */
+    public function stripeName(): string
+    {
+        return $this->name;
+    }
+
+    /**
+     * Get the current plan for this manufacturer.
+     */
+    public function currentPlan(): BelongsTo
+    {
+        return $this->belongsTo(Plan::class, 'current_plan_id');
     }
 
     /**
@@ -64,6 +85,14 @@ class Manufacturer extends Model
     public function catalogVisits(): HasMany
     {
         return $this->hasMany(CatalogVisit::class);
+    }
+
+    /**
+     * Get all orders for this manufacturer.
+     */
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
     }
 
     /**

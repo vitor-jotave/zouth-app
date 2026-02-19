@@ -14,6 +14,9 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // Seed plans first
+        $this->call(PlanSeeder::class);
+
         // Create superadmin
         $superadmin = User::create([
             'name' => 'Super Admin',

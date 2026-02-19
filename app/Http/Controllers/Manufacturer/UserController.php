@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Manufacturer;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\PlanLimitService;
 use App\Services\TenantManager;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\RedirectResponse;
@@ -20,7 +21,8 @@ class UserController extends Controller
     use AuthorizesRequests;
 
     public function __construct(
-        protected TenantManager $tenantManager
+        protected TenantManager $tenantManager,
+        protected PlanLimitService $limitService
     ) {}
 
     public function index(): Response
@@ -55,6 +57,12 @@ class UserController extends Controller
 
         // Only owners can create users
         $this->authorize('manageTeam', $manufacturer);
+
+        if (! $this->limitService->canCreateUser($manufacturer)) {
+            return redirect()->back()
+                ->withErrors(['limit' => 'Você atingiu o limite de usuários do seu plano.'])
+                ->with('limit_exceeded', $this->limitService->limitExceededPayload($manufacturer, 'users'));
+        }
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],

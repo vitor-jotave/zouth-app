@@ -5,11 +5,16 @@ use App\Models\CatalogSetting;
 use App\Models\Manufacturer;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Plan;
 use App\Models\Product;
 use App\Models\User;
 
 beforeEach(function () {
-    $this->manufacturer = Manufacturer::factory()->create(['is_active' => true]);
+    $plan = Plan::factory()->premium()->create();
+    $this->manufacturer = Manufacturer::factory()->create([
+        'is_active' => true,
+        'current_plan_id' => $plan->id,
+    ]);
     $this->owner = User::factory()->create([
         'user_type' => UserType::ManufacturerUser,
         'current_manufacturer_id' => $this->manufacturer->id,

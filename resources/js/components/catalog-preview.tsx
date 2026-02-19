@@ -60,7 +60,7 @@ function ProductImage({ product }: { product: Product }) {
     if (product.primary_image) {
         return (
             <img
-                src={`/storage/${product.primary_image}`}
+                src={product.primary_image}
                 alt={product.name}
                 className="h-full w-full object-cover"
             />

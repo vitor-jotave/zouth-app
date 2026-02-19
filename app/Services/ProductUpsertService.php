@@ -34,13 +34,14 @@ class ProductUpsertService
             }
         }
 
-        $path = $file->store("products/{$product->id}", 'public');
+        $path = $file->store("products/{$product->id}");
         $order = $sortOrder ?? ((int) $product->media()->max('sort_order') + 1);
 
         return $product->media()->create([
             'type' => $type->value,
             'path' => $path,
             'sort_order' => $order,
+            'file_size_bytes' => $file->getSize(),
         ]);
     }
 

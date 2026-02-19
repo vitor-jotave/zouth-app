@@ -93,7 +93,7 @@ export default function Catalog({ manufacturer, products }: Props) {
                                         >
                                             {product.primary_image ? (
                                                 <img
-                                                    src={`/storage/${product.primary_image}`}
+                                                    src={product.primary_image}
                                                     alt={product.name}
                                                     className="h-40 w-full object-cover"
                                                 />

@@ -26,6 +26,7 @@ class ProductMediaFactory extends Factory
             'type' => ProductMediaType::Image->value,
             'path' => 'products/sample.jpg',
             'sort_order' => 0,
+            'file_size_bytes' => 1_048_576, // 1 MB default
         ];
     }
 }

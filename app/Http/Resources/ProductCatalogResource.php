@@ -6,6 +6,7 @@ use App\Enums\ProductMediaType;
 use App\Enums\ProductSize;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Storage;
 
 class ProductCatalogResource extends JsonResource
 {
@@ -33,8 +34,8 @@ class ProductCatalogResource extends JsonResource
             'name' => $this->name,
             'sku' => $this->sku,
             'category' => $this->category?->name,
-            'primary_image' => $primaryImage?->path,
-            'images' => $images->map(fn ($item) => $item->path)->values(),
+            'primary_image' => $primaryImage ? Storage::url($primaryImage->path) : null,
+            'images' => $images->map(fn ($item) => Storage::url($item->path))->values(),
             'has_size_variants' => $this->has_size_variants,
             'has_color_variants' => $this->has_color_variants,
             'sizes' => $sizes,

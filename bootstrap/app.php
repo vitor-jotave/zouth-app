@@ -20,6 +20,10 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['sidebar_state']);
 
+        $middleware->validateCsrfTokens(except: [
+            'stripe/*',
+        ]);
+
         // Configurar trust proxies para Cloudflare
         $middleware->trustProxies(
             at: '**',

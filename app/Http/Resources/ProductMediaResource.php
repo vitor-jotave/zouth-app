@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Enums\ProductMediaType;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Storage;
 
 class ProductMediaResource extends JsonResource
 {
@@ -22,6 +23,7 @@ class ProductMediaResource extends JsonResource
             'product_id' => $this->product_id,
             'type' => $type,
             'path' => $this->path,
+            'url' => Storage::url($this->path),
             'sort_order' => $this->sort_order,
         ];
     }

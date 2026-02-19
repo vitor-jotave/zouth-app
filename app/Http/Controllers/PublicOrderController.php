@@ -7,9 +7,11 @@ use App\Http\Requests\StorePublicOrderRequest;
 use App\Http\Resources\OrderItemResource;
 use App\Http\Resources\OrderStatusHistoryResource;
 use App\Models\CatalogSetting;
+use App\Models\Manufacturer;
 use App\Models\ManufacturerAffiliation;
 use App\Models\Order;
 use App\Services\OrderService;
+use App\Services\PlanLimitService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -19,10 +21,25 @@ class PublicOrderController extends Controller
 {
     public function __construct(
         private OrderService $orderService,
+        private PlanLimitService $limitService
     ) {}
 
     public function store(StorePublicOrderRequest $request, CatalogSetting $catalogSetting): RedirectResponse
     {
+        $manufacturer = Manufacturer::find($catalogSetting->manufacturer_id);
+
+        if ($manufacturer && ! $this->limitService->canCreateOrder($manufacturer)) {
+            return redirect()->back()
+                ->withErrors(['limit' => 'Este fabricante atingiu o limite de pedidos do mês.'])
+                ->with('limit_exceeded', $this->limitService->limitExceededPayload($manufacturer, 'orders_this_month'));
+        }
+
+        if ($manufacturer && ! $this->limitService->canStoreData($manufacturer)) {
+            return redirect()->back()
+                ->withErrors(['limit' => 'Este fabricante atingiu o limite de armazenamento de dados.'])
+                ->with('limit_exceeded', $this->limitService->limitExceededPayload($manufacturer, 'data_mb'));
+        }
+
         $data = $request->validated();
         $data['manufacturer_id'] = $catalogSetting->manufacturer_id;
 

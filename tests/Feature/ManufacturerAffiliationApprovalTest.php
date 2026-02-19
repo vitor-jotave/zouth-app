@@ -3,12 +3,15 @@
 use App\Enums\UserType;
 use App\Models\Manufacturer;
 use App\Models\ManufacturerAffiliation;
+use App\Models\Plan;
 use App\Models\User;
 
 beforeEach(function () {
+    $plan = Plan::factory()->premium()->create();
     $this->manufacturer = Manufacturer::factory()->create([
         'name' => 'Test Manufacturer',
         'slug' => 'test-manufacturer',
+        'current_plan_id' => $plan->id,
     ]);
 
     $this->manufacturerOwner = User::factory()->create([

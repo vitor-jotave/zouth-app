@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, Building2, Folder, LayoutGrid, Package, Palette, ShoppingCart, Tags, UserCheck, Users } from 'lucide-react';
+import { BookOpen, Building2, CreditCard, Folder, LayoutGrid, Package, Palette, ShoppingCart, Tags, UserCheck, Users } from 'lucide-react';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -49,6 +49,11 @@ function useMainNavItems(): NavItem[] {
             href: '/admin/manufacturers',
             icon: Building2,
         });
+        items.push({
+            title: 'Planos',
+            href: '/admin/plans',
+            icon: CreditCard,
+        });
     }
 
     // Add Usuários menu item for manufacturer users
@@ -82,6 +87,11 @@ function useMainNavItems(): NavItem[] {
             title: 'Afiliações',
             href: '/affiliations',
             icon: UserCheck,
+        });
+        items.push({
+            title: 'Assinatura',
+            href: '/manufacturer/billing',
+            icon: CreditCard,
         });
     }
 

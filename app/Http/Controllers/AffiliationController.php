@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Manufacturer;
 use App\Models\ManufacturerAffiliation;
+use App\Services\PlanLimitService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -11,6 +12,10 @@ use Inertia\Response;
 
 class AffiliationController extends Controller
 {
+    public function __construct(
+        private PlanLimitService $limitService
+    ) {}
+
     public function index(Request $request): Response
     {
         $user = $request->user();
@@ -64,6 +69,12 @@ class AffiliationController extends Controller
 
         if ($affiliation->status !== 'pending') {
             return redirect()->back()->with('error', 'Apenas afiliações pendentes podem ser aprovadas.');
+        }
+
+        if (! $this->limitService->canCreateRep($manufacturer)) {
+            return redirect()->back()
+                ->with('error', 'Você atingiu o limite de representantes do seu plano.')
+                ->with('limit_exceeded', $this->limitService->limitExceededPayload($manufacturer, 'reps'));
         }
 
         $affiliation->update(['status' => 'active']);

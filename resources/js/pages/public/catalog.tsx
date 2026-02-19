@@ -191,7 +191,7 @@ function MinimalLayout({ manufacturer, settings, products, tokens, onAddToCart }
                             <div className="aspect-square overflow-hidden bg-gray-100">
                                 {product.primary_image ? (
                                     <img
-                                        src={`/storage/${product.primary_image}`}
+                                        src={product.primary_image}
                                         alt={product.name}
                                         className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                                     />
@@ -327,7 +327,7 @@ function PlayfulLayout({ manufacturer, settings, products, tokens, onAddToCart }
                             <div className="relative aspect-square overflow-hidden">
                                 {product.primary_image ? (
                                     <img
-                                        src={`/storage/${product.primary_image}`}
+                                        src={product.primary_image}
                                         alt={product.name}
                                         className="h-full w-full object-cover transition-all duration-500 group-hover:scale-110 group-hover:rotate-2"
                                     />
@@ -477,7 +477,7 @@ function BoutiqueLayout({ manufacturer, settings, products, tokens, onAddToCart 
                             >
                                 {product.primary_image ? (
                                     <img
-                                        src={`/storage/${product.primary_image}`}
+                                        src={product.primary_image}
                                         alt={product.name}
                                         className="h-full w-full object-cover transition-all duration-700 group-hover:scale-105"
                                     />
@@ -785,7 +785,7 @@ export default function PublicCatalog({ manufacturer, catalog_settings, products
                                         <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-md bg-gray-100">
                                             {item.product.primary_image ? (
                                                 <img
-                                                    src={`/storage/${item.product.primary_image}`}
+                                                    src={item.product.primary_image}
                                                     alt={item.product.name}
                                                     className="h-full w-full object-cover"
                                                 />

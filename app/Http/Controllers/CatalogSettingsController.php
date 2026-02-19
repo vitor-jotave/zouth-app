@@ -39,7 +39,7 @@ class CatalogSettingsController extends Controller
                 'name' => $product->name,
                 'sku' => $product->sku,
                 'category' => $product->category?->name,
-                'primary_image' => $product->media->where('type', 'image')->sortBy('sort_order')->first()?->path,
+                'primary_image' => ($primaryImage = $product->media->where('type', 'image')->sortBy('sort_order')->first()) ? Storage::url($primaryImage->path) : null,
                 'total_stock' => $product->variantStocks->sum('quantity'),
             ]);
 
@@ -72,10 +72,10 @@ class CatalogSettingsController extends Controller
         $this->authorize('update', $setting);
 
         if ($setting->logo_path) {
-            Storage::disk('public')->delete($setting->logo_path);
+            Storage::delete($setting->logo_path);
         }
 
-        $path = $request->file('logo')->store('catalog-logos', 'public');
+        $path = $request->file('logo')->store('catalog-logos');
 
         $setting->update(['logo_path' => $path]);
 
@@ -91,7 +91,7 @@ class CatalogSettingsController extends Controller
         $this->authorize('update', $setting);
 
         if ($setting->logo_path) {
-            Storage::disk('public')->delete($setting->logo_path);
+            Storage::delete($setting->logo_path);
             $setting->update(['logo_path' => null]);
         }
 
@@ -107,10 +107,10 @@ class CatalogSettingsController extends Controller
         $this->authorize('update', $setting);
 
         if ($setting->background_image_path) {
-            Storage::disk('public')->delete($setting->background_image_path);
+            Storage::delete($setting->background_image_path);
         }
 
-        $path = $request->file('background_image')->store('catalog-backgrounds', 'public');
+        $path = $request->file('background_image')->store('catalog-backgrounds');
 
         $setting->update(['background_image_path' => $path]);
 
@@ -126,7 +126,7 @@ class CatalogSettingsController extends Controller
         $this->authorize('update', $setting);
 
         if ($setting->background_image_path) {
-            Storage::disk('public')->delete($setting->background_image_path);
+            Storage::delete($setting->background_image_path);
             $setting->update(['background_image_path' => null]);
         }
 
