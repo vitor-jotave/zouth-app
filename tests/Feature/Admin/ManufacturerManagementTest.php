@@ -3,6 +3,7 @@
 use App\Enums\UserType;
 use App\Models\Manufacturer;
 use App\Models\User;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 
 use function Pest\Laravel\actingAs;
@@ -10,6 +11,7 @@ use function Pest\Laravel\withoutVite;
 
 beforeEach(function () {
     withoutVite();
+    Mail::fake();
     $this->superadmin = User::factory()->create(['user_type' => 'superadmin']);
 });
 
@@ -40,6 +42,8 @@ it('allows superadmin to create manufacturer with owner', function () {
         'manufacturer_name' => 'Test Manufacturer',
         'owner_name' => 'Test Owner',
         'owner_email' => 'owner@test.com',
+        'cnpj' => '11222333000181',
+        'phone' => '(11) 99999-9999',
     ]);
 
     $response->assertRedirect('/admin/manufacturers');
@@ -71,9 +75,67 @@ it('validates manufacturer creation input', function () {
         'manufacturer_name' => '',
         'owner_name' => '',
         'owner_email' => 'invalid-email',
+        'cnpj' => '',
+        'phone' => '',
     ]);
 
-    $response->assertSessionHasErrors(['manufacturer_name', 'owner_name', 'owner_email']);
+    $response->assertSessionHasErrors(['manufacturer_name', 'owner_name', 'owner_email', 'cnpj', 'phone']);
+});
+
+it('rejects invalid CNPJ on manufacturer creation', function () {
+    actingAs($this->superadmin);
+
+    $response = $this->post('/admin/manufacturers', [
+        'manufacturer_name' => 'Test',
+        'owner_name' => 'Owner',
+        'owner_email' => 'owner@test.com',
+        'cnpj' => '11111111111111',
+        'phone' => '(11) 99999-9999',
+    ]);
+
+    $response->assertSessionHasErrors('cnpj');
+});
+
+it('allows superadmin to update a manufacturer', function () {
+    actingAs($this->superadmin);
+
+    $manufacturer = Manufacturer::factory()->create();
+
+    $response = $this->put("/admin/manufacturers/{$manufacturer->id}", [
+        'name' => 'Updated Name',
+        'cnpj' => '11222333000181',
+        'phone' => '(21) 88888-8888',
+        'zip_code' => '01310-100',
+        'state' => 'SP',
+        'city' => 'São Paulo',
+        'neighborhood' => 'Centro',
+        'street' => 'Avenida Paulista',
+        'address_number' => '1000',
+        'complement' => '',
+    ]);
+
+    $response->assertRedirect('/admin/manufacturers');
+    $response->assertSessionHas('status');
+
+    $manufacturer->refresh();
+    expect($manufacturer->name)->toBe('Updated Name');
+    expect($manufacturer->phone)->toBe('(21) 88888-8888');
+    expect($manufacturer->cnpj)->toBe('11222333000181');
+});
+
+it('prevents duplicate CNPJ when updating manufacturer', function () {
+    actingAs($this->superadmin);
+
+    Manufacturer::factory()->create(['cnpj' => '11222333000181']);
+    $manufacturer = Manufacturer::factory()->create(['cnpj' => '07526557000100']);
+
+    $response = $this->put("/admin/manufacturers/{$manufacturer->id}", [
+        'name' => 'Updated',
+        'cnpj' => '11222333000181',
+        'phone' => '(11) 99999-9999',
+    ]);
+
+    $response->assertSessionHasErrors('cnpj');
 });
 
 it('prevents duplicate owner email', function () {
@@ -85,6 +147,8 @@ it('prevents duplicate owner email', function () {
         'manufacturer_name' => 'Test Manufacturer',
         'owner_name' => 'Test Owner',
         'owner_email' => 'existing@test.com',
+        'cnpj' => '11222333000181',
+        'phone' => '(11) 99999-9999',
     ]);
 
     $response->assertSessionHasErrors('owner_email');
@@ -133,6 +197,8 @@ it('blocks non-superadmin from creating manufacturers', function () {
         'manufacturer_name' => 'Test Manufacturer',
         'owner_name' => 'Test Owner',
         'owner_email' => 'owner@test.com',
+        'cnpj' => '11222333000181',
+        'phone' => '(11) 99999-9999',
     ]);
 
     $response->assertForbidden();

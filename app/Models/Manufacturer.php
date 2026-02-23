@@ -27,6 +27,16 @@ class Manufacturer extends Model
         'slug',
         'is_active',
         'current_plan_id',
+        'cnpj',
+        'phone',
+        'logo_path',
+        'zip_code',
+        'state',
+        'city',
+        'neighborhood',
+        'street',
+        'address_number',
+        'complement',
     ];
 
     /**

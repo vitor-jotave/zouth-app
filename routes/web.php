@@ -8,6 +8,7 @@ use App\Http\Controllers\CatalogSettingsController;
 use App\Http\Controllers\Manufacturer\BillingController;
 use App\Http\Controllers\Manufacturer\OrderController as ManufacturerOrderController;
 use App\Http\Controllers\Manufacturer\UserController as ManufacturerUserController;
+use App\Http\Controllers\PlanSelectionController;
 use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductMediaController;
@@ -33,6 +34,16 @@ Route::post('catalog/{catalogSetting:public_token}/orders', [PublicOrderControll
     ->name('public.order.store');
 Route::get('o/{publicToken}', [PublicOrderController::class, 'show'])
     ->name('public.order.show');
+
+// Public plan selection routes (secured via signed URLs)
+Route::controller(PlanSelectionController::class)
+    ->prefix('plan-selection')
+    ->name('plan-selection.')
+    ->group(function () {
+        Route::get('{manufacturer}', 'show')->name('show');
+        Route::get('{manufacturer}/checkout/{plan}', 'checkout')->name('checkout');
+        Route::get('{manufacturer}/checkout/{plan}/success', 'checkoutSuccess')->name('checkout.success');
+    });
 
 // Manufacturer User Routes (tenant via session)
 Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function () {
@@ -121,6 +132,7 @@ Route::middleware(['auth', 'verified', 'superadmin'])->prefix('admin')->name('ad
     Route::controller(ManufacturerController::class)->prefix('manufacturers')->name('manufacturers.')->group(function () {
         Route::get('/', 'index')->name('index');
         Route::post('/', 'store')->name('store');
+        Route::put('{manufacturer}', 'update')->name('update');
         Route::post('{manufacturer}/toggle', 'toggle')->name('toggle');
     });
 

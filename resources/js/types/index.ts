@@ -29,6 +29,7 @@ export type SharedData = {
         limit_exceeded?: LimitExceededPayload | null;
         upgrade_success?: { plan_name: string } | null;
         downgrade_violations?: DowngradeViolation[] | null;
+        plan_selection_url?: string | null;
     };
     [key: string]: unknown;
 };
