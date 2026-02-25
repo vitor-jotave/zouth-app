@@ -1,7 +1,17 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { Package, Plus, Search, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pagination } from '@/components/pagination';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,7 +46,7 @@ interface Product {
     total_stock: number;
     price_cents?: number | null;
     category?: { id: number; name: string } | null;
-    media?: Array<{ id: number; type: 'image' | 'video'; path: string }>;
+    media?: Array<{ id: number; type: 'image' | 'video'; path: string; url?: string }>;
 }
 
 function formatPrice(priceCents?: number | null): string {
@@ -73,36 +83,46 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function ProductsIndex({ products, categories, filters }: Props) {
     const [search, setSearch] = useState(filters.search ?? '');
+    const [deleteProductId, setDeleteProductId] = useState<number | null>(null);
+    const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 
-    const updateFilters = (payload: Record<string, unknown>) => {
-        router.get(
-            '/manufacturer/products',
-            {
-                search,
-                category_id: filters.category_id ?? '',
-                is_active: filters.is_active ?? '',
-                ...payload,
-            },
-            {
-                preserveState: true,
-                preserveScroll: true,
-                replace: true,
-            },
-        );
-    };
+    const updateFilters = useCallback(
+        (payload: Record<string, unknown>) => {
+            router.get(
+                '/manufacturer/products',
+                {
+                    search,
+                    category_id: filters.category_id ?? '',
+                    is_active: filters.is_active ?? '',
+                    ...payload,
+                },
+                {
+                    preserveState: true,
+                    preserveScroll: true,
+                    replace: true,
+                },
+            );
+        },
+        [search, filters.category_id, filters.is_active],
+    );
 
     const handleSearchChange = (value: string) => {
         setSearch(value);
-        updateFilters({ search: value });
-    };
 
-    const handleDelete = (productId: number) => {
-        const confirmed = window.confirm('Deseja excluir este produto?');
-        if (!confirmed) {
-            return;
+        if (debounceRef.current) {
+            clearTimeout(debounceRef.current);
         }
 
-        router.delete(`/manufacturer/products/${productId}`);
+        debounceRef.current = setTimeout(() => {
+            updateFilters({ search: value });
+        }, 300);
+    };
+
+    const confirmDelete = () => {
+        if (deleteProductId === null) return;
+        router.delete(`/manufacturer/products/${deleteProductId}`, {
+            onFinish: () => setDeleteProductId(null),
+        });
     };
 
     return (
@@ -251,7 +271,7 @@ export default function ProductsIndex({ products, categories, filters }: Props) 
                                             <Button
                                                 variant="destructive"
                                                 size="sm"
-                                                onClick={() => handleDelete(product.id)}
+                                                onClick={() => setDeleteProductId(product.id)}
                                             >
                                                 <Trash2 className="mr-1 h-4 w-4" />
                                                 Excluir
@@ -265,6 +285,32 @@ export default function ProductsIndex({ products, categories, filters }: Props) 
                 </div>
 
                 <Pagination links={products.meta?.links ?? products.links} />
+
+                {/* Delete confirmation dialog */}
+                <AlertDialog
+                    open={deleteProductId !== null}
+                    onOpenChange={(open) => {
+                        if (!open) setDeleteProductId(null);
+                    }}
+                >
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir produto</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Tem certeza que deseja excluir este produto? Essa acao nao pode ser desfeita.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={confirmDelete}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                                Excluir
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             </div>
         </AppLayout>
     );

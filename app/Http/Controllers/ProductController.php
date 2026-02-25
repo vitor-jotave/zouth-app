@@ -122,7 +122,7 @@ class ProductController extends Controller
         }
 
         return redirect()
-            ->route('manufacturer.products.edit', $product)
+            ->route('manufacturer.products.index')
             ->with('success', 'Produto criado com sucesso.');
     }
 
@@ -166,7 +166,7 @@ class ProductController extends Controller
     public function destroy(Product $product): RedirectResponse
     {
         foreach ($product->media as $media) {
-            Storage::delete($media->path);
+            Storage::disk('s3')->delete($media->path);
         }
 
         $product->delete();

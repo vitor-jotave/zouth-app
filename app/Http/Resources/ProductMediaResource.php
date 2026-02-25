@@ -23,7 +23,7 @@ class ProductMediaResource extends JsonResource
             'product_id' => $this->product_id,
             'type' => $type,
             'path' => $this->path,
-            'url' => Storage::url($this->path),
+            'url' => Storage::disk('s3')->url($this->path),
             'sort_order' => $this->sort_order,
         ];
     }

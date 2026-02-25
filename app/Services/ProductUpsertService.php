@@ -34,7 +34,7 @@ class ProductUpsertService
             }
         }
 
-        $path = $file->store("products/{$product->id}");
+        $path = $file->store("products/{$product->id}", 's3');
         $order = $sortOrder ?? ((int) $product->media()->max('sort_order') + 1);
 
         return $product->media()->create([

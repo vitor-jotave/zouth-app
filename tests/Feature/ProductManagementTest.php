@@ -49,7 +49,7 @@ it('creates a product without variants', function () {
 
     $product = Product::first();
 
-    $response->assertRedirect(route('manufacturer.products.edit', $product));
+    $response->assertRedirect(route('manufacturer.products.index'));
 
     $this->assertDatabaseHas('products', [
         'sku' => 'SKU-BASIC',

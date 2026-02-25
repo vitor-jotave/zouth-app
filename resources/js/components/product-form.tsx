@@ -1,6 +1,25 @@
 import { router, useForm } from '@inertiajs/react';
-import { ArrowDown, ArrowUp, ImagePlus, Package, Palette, Shirt, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+    DndContext,
+    KeyboardSensor,
+    PointerSensor,
+    closestCenter,
+    type DragEndEvent,
+    useSensor,
+    useSensors,
+} from '@dnd-kit/core';
+import {
+    SortableContext,
+    arrayMove,
+    sortableKeyboardCoordinates,
+    useSortable,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { CircleAlert, GripVertical, ImagePlus, Loader2, Package, Palette, Shirt, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ImageCropDialog } from '@/components/image-crop-dialog';
+import { ImageDropzone } from '@/components/image-dropzone';
 import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -26,8 +45,11 @@ interface MediaItem {
     id: number;
     type: 'image' | 'video';
     path: string;
+    url?: string;
     sort_order: number;
 }
+
+const MAX_IMAGES = 10;
 
 interface ProductColor {
     id?: number;
@@ -89,6 +111,31 @@ const steps = [
     { key: 'variants', label: 'Variacoes e estoque', icon: Shirt },
 ];
 
+/** Maps error field prefixes to their respective step index. */
+const STEP_FIELDS: Record<number, string[]> = {
+    0: ['name', 'sku', 'description', 'product_category_id', 'price', 'sort_order', 'is_active'],
+    1: ['images', 'video'],
+    2: ['sizes', 'colors', 'variant_stocks', 'has_size_variants', 'has_color_variants', 'base_quantity'],
+};
+
+function getStepForError(errorKey: string): number {
+    for (const [stepStr, fields] of Object.entries(STEP_FIELDS)) {
+        const stepIdx = Number(stepStr);
+        if (fields.some((f) => errorKey === f || errorKey.startsWith(`${f}.`))) {
+            return stepIdx;
+        }
+    }
+    return 0;
+}
+
+function stepsWithErrors(errors: Record<string, string>): Set<number> {
+    const set = new Set<number>();
+    for (const key of Object.keys(errors)) {
+        set.add(getStepForError(key));
+    }
+    return set;
+}
+
 function buildVariantStocks(
     hasSizes: boolean,
     hasColors: boolean,
@@ -136,6 +183,77 @@ function buildVariantStocks(
     });
 
     return combos;
+}
+
+// ---------------------------------------------------------------------------
+// Sortable media item component
+// ---------------------------------------------------------------------------
+interface SortableMediaItemProps {
+    media: MediaItem;
+    index: number;
+    onDelete: (id: number) => void;
+}
+
+function SortableMediaItem({ media, index, onDelete }: SortableMediaItemProps) {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id: media.id });
+
+    const style: React.CSSProperties = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+        zIndex: isDragging ? 50 : undefined,
+    };
+
+    return (
+        <div
+            ref={setNodeRef}
+            style={style}
+            className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-background p-3"
+        >
+            <div className="flex items-center gap-3">
+                <button
+                    type="button"
+                    className="cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
+                    aria-label="Arrastar para reordenar"
+                    {...attributes}
+                    {...listeners}
+                >
+                    <GripVertical className="h-5 w-5" />
+                </button>
+                {media.type === 'image' ? (
+                    <img
+                        src={media.url}
+                        alt="Preview"
+                        className="h-16 w-16 rounded-md object-cover"
+                    />
+                ) : (
+                    <div className="flex h-16 w-16 items-center justify-center rounded-md bg-muted text-sm">
+                        Video
+                    </div>
+                )}
+                <div>
+                    <div className="text-sm font-medium">
+                        {media.type === 'image' ? 'Imagem' : 'Video'}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Ordem {index + 1}</div>
+                </div>
+            </div>
+            <Button
+                type="button"
+                variant="destructive"
+                onClick={() => onDelete(media.id)}
+            >
+                Remover
+            </Button>
+        </div>
+    );
 }
 
 export function ProductForm({
@@ -194,10 +312,13 @@ export function ProductForm({
     const [mediaItems, setMediaItems] = useState<MediaItem[]>(
         product?.media ?? [],
     );
-    const [imagesToUpload, setImagesToUpload] = useState<File[]>([]);
     const [videoToUpload, setVideoToUpload] = useState<File | null>(null);
-    const imagesInputRef = useRef<HTMLInputElement>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
+
+    // Crop queue: files waiting to be cropped one-by-one
+    const [cropQueue, setCropQueue] = useState<File[]>([]);
+    const [cropDialogOpen, setCropDialogOpen] = useState(false);
+    const [uploadingMedia, setUploadingMedia] = useState(false);
 
     useEffect(() => {
         setMediaItems(product?.media ?? []);
@@ -221,7 +342,28 @@ export function ProductForm({
         data.variant_stocks,
     ]);
 
+    // Steps with validation errors — used for badges + auto-navigation
+    const errorSteps = useMemo(() => stepsWithErrors(errors), [errors]);
+
+    // When backend errors arrive, navigate to the first step that has errors
+    useEffect(() => {
+        if (errorSteps.size > 0) {
+            const first = Math.min(...errorSteps);
+            setStep(first);
+        }
+    }, [errorSteps]);
+
+    /** Client-side required-field check for the current step. */
+    const validateCurrentStep = (): boolean => {
+        if (step === 0) {
+            return data.name.trim() !== '' && data.sku.trim() !== '';
+        }
+        // Steps 1 & 2 don't have mandatory fields that block advancing
+        return true;
+    };
+
     const handleNext = () => {
+        if (!validateCurrentStep()) return;
         setStep((current) => Math.min(current + 1, steps.length - 1));
     };
 
@@ -362,47 +504,110 @@ export function ProductForm({
         updateColors(nextColors);
     };
 
-    const handleMediaUpload = () => {
-        if (!product) {
-            return;
-        }
+    // -----------------------------------------------------------------------
+    // Image crop queue
+    // -----------------------------------------------------------------------
+    const currentCropFile = cropQueue.length > 0 ? cropQueue[0] : null;
 
-        if (imagesToUpload.length > 0) {
-            router.post(
-                `/manufacturer/products/${product.id}/media`,
-                { type: 'image', files: imagesToUpload },
-                {
-                    forceFormData: true,
-                    preserveScroll: true,
-                    preserveState: true,
-                    onFinish: () => {
-                        setImagesToUpload([]);
-                        if (imagesInputRef.current) {
-                            imagesInputRef.current.value = '';
-                        }
-                    },
-                },
-            );
-        }
+    const handleFilesSelected = useCallback(
+        (files: File[]) => {
+            setCropQueue(files);
+            setCropDialogOpen(true);
+        },
+        [],
+    );
 
-        if (videoToUpload) {
-            router.post(
-                `/manufacturer/products/${product.id}/media`,
-                { type: 'video', file: videoToUpload },
-                {
-                    forceFormData: true,
-                    preserveScroll: true,
-                    preserveState: true,
-                    onFinish: () => {
-                        setVideoToUpload(null);
-                        if (videoInputRef.current) {
-                            videoInputRef.current.value = '';
-                        }
+    const handleCropped = useCallback(
+        (croppedFile: File) => {
+            if (mode === 'create') {
+                setData('images', [...data.images, croppedFile]);
+            } else if (product) {
+                // Upload immediately in edit mode
+                setUploadingMedia(true);
+                router.post(
+                    `/manufacturer/products/${product.id}/media`,
+                    { type: 'image', files: [croppedFile] },
+                    {
+                        forceFormData: true,
+                        preserveScroll: true,
+                        preserveState: true,
+                        onFinish: () => setUploadingMedia(false),
                     },
+                );
+            }
+
+            // Advance to next file in queue or close
+            setCropQueue((prev) => {
+                const next = prev.slice(1);
+                if (next.length === 0) {
+                    setCropDialogOpen(false);
+                }
+                return next;
+            });
+        },
+        [mode, product, data.images, setData],
+    );
+
+    const handleCropSkip = useCallback(() => {
+        setCropQueue((prev) => {
+            const next = prev.slice(1);
+            if (next.length === 0) {
+                setCropDialogOpen(false);
+            }
+            return next;
+        });
+    }, []);
+
+    const handleVideoUpload = useCallback(() => {
+        if (!product || !videoToUpload) return;
+
+        setUploadingMedia(true);
+        router.post(
+            `/manufacturer/products/${product.id}/media`,
+            { type: 'video', file: videoToUpload },
+            {
+                forceFormData: true,
+                preserveScroll: true,
+                preserveState: true,
+                onFinish: () => {
+                    setVideoToUpload(null);
+                    setUploadingMedia(false);
+                    if (videoInputRef.current) {
+                        videoInputRef.current.value = '';
+                    }
                 },
-            );
-        }
-    };
+            },
+        );
+    }, [product, videoToUpload]);
+
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        }),
+    );
+
+    const handleDragEnd = useCallback(
+        (event: DragEndEvent) => {
+            const { active, over } = event;
+            if (!over || active.id === over.id || !product) return;
+
+            setMediaItems((prev) => {
+                const oldIndex = prev.findIndex((m) => m.id === active.id);
+                const newIndex = prev.findIndex((m) => m.id === over.id);
+                const next = arrayMove(prev, oldIndex, newIndex);
+
+                router.put(
+                    `/manufacturer/products/${product.id}/media/order`,
+                    { media_order: next.map((item) => item.id) },
+                    { preserveScroll: true, preserveState: true },
+                );
+
+                return next;
+            });
+        },
+        [product],
+    );
 
     const moveMedia = (index: number, direction: 'up' | 'down') => {
         const next = [...mediaItems];
@@ -447,6 +652,7 @@ export function ProductForm({
                 {steps.map((item, index) => {
                     const Icon = item.icon;
                     const isActive = step === index;
+                    const hasError = errorSteps.has(index);
 
                     return (
                         <Button
@@ -454,9 +660,13 @@ export function ProductForm({
                             type="button"
                             variant={isActive ? 'default' : 'outline'}
                             onClick={() => setStep(index)}
+                            className="relative"
                         >
                             <Icon className="mr-2 h-4 w-4" />
                             {item.label}
+                            {hasError && (
+                                <CircleAlert className="ml-1.5 size-4 shrink-0 text-destructive" />
+                            )}
                         </Button>
                     );
                 })}
@@ -596,182 +806,183 @@ export function ProductForm({
                     <CardHeader>
                         <CardTitle>Midia</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-6">
+                        {/* Image drop zone */}
                         <div className="space-y-4">
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label>Adicionar fotos</Label>
-                                    <Input
-                                        ref={imagesInputRef}
-                                        type="file"
-                                        accept="image/*"
-                                        multiple
-                                        onChange={(event) => {
-                                            const files = Array.from(event.target.files ?? []);
-                                            if (mode === 'create') {
-                                                setData('images', [...data.images, ...files]);
-                                            } else {
-                                                setImagesToUpload(files);
-                                            }
-                                        }}
-                                    />
-                                    <InputError message={errors.images} />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Adicionar video</Label>
-                                    <Input
-                                        ref={videoInputRef}
-                                        type="file"
-                                        accept="video/mp4,video/quicktime,video/webm"
-                                        onChange={(event) => {
-                                            const file = event.target.files?.[0] ?? null;
-                                            if (mode === 'create') {
-                                                setData('video', file);
-                                            } else {
-                                                setVideoToUpload(file);
-                                            }
-                                        }}
-                                    />
-                                    <InputError message={errors.video} />
-                                </div>
-                            </div>
-
-                            {mode === 'edit' && (
-                                <Button
-                                    type="button"
-                                    onClick={handleMediaUpload}
-                                    disabled={
-                                        imagesToUpload.length === 0 &&
-                                        !videoToUpload
-                                    }
-                                >
-                                    Enviar midia
-                                </Button>
-                            )}
-
-                            {mode === 'create' && data.images.length > 0 && (
-                                <div className="space-y-2">
-                                    <Label className="text-xs text-muted-foreground">
-                                        {data.images.length} foto(s) selecionada(s)
-                                    </Label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {data.images.map((file, index) => (
-                                            <div key={index} className="relative">
-                                                <img
-                                                    src={URL.createObjectURL(file)}
-                                                    alt={`Preview ${index + 1}`}
-                                                    className="h-16 w-16 rounded-md object-cover"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    className="absolute -top-1.5 -right-1.5 rounded-full bg-destructive p-0.5 text-destructive-foreground"
-                                                    onClick={() =>
-                                                        setData('images', data.images.filter((_, i) => i !== index))
-                                                    }
-                                                >
-                                                    <X className="h-3 w-3" />
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {mode === 'create' && data.video && (
-                                <div className="flex items-center gap-2 rounded-md border p-2 text-sm">
-                                    <span className="text-muted-foreground">Video:</span>
-                                    <span>{data.video.name}</span>
-                                    <button
-                                        type="button"
-                                        className="ml-auto rounded-full bg-destructive p-0.5 text-destructive-foreground"
-                                        onClick={() => {
-                                            setData('video', null);
-                                            if (videoInputRef.current) {
-                                                videoInputRef.current.value = '';
-                                            }
-                                        }}
-                                    >
-                                        <X className="h-3 w-3" />
-                                    </button>
-                                </div>
-                            )}
+                            <Label>Fotos do produto</Label>
+                            <ImageDropzone
+                                onFilesSelected={handleFilesSelected}
+                                maxFiles={MAX_IMAGES}
+                                currentCount={
+                                    mode === 'create'
+                                        ? data.images.length
+                                        : mediaItems.filter((m) => m.type === 'image').length
+                                }
+                                disabled={uploadingMedia}
+                            />
+                            <InputError message={errors.images} />
                         </div>
 
-                        {mediaItems.length === 0 ? (
-                            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                                Nenhuma midia adicionada.
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                {mediaItems.map((media, index) => (
-                                    <div
-                                        key={media.id}
-                                        className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            {media.type === 'image' ? (
-                                                <img
-                                                    src={media.url}
-                                                    alt="Preview"
-                                                    className="h-16 w-16 rounded-md object-cover"
-                                                />
-                                            ) : (
-                                                <div className="flex h-16 w-16 items-center justify-center rounded-md bg-muted text-sm">
-                                                    Video
-                                                </div>
-                                            )}
-                                            <div>
-                                                <div className="text-sm font-medium">
-                                                    {media.type === 'image'
-                                                        ? 'Imagem'
-                                                        : 'Video'}
-                                                </div>
-                                                <div className="text-xs text-muted-foreground">
-                                                    Ordem {index + 1}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="icon"
-                                                onClick={() =>
-                                                    moveMedia(index, 'up')
-                                                }
-                                            >
-                                                <ArrowUp className="h-4 w-4" />
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="icon"
-                                                onClick={() =>
-                                                    moveMedia(index, 'down')
-                                                }
-                                            >
-                                                <ArrowDown className="h-4 w-4" />
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                variant="destructive"
-                                                onClick={() => deleteMedia(media.id)}
-                                            >
-                                                Remover
-                                            </Button>
-                                        </div>
-                                    </div>
-                                ))}
+                        {/* Crop dialog (processes queue one by one) */}
+                        <ImageCropDialog
+                            open={cropDialogOpen}
+                            onOpenChange={setCropDialogOpen}
+                            imageFile={currentCropFile}
+                            onCropped={handleCropped}
+                            onSkip={handleCropSkip}
+                        />
 
-                                {mode === 'edit' && mediaItems.length > 1 && (
+                        {/* Create mode: preview of cropped images ready to submit */}
+                        {mode === 'create' && data.images.length > 0 && (
+                            <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground">
+                                    {data.images.length} foto(s) pronta(s) para envio
+                                </Label>
+                                <div className="grid grid-cols-[repeat(auto-fill,minmax(5rem,1fr))] gap-2">
+                                    {data.images.map((file, index) => (
+                                        <div
+                                            key={`img-${index}`}
+                                            className="group relative aspect-[4/5] overflow-hidden rounded-md border bg-muted"
+                                        >
+                                            <img
+                                                src={URL.createObjectURL(file)}
+                                                alt={`Preview ${index + 1}`}
+                                                className="h-full w-full object-cover"
+                                            />
+                                            <button
+                                                type="button"
+                                                className="absolute top-1 right-1 rounded-full bg-destructive p-1 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                                                onClick={() =>
+                                                    setData(
+                                                        'images',
+                                                        data.images.filter(
+                                                            (_, i) => i !== index,
+                                                        ),
+                                                    )
+                                                }
+                                            >
+                                                <X className="size-3" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Create mode: video selector */}
+                        {mode === 'create' && (
+                            <div className="space-y-2">
+                                <Label>Video (opcional)</Label>
+                                <Input
+                                    ref={videoInputRef}
+                                    type="file"
+                                    accept="video/mp4,video/quicktime,video/webm"
+                                    onChange={(event) => {
+                                        const file =
+                                            event.target.files?.[0] ?? null;
+                                        setData('video', file);
+                                    }}
+                                />
+                                <InputError message={errors.video} />
+
+                                {data.video && (
+                                    <div className="flex items-center gap-2 rounded-md border p-2 text-sm">
+                                        <span className="text-muted-foreground">
+                                            Video:
+                                        </span>
+                                        <span className="truncate">
+                                            {data.video.name}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            className="ml-auto shrink-0 rounded-full bg-destructive p-1 text-destructive-foreground"
+                                            onClick={() => {
+                                                setData('video', null);
+                                                if (videoInputRef.current) {
+                                                    videoInputRef.current.value =
+                                                        '';
+                                                }
+                                            }}
+                                        >
+                                            <X className="size-3" />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Edit mode: video upload */}
+                        {mode === 'edit' && (
+                            <div className="space-y-2">
+                                <Label>Adicionar video</Label>
+                                <Input
+                                    ref={videoInputRef}
+                                    type="file"
+                                    accept="video/mp4,video/quicktime,video/webm"
+                                    onChange={(event) => {
+                                        const file =
+                                            event.target.files?.[0] ?? null;
+                                        setVideoToUpload(file);
+                                    }}
+                                />
+                                <InputError message={errors.video} />
+
+                                {videoToUpload && (
                                     <Button
                                         type="button"
-                                        variant="outline"
-                                        onClick={persistMediaOrder}
+                                        onClick={handleVideoUpload}
+                                        disabled={uploadingMedia}
                                     >
-                                        Salvar ordem
+                                        {uploadingMedia && (
+                                            <Loader2 className="mr-2 size-4 animate-spin" />
+                                        )}
+                                        Enviar video
                                     </Button>
                                 )}
+                            </div>
+                        )}
+
+                        {/* Upload progress indicator */}
+                        {uploadingMedia && (
+                            <div className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-sm text-primary">
+                                <Loader2 className="size-4 animate-spin" />
+                                Enviando midia...
+                            </div>
+                        )}
+
+                        {/* Existing media list (edit mode) */}
+                        {mediaItems.length === 0 && mode === 'edit' && (
+                            <div className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+                                Nenhuma midia adicionada.
+                            </div>
+                        )}
+
+                        {mediaItems.length > 0 && (
+                            <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground">
+                                    Midias do produto ({mediaItems.length})
+                                </Label>
+                                <DndContext
+                                    sensors={sensors}
+                                    collisionDetection={closestCenter}
+                                    onDragEnd={handleDragEnd}
+                                >
+                                    <SortableContext
+                                        items={mediaItems.map((m) => m.id)}
+                                        strategy={verticalListSortingStrategy}
+                                    >
+                                        <div className="space-y-2">
+                                            {mediaItems.map((media, index) => (
+                                                <SortableMediaItem
+                                                    key={media.id}
+                                                    media={media}
+                                                    index={index}
+                                                    onDelete={deleteMedia}
+                                                />
+                                            ))}
+                                        </div>
+                                    </SortableContext>
+                                </DndContext>
                             </div>
                         )}
                     </CardContent>
@@ -1092,9 +1303,13 @@ export function ProductForm({
             )}
 
             <div className="flex flex-wrap items-center justify-between gap-4">
-                <Button type="button" variant="outline" onClick={handlePrev}>
-                    Voltar
-                </Button>
+                {step > 0 ? (
+                    <Button type="button" variant="outline" onClick={handlePrev}>
+                        Voltar
+                    </Button>
+                ) : (
+                    <div />
+                )}
                 <div className="flex gap-2">
                     {step < steps.length - 1 && (
                         <Button type="button" onClick={handleNext}>
@@ -1103,9 +1318,14 @@ export function ProductForm({
                     )}
                     {step === steps.length - 1 && (
                         <Button type="submit" disabled={processing}>
-                            {mode === 'create'
-                                ? 'Criar produto'
-                                : 'Salvar alteracoes'}
+                            {processing && <Loader2 className="mr-2 size-4 animate-spin" />}
+                            {processing
+                                ? mode === 'create'
+                                    ? 'Criando...'
+                                    : 'Salvando...'
+                                : mode === 'create'
+                                  ? 'Criar produto'
+                                  : 'Salvar alteracoes'}
                         </Button>
                     )}
                 </div>
