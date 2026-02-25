@@ -67,11 +67,16 @@ interface Product {
     category?: string | null;
     primary_image?: string | null;
     images: string[];
-    has_size_variants: boolean;
-    has_color_variants: boolean;
-    sizes: string[];
-    colors: Array<{ name: string; hex?: string | null }>;
-    variant_stocks: Array<{ size?: string | null; color?: string | null; quantity: number }>;
+    variations: Array<{
+        type_name: string;
+        is_color_type: boolean;
+        values: Array<{ value: string; hex?: string | null }>;
+    }>;
+    variant_stocks: Array<{
+        variation_key: Record<string, string>;
+        quantity: number;
+        price_cents?: number | null;
+    }>;
     total_stock: number;
     price_cents?: number | null;
 }
@@ -366,9 +371,9 @@ function PlayfulLayout({ manufacturer, settings, products, tokens, onAddToCart }
                                             {product.category}
                                         </Badge>
                                     )}
-                                    {product.has_size_variants && product.sizes.length > 0 && (
+                                    {product.variations.length > 0 && (
                                         <Badge variant="outline">
-                                            {product.sizes.length} tamanhos
+                                            {product.variations.reduce((sum, v) => sum + v.values.length, 0)} variações
                                         </Badge>
                                     )}
                                 </div>
@@ -510,29 +515,29 @@ function BoutiqueLayout({ manufacturer, settings, products, tokens, onAddToCart 
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <span className="text-xs opacity-40">SKU {product.sku}</span>
-                                    {product.has_size_variants && product.sizes.length > 0 && (
-                                        <>
-                                            <span className="opacity-20">•</span>
+                                    {product.variations.filter((v) => !v.is_color_type).map((v) => (
+                                        <span key={v.type_name}>
+                                            <span className="opacity-20">•</span>{' '}
                                             <span className="text-xs opacity-60">
-                                                {product.sizes.join(', ')}
+                                                {v.values.map((val) => val.value).join(', ')}
                                             </span>
-                                        </>
-                                    )}
+                                        </span>
+                                    ))}
                                 </div>
-                                {product.has_color_variants && product.colors.length > 0 && (
-                                    <div className="flex gap-2">
-                                        {product.colors.slice(0, 5).map((color, i) => (
+                                {product.variations.filter((v) => v.is_color_type).map((v) => (
+                                    <div key={v.type_name} className="flex gap-2">
+                                        {v.values.slice(0, 5).map((val, i) => (
                                             <div
                                                 key={i}
                                                 className="h-6 w-6 rounded-full border-2 border-white shadow-sm"
                                                 style={{
-                                                    backgroundColor: color.hex ?? '#ccc',
+                                                    backgroundColor: val.hex ?? '#ccc',
                                                 }}
-                                                title={color.name}
+                                                title={val.value}
                                             />
                                         ))}
                                     </div>
-                                )}
+                                ))}
                                 <button
                                     type="button"
                                     onClick={() => onAddToCart(product)}

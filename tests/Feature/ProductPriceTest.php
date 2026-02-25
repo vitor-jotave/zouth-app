@@ -36,12 +36,9 @@ it('stores a product with comma-separated price converting to cents', function (
     $response = $this->post('/manufacturer/products', [
         'name' => 'Produto Preco Virgula',
         'sku' => 'SKU-PRICE-COMMA',
-        'has_size_variants' => false,
-        'has_color_variants' => false,
         'base_quantity' => 10,
         'price' => '12,90',
-        'sizes' => [],
-        'colors' => [],
+        'variations' => [],
         'variant_stocks' => [],
     ]);
 
@@ -57,12 +54,9 @@ it('stores a product with dot-separated price converting to cents', function () 
     $response = $this->post('/manufacturer/products', [
         'name' => 'Produto Preco Ponto',
         'sku' => 'SKU-PRICE-DOT',
-        'has_size_variants' => false,
-        'has_color_variants' => false,
         'base_quantity' => 10,
         'price' => '99.50',
-        'sizes' => [],
-        'colors' => [],
+        'variations' => [],
         'variant_stocks' => [],
     ]);
 
@@ -78,12 +72,9 @@ it('stores a product with null price when field is empty', function () {
     $response = $this->post('/manufacturer/products', [
         'name' => 'Produto Sem Preco',
         'sku' => 'SKU-NO-PRICE',
-        'has_size_variants' => false,
-        'has_color_variants' => false,
         'base_quantity' => 5,
         'price' => '',
-        'sizes' => [],
-        'colors' => [],
+        'variations' => [],
         'variant_stocks' => [],
     ]);
 
@@ -99,11 +90,8 @@ it('stores a product with null price when field is omitted', function () {
     $response = $this->post('/manufacturer/products', [
         'name' => 'Produto Omitido Preco',
         'sku' => 'SKU-OMIT-PRICE',
-        'has_size_variants' => false,
-        'has_color_variants' => false,
         'base_quantity' => 5,
-        'sizes' => [],
-        'colors' => [],
+        'variations' => [],
         'variant_stocks' => [],
     ]);
 
@@ -128,12 +116,9 @@ it('updates a product price correctly', function () {
     $response = $this->put("/manufacturer/products/{$product->id}", [
         'name' => $product->name,
         'sku' => $product->sku,
-        'has_size_variants' => false,
-        'has_color_variants' => false,
         'base_quantity' => $product->base_quantity,
         'price' => '25,00',
-        'sizes' => [],
-        'colors' => [],
+        'variations' => [],
         'variant_stocks' => [],
     ]);
 
@@ -151,12 +136,9 @@ it('clears product price when empty string is sent', function () {
     $response = $this->put("/manufacturer/products/{$product->id}", [
         'name' => $product->name,
         'sku' => $product->sku,
-        'has_size_variants' => false,
-        'has_color_variants' => false,
         'base_quantity' => $product->base_quantity,
         'price' => '',
-        'sizes' => [],
-        'colors' => [],
+        'variations' => [],
         'variant_stocks' => [],
     ]);
 
@@ -173,12 +155,9 @@ it('rejects a negative price', function () {
     $response = $this->post('/manufacturer/products', [
         'name' => 'Produto Negativo',
         'sku' => 'SKU-NEG',
-        'has_size_variants' => false,
-        'has_color_variants' => false,
         'base_quantity' => 1,
         'price' => '-10',
-        'sizes' => [],
-        'colors' => [],
+        'variations' => [],
         'variant_stocks' => [],
     ]);
 
@@ -189,12 +168,9 @@ it('rejects a non-numeric price', function () {
     $response = $this->post('/manufacturer/products', [
         'name' => 'Produto Texto',
         'sku' => 'SKU-TXT',
-        'has_size_variants' => false,
-        'has_color_variants' => false,
         'base_quantity' => 1,
         'price' => 'abc',
-        'sizes' => [],
-        'colors' => [],
+        'variations' => [],
         'variant_stocks' => [],
     ]);
 
@@ -205,12 +181,9 @@ it('rejects a price above the maximum', function () {
     $response = $this->post('/manufacturer/products', [
         'name' => 'Produto Caro',
         'sku' => 'SKU-MAX',
-        'has_size_variants' => false,
-        'has_color_variants' => false,
         'base_quantity' => 1,
         'price' => '1000000.00',
-        'sizes' => [],
-        'colors' => [],
+        'variations' => [],
         'variant_stocks' => [],
     ]);
 

@@ -3,7 +3,6 @@
 namespace App\Http\Resources;
 
 use App\Enums\ProductMediaType;
-use App\Enums\ProductSize;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Storage;
@@ -23,11 +22,15 @@ class ProductCatalogResource extends JsonResource
             : $item->type === ProductMediaType::Image->value);
         $primaryImage = $images->first();
 
-        $sizes = $this->variantStocks
-            ? $this->variantStocks->pluck('size')->filter()->unique()->values()->map(function ($size) {
-                return $size instanceof ProductSize ? $size->value : $size;
-            })
-            : collect();
+        // Build variation info from product_variations relationship
+        $variations = ($this->productVariations ?? collect())->map(fn ($pv) => [
+            'type_name' => $pv->variationType->name ?? '',
+            'is_color_type' => $pv->variationType->is_color_type ?? false,
+            'values' => ($pv->variationType->values ?? collect())->map(fn ($val) => [
+                'value' => $val->value,
+                'hex' => $val->hex,
+            ])->values()->all(),
+        ])->values()->all();
 
         return [
             'id' => $this->id,
@@ -36,17 +39,11 @@ class ProductCatalogResource extends JsonResource
             'category' => $this->category?->name,
             'primary_image' => $primaryImage ? Storage::url($primaryImage->path) : null,
             'images' => $images->map(fn ($item) => Storage::url($item->path))->values(),
-            'has_size_variants' => $this->has_size_variants,
-            'has_color_variants' => $this->has_color_variants,
-            'sizes' => $sizes,
-            'colors' => $this->colors?->map(fn ($color) => [
-                'name' => $color->name,
-                'hex' => $color->hex,
-            ]) ?? [],
+            'variations' => $variations,
             'variant_stocks' => $this->variantStocks?->map(fn ($stock) => [
-                'size' => $stock->size instanceof ProductSize ? $stock->size->value : $stock->size,
-                'color' => $stock->color?->name,
+                'variation_key' => $stock->variation_key,
                 'quantity' => $stock->quantity,
+                'price_cents' => $stock->price_cents,
             ]) ?? [],
             'total_stock' => $this->getTotalStock(),
             'price_cents' => $this->price_cents,

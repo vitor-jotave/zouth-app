@@ -5,9 +5,10 @@ use App\Models\Manufacturer;
 use App\Models\Plan;
 use App\Models\Product;
 use App\Models\ProductCategory;
-use App\Models\ProductColor;
 use App\Models\ProductVariantStock;
 use App\Models\User;
+use App\Models\VariationType;
+use App\Models\VariationValue;
 
 beforeEach(function () {
     $plan = Plan::factory()->premium()->create();
@@ -36,18 +37,13 @@ it('creates a product without variants', function () {
         'sku' => 'SKU-BASIC',
         'description' => 'Produto simples',
         'product_category_id' => $category->id,
-        'has_size_variants' => false,
-        'has_color_variants' => false,
         'base_quantity' => 12,
         'is_active' => true,
-        'sizes' => [],
-        'colors' => [],
+        'variations' => [],
         'variant_stocks' => [],
     ];
 
     $response = $this->post('/manufacturer/products', $payload);
-
-    $product = Product::first();
 
     $response->assertRedirect(route('manufacturer.products.index'));
 
@@ -55,25 +51,29 @@ it('creates a product without variants', function () {
         'sku' => 'SKU-BASIC',
         'manufacturer_id' => $this->manufacturer->id,
         'base_quantity' => 12,
-        'has_size_variants' => false,
-        'has_color_variants' => false,
     ]);
 
     expect(ProductVariantStock::count())->toBe(0);
 });
 
-it('creates size-only variants with stock rows', function () {
+it('creates single-type variants with stock rows', function () {
+    $sizeType = VariationType::factory()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'name' => 'Tamanho',
+    ]);
+    VariationValue::factory()->create(['variation_type_id' => $sizeType->id, 'value' => 'P']);
+    VariationValue::factory()->create(['variation_type_id' => $sizeType->id, 'value' => 'M']);
+
     $payload = [
         'name' => 'Produto Tamanhos',
         'sku' => 'SKU-SIZE',
-        'has_size_variants' => true,
-        'has_color_variants' => false,
         'base_quantity' => 0,
-        'sizes' => ['P', 'M'],
-        'colors' => [],
+        'variations' => [
+            ['variation_type_id' => $sizeType->id, 'values' => ['P', 'M']],
+        ],
         'variant_stocks' => [
-            ['size' => 'P', 'quantity' => 5],
-            ['size' => 'M', 'quantity' => 7],
+            ['variation_key' => ['Tamanho' => 'P'], 'quantity' => 5],
+            ['variation_key' => ['Tamanho' => 'M'], 'quantity' => 7],
         ],
     ];
 
@@ -83,60 +83,40 @@ it('creates size-only variants with stock rows', function () {
 
     $product = Product::first();
 
-    expect($product->has_size_variants)->toBeTrue();
-    expect($product->has_color_variants)->toBeFalse();
+    expect($product->hasVariations())->toBeTrue();
     expect($product->base_quantity)->toBe(0);
     expect($product->variantStocks)->toHaveCount(2);
-    expect($product->variantStocks->pluck('product_color_id')->filter()->count())->toBe(0);
+    expect($product->productVariations)->toHaveCount(1);
 });
 
-it('creates color-only variants with stock rows', function () {
-    $payload = [
-        'name' => 'Produto Cores',
-        'sku' => 'SKU-COLOR',
-        'has_size_variants' => false,
-        'has_color_variants' => true,
-        'base_quantity' => 0,
-        'sizes' => [],
-        'colors' => [
-            ['name' => 'Preto', 'hex' => '#000000'],
-            ['name' => 'Branco', 'hex' => '#FFFFFF'],
-        ],
-        'variant_stocks' => [
-            ['color_name' => 'Preto', 'quantity' => 4],
-            ['color_name' => 'Branco', 'quantity' => 6],
-        ],
-    ];
+it('creates multi-type matrix variants with stock rows', function () {
+    $sizeType = VariationType::factory()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'name' => 'Tamanho',
+    ]);
+    VariationValue::factory()->create(['variation_type_id' => $sizeType->id, 'value' => 'P']);
+    VariationValue::factory()->create(['variation_type_id' => $sizeType->id, 'value' => 'M']);
 
-    $response = $this->post('/manufacturer/products', $payload);
+    $colorType = VariationType::factory()->colorType()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'name' => 'Cor',
+    ]);
+    VariationValue::factory()->create(['variation_type_id' => $colorType->id, 'value' => 'Azul', 'hex' => '#0000FF']);
+    VariationValue::factory()->create(['variation_type_id' => $colorType->id, 'value' => 'Verde', 'hex' => '#00FF00']);
 
-    $response->assertRedirect();
-
-    $product = Product::first();
-
-    expect($product->has_color_variants)->toBeTrue();
-    expect(ProductColor::where('product_id', $product->id)->count())->toBe(2);
-    expect($product->variantStocks)->toHaveCount(2);
-    expect($product->variantStocks->pluck('product_color_id')->filter()->count())->toBe(2);
-});
-
-it('creates size and color matrix variants', function () {
     $payload = [
         'name' => 'Produto Matriz',
         'sku' => 'SKU-MATRIX',
-        'has_size_variants' => true,
-        'has_color_variants' => true,
         'base_quantity' => 0,
-        'sizes' => ['P', 'M'],
-        'colors' => [
-            ['name' => 'Azul', 'hex' => '#0000FF'],
-            ['name' => 'Verde', 'hex' => '#00FF00'],
+        'variations' => [
+            ['variation_type_id' => $sizeType->id, 'values' => ['P', 'M']],
+            ['variation_type_id' => $colorType->id, 'values' => ['Azul', 'Verde']],
         ],
         'variant_stocks' => [
-            ['size' => 'P', 'color_name' => 'Azul', 'quantity' => 2],
-            ['size' => 'P', 'color_name' => 'Verde', 'quantity' => 3],
-            ['size' => 'M', 'color_name' => 'Azul', 'quantity' => 4],
-            ['size' => 'M', 'color_name' => 'Verde', 'quantity' => 5],
+            ['variation_key' => ['Tamanho' => 'P', 'Cor' => 'Azul'], 'quantity' => 2],
+            ['variation_key' => ['Tamanho' => 'P', 'Cor' => 'Verde'], 'quantity' => 3],
+            ['variation_key' => ['Tamanho' => 'M', 'Cor' => 'Azul'], 'quantity' => 4],
+            ['variation_key' => ['Tamanho' => 'M', 'Cor' => 'Verde'], 'quantity' => 5],
         ],
     ];
 
@@ -147,20 +127,18 @@ it('creates size and color matrix variants', function () {
     $product = Product::first();
 
     expect($product->variantStocks)->toHaveCount(4);
+    expect($product->productVariations)->toHaveCount(2);
 });
 
-it('rejects inconsistent variant payloads', function () {
+it('rejects variant stocks when no variations are selected', function () {
     $payload = [
         'name' => 'Produto Invalido',
         'sku' => 'SKU-INVALID',
-        'has_size_variants' => false,
-        'has_color_variants' => false,
         'base_quantity' => 10,
-        'sizes' => [],
-        'colors' => [
-            ['name' => 'Preto', 'hex' => '#000000'],
+        'variations' => [],
+        'variant_stocks' => [
+            ['variation_key' => ['Tamanho' => 'P'], 'quantity' => 5],
         ],
-        'variant_stocks' => [],
     ];
 
     $response = $this->post('/manufacturer/products', $payload);
@@ -186,11 +164,8 @@ it('prevents cross-tenant product access', function () {
     $response = $this->put('/manufacturer/products/'.$product->id, [
         'name' => 'Produto Bloqueado',
         'sku' => 'SKU-BLOCK',
-        'has_size_variants' => false,
-        'has_color_variants' => false,
         'base_quantity' => 1,
-        'sizes' => [],
-        'colors' => [],
+        'variations' => [],
         'variant_stocks' => [],
     ]);
 

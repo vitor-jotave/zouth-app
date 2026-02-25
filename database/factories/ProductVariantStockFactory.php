@@ -2,7 +2,6 @@
 
 namespace Database\Factories;
 
-use App\Enums\ProductSize;
 use App\Models\Product;
 use App\Models\ProductVariantStock;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -23,9 +22,9 @@ class ProductVariantStockFactory extends Factory
     {
         return [
             'product_id' => Product::factory(),
-            'size' => ProductSize::P->value,
-            'product_color_id' => null,
+            'variation_key' => ['Tamanho' => 'M'],
             'quantity' => fake()->numberBetween(0, 50),
+            'price_cents' => null,
             'sku_variant' => null,
         ];
     }

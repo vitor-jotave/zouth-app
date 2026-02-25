@@ -17,6 +17,7 @@ use App\Http\Controllers\PublicOrderController;
 use App\Http\Controllers\Rep\DashboardController as RepDashboardController;
 use App\Http\Controllers\Rep\ManufacturerController as RepManufacturerController;
 use App\Http\Controllers\Rep\OrderController as RepOrderController;
+use App\Http\Controllers\VariationTypeController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
@@ -89,6 +90,13 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
             Route::post('/', 'store')->name('store');
             Route::put('{category}', 'update')->name('update');
             Route::delete('{category}', 'destroy')->name('destroy');
+        });
+
+        Route::controller(VariationTypeController::class)->prefix('variation-types')->name('variation-types.')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::put('{variation_type}', 'update')->name('update');
+            Route::delete('{variation_type}', 'destroy')->name('destroy');
         });
 
         Route::controller(ProductController::class)->prefix('products')->name('products.')->group(function () {

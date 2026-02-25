@@ -3,12 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ProductMediaType;
-use App\Enums\ProductSize;
 use App\Http\Requests\ProductStoreRequest;
 use App\Http\Requests\ProductUpdateRequest;
 use App\Http\Resources\ProductResource;
 use App\Models\Product;
 use App\Models\ProductCategory;
+use App\Models\VariationType;
 use App\Services\PlanLimitService;
 use App\Services\ProductStockService;
 use App\Services\ProductUpsertService;
@@ -84,9 +84,23 @@ class ProductController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
+        $variationTypes = VariationType::where('manufacturer_id', $manufacturer->id)
+            ->with('values')
+            ->orderBy('display_order')
+            ->get();
+
         return Inertia::render('manufacturer/products/create', [
             'categories' => $categories,
-            'sizes' => collect(ProductSize::cases())->map(fn (ProductSize $size) => $size->value),
+            'variation_types' => $variationTypes->map(fn ($type) => [
+                'id' => $type->id,
+                'name' => $type->name,
+                'is_color_type' => $type->is_color_type,
+                'values' => $type->values->map(fn ($val) => [
+                    'id' => $val->id,
+                    'value' => $val->value,
+                    'hex' => $val->hex,
+                ])->values()->all(),
+            ])->values()->all(),
         ]);
     }
 
@@ -134,18 +148,32 @@ class ProductController extends Controller
             abort(403);
         }
 
-        $product->load(['media', 'colors', 'variantStocks.color', 'category']);
+        $product->load(['media', 'productVariations.variationType.values', 'variantStocks', 'category']);
 
         $categories = ProductCategory::where('manufacturer_id', $manufacturer->id)
             ->orderBy('name')
             ->get(['id', 'name']);
+
+        $variationTypes = VariationType::where('manufacturer_id', $manufacturer->id)
+            ->with('values')
+            ->orderBy('display_order')
+            ->get();
 
         $stockStructure = $this->stockService->getStockStructure($product);
 
         return Inertia::render('manufacturer/products/edit', [
             'product' => new ProductResource($product),
             'categories' => $categories,
-            'sizes' => collect(ProductSize::cases())->map(fn (ProductSize $size) => $size->value),
+            'variation_types' => $variationTypes->map(fn ($type) => [
+                'id' => $type->id,
+                'name' => $type->name,
+                'is_color_type' => $type->is_color_type,
+                'values' => $type->values->map(fn ($val) => [
+                    'id' => $val->id,
+                    'value' => $val->value,
+                    'hex' => $val->hex,
+                ])->values()->all(),
+            ])->values()->all(),
             'stock_structure' => $stockStructure,
         ]);
     }

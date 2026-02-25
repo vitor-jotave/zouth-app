@@ -87,6 +87,11 @@ class Manufacturer extends Model
         return $this->hasMany(Product::class);
     }
 
+    public function variationTypes(): HasMany
+    {
+        return $this->hasMany(VariationType::class)->orderBy('display_order');
+    }
+
     public function catalogSetting(): HasOne
     {
         return $this->hasOne(CatalogSetting::class);

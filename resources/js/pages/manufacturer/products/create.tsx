@@ -10,9 +10,16 @@ interface Category {
     name: string;
 }
 
+interface VariationTypeOption {
+    id: number;
+    name: string;
+    is_color_type: boolean;
+    values: Array<{ id: number; value: string; hex?: string | null }>;
+}
+
 interface Props {
     categories: Category[];
-    sizes: string[];
+    variationTypes: VariationTypeOption[];
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -21,7 +28,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Novo produto', href: '/manufacturer/products/create' },
 ];
 
-export default function ProductsCreate({ categories, sizes }: Props) {
+export default function ProductsCreate({ categories, variationTypes }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Novo produto" />
@@ -44,7 +51,7 @@ export default function ProductsCreate({ categories, sizes }: Props) {
                     </Link>
                 </div>
 
-                <ProductForm mode="create" categories={categories} sizes={sizes} />
+                <ProductForm mode="create" categories={categories} variationTypes={variationTypes} />
             </div>
         </AppLayout>
     );

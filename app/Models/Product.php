@@ -23,8 +23,6 @@ class Product extends Model
         'name',
         'sku',
         'description',
-        'has_size_variants',
-        'has_color_variants',
         'base_quantity',
         'is_active',
         'sort_order',
@@ -39,8 +37,6 @@ class Product extends Model
     protected function casts(): array
     {
         return [
-            'has_size_variants' => 'boolean',
-            'has_color_variants' => 'boolean',
             'is_active' => 'boolean',
             'base_quantity' => 'integer',
             'sort_order' => 'integer',
@@ -63,9 +59,9 @@ class Product extends Model
         return $this->hasMany(ProductMedia::class)->orderBy('sort_order');
     }
 
-    public function colors(): HasMany
+    public function productVariations(): HasMany
     {
-        return $this->hasMany(ProductColor::class)->orderBy('name');
+        return $this->hasMany(ProductVariation::class);
     }
 
     public function variantStocks(): HasMany
@@ -73,9 +69,14 @@ class Product extends Model
         return $this->hasMany(ProductVariantStock::class);
     }
 
+    public function hasVariations(): bool
+    {
+        return $this->productVariations()->exists();
+    }
+
     public function getTotalStock(): int
     {
-        if ($this->has_size_variants || $this->has_color_variants) {
+        if ($this->hasVariations()) {
             return (int) $this->variantStocks()->sum('quantity');
         }
 

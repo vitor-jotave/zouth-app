@@ -44,7 +44,7 @@ class PublicCatalogController extends Controller
 
         $products = Product::where('manufacturer_id', $setting->manufacturer_id)
             ->where('is_active', true)
-            ->with(['category', 'media', 'colors', 'variantStocks.color'])
+            ->with(['category', 'media', 'productVariations.variationType.values', 'variantStocks'])
             ->orderBy('sort_order')
             ->orderBy('name')
             ->paginate(24)

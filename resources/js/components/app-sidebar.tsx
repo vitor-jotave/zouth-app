@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, Building2, CreditCard, Folder, LayoutGrid, Package, Palette, ShoppingCart, Tags, UserCheck, Users } from 'lucide-react';
+import { BookOpen, Building2, CreditCard, Folder, LayoutGrid, Layers, Package, Palette, ShoppingCart, Tags, UserCheck, Users } from 'lucide-react';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -77,6 +77,11 @@ function useMainNavItems(): NavItem[] {
             title: 'Categorias',
             href: '/manufacturer/categories',
             icon: Tags,
+        });
+        items.push({
+            title: 'Variações',
+            href: '/manufacturer/variation-types',
+            icon: Layers,
         });
         items.push({
             title: 'Catalogo',

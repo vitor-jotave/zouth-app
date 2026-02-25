@@ -51,17 +51,28 @@ interface MediaItem {
 
 const MAX_IMAGES = 10;
 
-interface ProductColor {
-    id?: number;
-    name: string;
+interface VariationTypeValue {
+    id: number;
+    value: string;
     hex?: string | null;
 }
 
+interface VariationTypeOption {
+    id: number;
+    name: string;
+    is_color_type: boolean;
+    values: VariationTypeValue[];
+}
+
+interface ProductVariation {
+    variation_type_id: number;
+    values: string[];
+}
+
 interface ProductVariantStock {
-    id?: number;
-    size?: string | null;
-    color_name?: string | null;
+    variation_key: Record<string, string>;
     quantity: number;
+    price: string;
     sku_variant?: string | null;
 }
 
@@ -71,28 +82,46 @@ interface ProductPayload {
     sku: string;
     description?: string | null;
     product_category_id?: number | null;
-    has_size_variants: boolean;
-    has_color_variants: boolean;
     base_quantity: number;
     is_active: boolean;
     sort_order: number;
     price_cents?: number | null;
-    colors?: ProductColor[];
     media?: MediaItem[];
-    variant_stocks?: ProductVariantStock[];
+    variations?: Array<{
+        id: number;
+        variation_type_id: number;
+        type?: {
+            id: number;
+            name: string;
+            is_color_type: boolean;
+            values: VariationTypeValue[];
+        } | null;
+    }>;
+    variant_stocks?: Array<{
+        id: number;
+        variation_key: Record<string, string>;
+        quantity: number;
+        price_cents?: number | null;
+        sku_variant?: string | null;
+    }>;
 }
 
 interface StockStructure {
-    has_size_variants: boolean;
-    has_color_variants: boolean;
+    variations: Array<{
+        id: number;
+        type: {
+            id: number;
+            name: string;
+            is_color_type: boolean;
+        };
+        values: VariationTypeValue[];
+    }>;
     base_quantity: number;
-    sizes: string[];
-    colors: ProductColor[];
     stocks: Array<{
-        id?: number;
-        size?: string | null;
-        color?: ProductColor | null;
+        id: number;
+        variation_key: Record<string, string>;
         quantity: number;
+        price_cents?: number | null;
         sku_variant?: string | null;
     }>;
 }
@@ -100,7 +129,7 @@ interface StockStructure {
 interface Props {
     mode: 'create' | 'edit';
     categories: Category[];
-    sizes: string[];
+    variationTypes: VariationTypeOption[];
     product?: ProductPayload;
     stockStructure?: StockStructure;
 }
@@ -115,7 +144,7 @@ const steps = [
 const STEP_FIELDS: Record<number, string[]> = {
     0: ['name', 'sku', 'description', 'product_category_id', 'price', 'sort_order', 'is_active'],
     1: ['images', 'video'],
-    2: ['sizes', 'colors', 'variant_stocks', 'has_size_variants', 'has_color_variants', 'base_quantity'],
+    2: ['variations', 'variant_stocks', 'base_quantity'],
 };
 
 function getStepForError(errorKey: string): number {
@@ -136,53 +165,59 @@ function stepsWithErrors(errors: Record<string, string>): Set<number> {
     return set;
 }
 
+/**
+ * Build the cartesian product of all selected variation values and return stock
+ * rows, preserving existing quantities when the key matches.
+ */
 function buildVariantStocks(
-    hasSizes: boolean,
-    hasColors: boolean,
-    sizes: string[],
-    colors: ProductColor[],
-    current: ProductVariantStock[],
+    variations: ProductVariation[],
+    variationTypes: VariationTypeOption[],
+    currentStocks: ProductVariantStock[],
 ): ProductVariantStock[] {
-    if (!hasSizes && !hasColors) {
+    if (variations.length === 0) {
         return [];
     }
 
-    const map = new Map<string, ProductVariantStock>();
+    // Resolve type names for each selected variation
+    const resolvedSets = variations
+        .map((v) => {
+            const type = variationTypes.find((t) => t.id === v.variation_type_id);
+            return type ? { name: type.name, values: v.values } : null;
+        })
+        .filter(Boolean) as { name: string; values: string[] }[];
 
-    current.forEach((item) => {
-        const sizeKey = item.size ?? '';
-        const colorKey = item.color_name ?? '';
-        map.set(`${sizeKey}|${colorKey}`, item);
-    });
+    if (resolvedSets.length === 0 || resolvedSets.some((s) => s.values.length === 0)) {
+        return [];
+    }
 
-    const build = (size?: string | null, color?: ProductColor | null) => {
-        const key = `${size ?? ''}|${color?.name ?? ''}`;
-        const existing = map.get(key);
+    // Generate cartesian product of all value sets
+    let combos: Record<string, string>[] = [{}];
+    for (const set of resolvedSets) {
+        const next: Record<string, string>[] = [];
+        for (const combo of combos) {
+            for (const val of set.values) {
+                next.push({ ...combo, [set.name]: val });
+            }
+        }
+        combos = next;
+    }
 
+    // Build a lookup from current stocks for quantity/price/sku preservation
+    const normalize = (key: Record<string, string>) =>
+        JSON.stringify(Object.entries(key).sort(([a], [b]) => a.localeCompare(b)));
+
+    const stockMap = new Map<string, ProductVariantStock>();
+    currentStocks.forEach((s) => stockMap.set(normalize(s.variation_key), s));
+
+    return combos.map((key) => {
+        const existing = stockMap.get(normalize(key));
         return {
-            size: size ?? null,
-            color_name: color?.name ?? null,
+            variation_key: key,
             quantity: existing?.quantity ?? 0,
+            price: existing?.price ?? '',
             sku_variant: existing?.sku_variant ?? null,
         };
-    };
-
-    if (hasSizes && !hasColors) {
-        return sizes.map((size) => build(size));
-    }
-
-    if (!hasSizes && hasColors) {
-        return colors.map((color) => build(null, color));
-    }
-
-    const combos: ProductVariantStock[] = [];
-    sizes.forEach((size) => {
-        colors.forEach((color) => {
-            combos.push(build(size, color));
-        });
     });
-
-    return combos;
 }
 
 // ---------------------------------------------------------------------------
@@ -259,34 +294,64 @@ function SortableMediaItem({ media, index, onDelete }: SortableMediaItemProps) {
 export function ProductForm({
     mode,
     categories,
-    sizes,
+    variationTypes,
     product,
     stockStructure,
 }: Props) {
-    const initialSizes = stockStructure?.sizes ?? [];
-    const initialColors = stockStructure?.colors ?? product?.colors ?? [];
-    const initialStocks = stockStructure?.stocks
-        ? stockStructure.stocks.map((stock) => ({
-              size: stock.size ?? null,
-              color_name: stock.color?.name ?? null,
-              quantity: stock.quantity,
-              sku_variant: stock.sku_variant ?? null,
-          }))
-        : product?.variant_stocks ?? [];
+    const centsToDisplay = (cents: number | null | undefined): string => {
+        if (cents == null) return '';
+        return String(cents / 100).replace('.', ',');
+    };
+
+    // Derive initial variations from stockStructure (edit) or product
+    const initialVariations: ProductVariation[] = (() => {
+        if (stockStructure?.variations) {
+            return stockStructure.variations.map((v) => ({
+                variation_type_id: v.type.id,
+                values: v.values.map((val) => val.value),
+            }));
+        }
+        if (product?.variations) {
+            return product.variations
+                .filter((v) => v.type)
+                .map((v) => ({
+                    variation_type_id: v.variation_type_id,
+                    values: v.type!.values.map((val) => val.value),
+                }));
+        }
+        return [];
+    })();
+
+    const initialStocks: ProductVariantStock[] = (() => {
+        if (stockStructure?.stocks) {
+            return stockStructure.stocks.map((s) => ({
+                variation_key: s.variation_key,
+                quantity: s.quantity,
+                price: centsToDisplay(s.price_cents),
+                sku_variant: s.sku_variant ?? null,
+            }));
+        }
+        if (product?.variant_stocks) {
+            return product.variant_stocks.map((s) => ({
+                variation_key: s.variation_key,
+                quantity: s.quantity,
+                price: centsToDisplay(s.price_cents),
+                sku_variant: s.sku_variant ?? null,
+            }));
+        }
+        return [];
+    })();
 
     const { data, setData, post, put, processing, errors } = useForm<{
         name: string;
         sku: string;
         description: string;
         product_category_id: string | number;
-        has_size_variants: boolean;
-        has_color_variants: boolean;
         base_quantity: number;
         is_active: boolean;
         sort_order: number;
         price: string;
-        sizes: string[];
-        colors: ProductColor[];
+        variations: ProductVariation[];
         variant_stocks: ProductVariantStock[];
         images: File[];
         video: File | null;
@@ -295,14 +360,11 @@ export function ProductForm({
         sku: product?.sku ?? '',
         description: product?.description ?? '',
         product_category_id: product?.product_category_id ?? '',
-        has_size_variants: product?.has_size_variants ?? false,
-        has_color_variants: product?.has_color_variants ?? false,
         base_quantity: product?.base_quantity ?? 0,
         is_active: product?.is_active ?? true,
         sort_order: product?.sort_order ?? 0,
         price: product?.price_cents != null ? String(product.price_cents / 100).replace('.', ',') : '',
-        sizes: initialSizes,
-        colors: initialColors,
+        variations: initialVariations,
         variant_stocks: initialStocks,
         images: [],
         video: null,
@@ -324,23 +386,11 @@ export function ProductForm({
         setMediaItems(product?.media ?? []);
     }, [product?.media]);
 
-    const hasVariants = data.has_size_variants || data.has_color_variants;
+    const hasVariants = data.variations.length > 0;
 
     const computedStocks = useMemo(() => {
-        return buildVariantStocks(
-            data.has_size_variants,
-            data.has_color_variants,
-            data.sizes,
-            data.colors,
-            data.variant_stocks,
-        );
-    }, [
-        data.has_size_variants,
-        data.has_color_variants,
-        data.sizes,
-        data.colors,
-        data.variant_stocks,
-    ]);
+        return buildVariantStocks(data.variations, variationTypes, data.variant_stocks);
+    }, [data.variations, variationTypes, data.variant_stocks]);
 
     // Steps with validation errors — used for badges + auto-navigation
     const errorSteps = useMemo(() => stepsWithErrors(errors), [errors]);
@@ -386,122 +436,44 @@ export function ProductForm({
         put(`/manufacturer/products/${product.id}`);
     };
 
-    const updateSizes = (nextSizes: string[]) => {
-        setData('sizes', nextSizes);
-        setData(
-            'variant_stocks',
-            buildVariantStocks(
-                data.has_size_variants,
-                data.has_color_variants,
-                nextSizes,
-                data.colors,
-                data.variant_stocks,
-            ),
-        );
+    const rebuildStocks = (nextVariations: ProductVariation[]) => {
+        setData('variations', nextVariations);
+        setData('variant_stocks', buildVariantStocks(nextVariations, variationTypes, data.variant_stocks));
     };
 
-    const updateColors = (nextColors: ProductColor[]) => {
-        setData('colors', nextColors);
-        setData(
-            'variant_stocks',
-            buildVariantStocks(
-                data.has_size_variants,
-                data.has_color_variants,
-                data.sizes,
-                nextColors,
-                data.variant_stocks,
-            ),
-        );
+    const toggleVariationType = (typeId: number, checked: boolean) => {
+        if (checked) {
+            if (data.variations.some((v) => v.variation_type_id === typeId)) return;
+            rebuildStocks([...data.variations, { variation_type_id: typeId, values: [] }]);
+        } else {
+            rebuildStocks(data.variations.filter((v) => v.variation_type_id !== typeId));
+        }
     };
 
-    const toggleSizeVariants = (checked: boolean) => {
-        setData('has_size_variants', checked);
-        const nextSizes = checked ? data.sizes : [];
-        setData('sizes', nextSizes);
-        setData(
-            'variant_stocks',
-            buildVariantStocks(
-                checked,
-                data.has_color_variants,
-                nextSizes,
-                data.colors,
-                data.variant_stocks,
-            ),
-        );
-    };
-
-    const toggleColorVariants = (checked: boolean) => {
-        setData('has_color_variants', checked);
-        const nextColors = checked ? data.colors : [];
-        setData('colors', nextColors);
-        setData(
-            'variant_stocks',
-            buildVariantStocks(
-                data.has_size_variants,
-                checked,
-                data.sizes,
-                nextColors,
-                data.variant_stocks,
-            ),
-        );
-    };
-
-    const updateStockQuantity = (
-        size: string | null,
-        color: string | null,
-        quantity: number,
-    ) => {
-        const nextStocks = computedStocks.map((stock) => {
-            const sizeMatch = (stock.size ?? null) === size;
-            const colorMatch = (stock.color_name ?? null) === color;
-
-            if (sizeMatch && colorMatch) {
-                return { ...stock, quantity };
-            }
-
-            return stock;
+    const toggleVariationValue = (typeId: number, value: string) => {
+        const nextVariations = data.variations.map((v) => {
+            if (v.variation_type_id !== typeId) return v;
+            const hasValue = v.values.includes(value);
+            return {
+                ...v,
+                values: hasValue ? v.values.filter((val) => val !== value) : [...v.values, value],
+            };
         });
-
-        setData('variant_stocks', nextStocks);
+        rebuildStocks(nextVariations);
     };
 
-    const updateStockSku = (
-        size: string | null,
-        color: string | null,
-        skuVariant: string,
+    const updateStockField = (
+        key: Record<string, string>,
+        field: 'quantity' | 'price' | 'sku_variant',
+        value: number | string | null,
     ) => {
-        const nextStocks = computedStocks.map((stock) => {
-            const sizeMatch = (stock.size ?? null) === size;
-            const colorMatch = (stock.color_name ?? null) === color;
-
-            if (sizeMatch && colorMatch) {
-                return { ...stock, sku_variant: skuVariant };
-            }
-
-            return stock;
-        });
-
-        setData('variant_stocks', nextStocks);
-    };
-
-    const addColor = () => {
-        updateColors([...data.colors, { name: '', hex: '' }]);
-    };
-
-    const removeColor = (index: number) => {
-        const nextColors = data.colors.filter((_, idx) => idx !== index);
-        updateColors(nextColors);
-    };
-
-    const updateColor = (
-        index: number,
-        field: 'name' | 'hex',
-        value: string,
-    ) => {
-        const nextColors = data.colors.map((color, idx) =>
-            idx === index ? { ...color, [field]: value } : color,
+        const normalize = (k: Record<string, string>) =>
+            JSON.stringify(Object.entries(k).sort(([a], [b]) => a.localeCompare(b)));
+        const target = normalize(key);
+        const nextStocks = computedStocks.map((stock) =>
+            normalize(stock.variation_key) === target ? { ...stock, [field]: value } : stock,
         );
-        updateColors(nextColors);
+        setData('variant_stocks', nextStocks);
     };
 
     // -----------------------------------------------------------------------
@@ -995,125 +967,80 @@ export function ProductForm({
                         <CardTitle>Variacoes e estoque</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="flex flex-wrap items-center gap-6">
-                            <label className="flex items-center gap-2 text-sm">
-                                <Checkbox
-                                    checked={data.has_size_variants}
-                                    onCheckedChange={(checked) =>
-                                        toggleSizeVariants(Boolean(checked))
-                                    }
-                                />
-                                Tem tamanhos
-                            </label>
-                            <label className="flex items-center gap-2 text-sm">
-                                <Checkbox
-                                    checked={data.has_color_variants}
-                                    onCheckedChange={(checked) =>
-                                        toggleColorVariants(Boolean(checked))
-                                    }
-                                />
-                                Tem cores
-                            </label>
-                        </div>
-
-                        {data.has_size_variants && (
-                            <div className="space-y-2">
-                                <Label>Selecione os tamanhos</Label>
-                                <div className="flex flex-wrap gap-2">
-                                    {sizes.map((size) => {
-                                        const isSelected = data.sizes.includes(size);
-
-                                        return (
-                                            <Button
-                                                key={size}
-                                                type="button"
-                                                variant={isSelected ? 'default' : 'outline'}
-                                                onClick={() => {
-                                                    const nextSizes = isSelected
-                                                        ? data.sizes.filter(
-                                                              (item) => item !== size,
-                                                          )
-                                                        : [...data.sizes, size];
-                                                    updateSizes(nextSizes);
-                                                }}
-                                            >
-                                                {size}
-                                            </Button>
-                                        );
-                                    })}
-                                </div>
-                                <InputError message={errors.sizes} />
-                            </div>
-                        )}
-
-                        {data.has_color_variants && (
+                        {/* Variation type selection */}
+                        {variationTypes.length > 0 && (
                             <div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <Label>Cores</Label>
-                                    <Button type="button" variant="outline" onClick={addColor}>
-                                        Adicionar cor
-                                    </Button>
+                                <Label>Tipos de variacao</Label>
+                                <div className="flex flex-wrap items-center gap-6">
+                                    {variationTypes.map((type) => (
+                                        <label key={type.id} className="flex items-center gap-2 text-sm">
+                                            <Checkbox
+                                                checked={data.variations.some(
+                                                    (v) => v.variation_type_id === type.id,
+                                                )}
+                                                onCheckedChange={(checked) =>
+                                                    toggleVariationType(type.id, Boolean(checked))
+                                                }
+                                            />
+                                            {type.name}
+                                        </label>
+                                    ))}
                                 </div>
-
-                                {data.colors.length === 0 && (
-                                    <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                                        Nenhuma cor cadastrada.
-                                    </div>
-                                )}
-
-                                {data.colors.map((color, index) => (
-                                    <div
-                                        key={`color-${index}`}
-                                        className="grid gap-3 rounded-md border p-3 md:grid-cols-[1fr_160px_auto]"
-                                    >
-                                        <div className="space-y-2">
-                                            <Label>Nome</Label>
-                                            <Input
-                                                value={color.name}
-                                                onChange={(event) =>
-                                                    updateColor(
-                                                        index,
-                                                        'name',
-                                                        event.target.value,
-                                                    )
-                                                }
-                                            />
-                                            <InputError
-                                                message={
-                                                    errors[`colors.${index}.name`]
-                                                }
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>Hex</Label>
-                                            <Input
-                                                value={color.hex ?? ''}
-                                                onChange={(event) =>
-                                                    updateColor(
-                                                        index,
-                                                        'hex',
-                                                        event.target.value,
-                                                    )
-                                                }
-                                            />
-                                        </div>
-                                        <div className="flex items-end">
-                                            <Button
-                                                type="button"
-                                                variant="destructive"
-                                                onClick={() => removeColor(index)}
-                                            >
-                                                Remover
-                                            </Button>
-                                        </div>
-                                    </div>
-                                ))}
-                                <InputError message={errors.colors} />
                             </div>
                         )}
+
+                        {variationTypes.length === 0 && (
+                            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                                Nenhum tipo de variacao cadastrado. Cadastre tipos de variacao nas
+                                configuracoes do fabricante.
+                            </div>
+                        )}
+
+                        {/* Value toggles per selected variation type */}
+                        {data.variations.map((variation, vIdx) => {
+                            const type = variationTypes.find(
+                                (t) => t.id === variation.variation_type_id,
+                            );
+                            if (!type) return null;
+                            return (
+                                <div key={type.id} className="space-y-2">
+                                    <Label>Valores de {type.name}</Label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {type.values.map((val) => {
+                                            const isSelected = variation.values.includes(val.value);
+                                            return (
+                                                <Button
+                                                    key={val.id}
+                                                    type="button"
+                                                    variant={isSelected ? 'default' : 'outline'}
+                                                    onClick={() =>
+                                                        toggleVariationValue(type.id, val.value)
+                                                    }
+                                                    className="gap-2"
+                                                >
+                                                    {type.is_color_type && val.hex && (
+                                                        <span
+                                                            className="inline-block h-4 w-4 rounded-full border"
+                                                            style={{ backgroundColor: val.hex }}
+                                                        />
+                                                    )}
+                                                    {val.value}
+                                                </Button>
+                                            );
+                                        })}
+                                    </div>
+                                    <InputError
+                                        message={errors[`variations.${vIdx}.values`]}
+                                    />
+                                </div>
+                            );
+                        })}
+
+                        <InputError message={errors.variations} />
 
                         <Separator />
 
+                        {/* Base quantity (no variations) */}
                         {!hasVariants && (
                             <div className="space-y-2">
                                 <Label htmlFor="base_quantity">Quantidade base</Label>
@@ -1133,169 +1060,101 @@ export function ProductForm({
                             </div>
                         )}
 
-                        {hasVariants && (
+                        {/* Stock grid for variations */}
+                        {hasVariants && computedStocks.length > 0 && (
                             <div className="space-y-4">
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                     <Palette className="h-4 w-4" />
                                     Estoque por variacao
                                 </div>
 
-                                {data.has_size_variants && !data.has_color_variants && (
-                                    <div className="grid gap-3">
-                                        {computedStocks.map((stock) => (
-                                            <div
-                                                key={stock.size ?? ''}
-                                                className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
-                                            >
-                                                <Badge variant="outline">{stock.size}</Badge>
-                                                <div className="flex flex-1 flex-wrap items-center gap-2">
-                                                    <Input
-                                                        type="number"
-                                                        min={0}
-                                                        value={stock.quantity}
-                                                        onChange={(event) =>
-                                                            updateStockQuantity(
-                                                                stock.size ?? null,
-                                                                null,
-                                                                Number(event.target.value),
-                                                            )
-                                                        }
-                                                        className="w-32"
-                                                    />
-                                                    <Input
-                                                        placeholder="SKU da variacao"
-                                                        value={stock.sku_variant ?? ''}
-                                                        onChange={(event) =>
-                                                            updateStockSku(
-                                                                stock.size ?? null,
-                                                                null,
-                                                                event.target.value,
-                                                            )
-                                                        }
-                                                    />
-                                                </div>
+                                <div className="grid gap-3">
+                                    {computedStocks.map((stock) => (
+                                        <div
+                                            key={JSON.stringify(stock.variation_key)}
+                                            className="flex flex-wrap items-center gap-3 rounded-md border p-3"
+                                        >
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {Object.entries(stock.variation_key).map(
+                                                    ([typeName, value]) => {
+                                                        const type = variationTypes.find(
+                                                            (t) => t.name === typeName,
+                                                        );
+                                                        const val = type?.values.find(
+                                                            (v) => v.value === value,
+                                                        );
+                                                        return (
+                                                            <Badge
+                                                                key={typeName}
+                                                                variant="outline"
+                                                                className="gap-1.5"
+                                                            >
+                                                                {type?.is_color_type && val?.hex && (
+                                                                    <span
+                                                                        className="inline-block h-3 w-3 rounded-full border"
+                                                                        style={{
+                                                                            backgroundColor:
+                                                                                val.hex,
+                                                                        }}
+                                                                    />
+                                                                )}
+                                                                {value}
+                                                            </Badge>
+                                                        );
+                                                    },
+                                                )}
                                             </div>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {!data.has_size_variants && data.has_color_variants && (
-                                    <div className="grid gap-3">
-                                        {computedStocks.map((stock) => (
-                                            <div
-                                                key={stock.color_name ?? ''}
-                                                className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
-                                            >
-                                                <Badge variant="outline">
-                                                    {stock.color_name}
-                                                </Badge>
-                                                <div className="flex flex-1 flex-wrap items-center gap-2">
-                                                    <Input
-                                                        type="number"
-                                                        min={0}
-                                                        value={stock.quantity}
-                                                        onChange={(event) =>
-                                                            updateStockQuantity(
-                                                                null,
-                                                                stock.color_name ?? null,
-                                                                Number(event.target.value),
-                                                            )
-                                                        }
-                                                        className="w-32"
-                                                    />
-                                                    <Input
-                                                        placeholder="SKU da variacao"
-                                                        value={stock.sku_variant ?? ''}
-                                                        onChange={(event) =>
-                                                            updateStockSku(
-                                                                null,
-                                                                stock.color_name ?? null,
-                                                                event.target.value,
-                                                            )
-                                                        }
-                                                    />
-                                                </div>
+                                            <div className="flex flex-1 flex-wrap items-center gap-2">
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    placeholder="Qtd"
+                                                    value={stock.quantity}
+                                                    onChange={(e) =>
+                                                        updateStockField(
+                                                            stock.variation_key,
+                                                            'quantity',
+                                                            Number(e.target.value),
+                                                        )
+                                                    }
+                                                    className="w-24"
+                                                />
+                                                <Input
+                                                    placeholder="Preco (R$)"
+                                                    value={stock.price}
+                                                    onChange={(e) =>
+                                                        updateStockField(
+                                                            stock.variation_key,
+                                                            'price',
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                    className="w-32"
+                                                />
+                                                <Input
+                                                    placeholder="SKU variacao"
+                                                    value={stock.sku_variant ?? ''}
+                                                    onChange={(e) =>
+                                                        updateStockField(
+                                                            stock.variation_key,
+                                                            'sku_variant',
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                />
                                             </div>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {data.has_size_variants && data.has_color_variants && (
-                                    <div className="overflow-auto rounded-md border">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-muted">
-                                                <tr>
-                                                    <th className="px-3 py-2 text-left">Cor</th>
-                                                    {data.sizes.map((size) => (
-                                                        <th
-                                                            key={size}
-                                                            className="px-3 py-2 text-left"
-                                                        >
-                                                            {size}
-                                                        </th>
-                                                    ))}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {data.colors.map((color) => (
-                                                    <tr
-                                                        key={color.name}
-                                                        className="odd:bg-background even:bg-muted/40"
-                                                    >
-                                                        <td className="px-3 py-2 font-medium">
-                                                            {color.name}
-                                                        </td>
-                                                        {data.sizes.map((size) => {
-                                                            const stock = computedStocks.find(
-                                                                (item) =>
-                                                                    item.size === size &&
-                                                                    item.color_name === color.name,
-                                                            );
-
-                                                            return (
-                                                                <td
-                                                                    key={`${color.name}-${size}`}
-                                                                    className="px-3 py-2"
-                                                                >
-                                                                    <div className="space-y-2">
-                                                                        <Input
-                                                                            type="number"
-                                                                            min={0}
-                                                                            value={stock?.quantity ?? 0}
-                                                                            onChange={(event) =>
-                                                                                updateStockQuantity(
-                                                                                    size,
-                                                                                    color.name,
-                                                                                    Number(
-                                                                                        event.target.value,
-                                                                                    ),
-                                                                                )
-                                                                            }
-                                                                            className="w-24"
-                                                                        />
-                                                                        <Input
-                                                                            placeholder="SKU"
-                                                                            value={stock?.sku_variant ?? ''}
-                                                                            onChange={(event) =>
-                                                                                updateStockSku(
-                                                                                    size,
-                                                                                    color.name,
-                                                                                    event.target.value,
-                                                                                )
-                                                                            }
-                                                                        />
-                                                                    </div>
-                                                                </td>
-                                                            );
-                                                        })}
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
+                                        </div>
+                                    ))}
+                                </div>
 
                                 <InputError message={errors.variant_stocks} />
+                            </div>
+                        )}
+
+                        {hasVariants && computedStocks.length === 0 && (
+                            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                                Selecione ao menos um valor em cada tipo de variacao para gerar a
+                                grade de estoque.
                             </div>
                         )}
                     </CardContent>

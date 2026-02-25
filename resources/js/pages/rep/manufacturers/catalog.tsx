@@ -21,14 +21,15 @@ interface Props {
             category?: string | null;
             primary_image?: string | null;
             images: string[];
-            has_size_variants: boolean;
-            has_color_variants: boolean;
-            sizes: string[];
-            colors: Array<{ name: string; hex?: string | null }>;
+            variations: Array<{
+                type_name: string;
+                is_color_type: boolean;
+                values: Array<{ value: string; hex?: string | null }>;
+            }>;
             variant_stocks: Array<{
-                size?: string | null;
-                color?: string | null;
+                variation_key: Record<string, string>;
                 quantity: number;
+                price_cents?: number | null;
             }>;
             total_stock: number;
             price_cents?: number | null;
@@ -126,21 +127,14 @@ export default function Catalog({ manufacturer, products }: Props) {
                                                             : 'Sem estoque'}
                                                     </Badge>
                                                 </div>
-                                                {(product.has_size_variants ||
-                                                    product.has_color_variants) && (
+                                                {product.variations.length > 0 && (
                                                     <div className="space-y-2 text-xs text-muted-foreground">
-                                                        {product.has_size_variants && (
-                                                            <div>
-                                                                Tamanhos: {product.sizes.join(', ') || '---'}
+                                                        {product.variations.map((variation) => (
+                                                            <div key={variation.type_name}>
+                                                                {variation.type_name}:{' '}
+                                                                {variation.values.map((v) => v.value).join(', ') || '---'}
                                                             </div>
-                                                        )}
-                                                        {product.has_color_variants && (
-                                                            <div>
-                                                                Cores: {product.colors
-                                                                    .map((color) => color.name)
-                                                                    .join(', ') || '---'}
-                                                            </div>
-                                                        )}
+                                                        ))}
                                                     </div>
                                                 )}
                                             </div>

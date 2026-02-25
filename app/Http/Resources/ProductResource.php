@@ -2,7 +2,6 @@
 
 namespace App\Http\Resources;
 
-use App\Enums\ProductSize;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -22,8 +21,6 @@ class ProductResource extends JsonResource
             'name' => $this->name,
             'sku' => $this->sku,
             'description' => $this->description,
-            'has_size_variants' => $this->has_size_variants,
-            'has_color_variants' => $this->has_color_variants,
             'base_quantity' => $this->base_quantity,
             'is_active' => $this->is_active,
             'sort_order' => $this->sort_order,
@@ -31,16 +28,27 @@ class ProductResource extends JsonResource
             'total_stock' => $this->getTotalStock(),
             'category' => $this->whenLoaded('category', fn () => new ProductCategoryResource($this->category)),
             'media' => $this->whenLoaded('media', fn () => ProductMediaResource::collection($this->media)->resolve()),
-            'colors' => $this->whenLoaded('colors', fn () => $this->colors->map(fn ($color) => [
-                'id' => $color->id,
-                'name' => $color->name,
-                'hex' => $color->hex,
+            'variations' => $this->whenLoaded('productVariations', fn () => $this->productVariations->map(fn ($pv) => [
+                'id' => $pv->id,
+                'variation_type_id' => $pv->variation_type_id,
+                'type' => $pv->relationLoaded('variationType') ? [
+                    'id' => $pv->variationType->id,
+                    'name' => $pv->variationType->name,
+                    'is_color_type' => $pv->variationType->is_color_type,
+                    'values' => $pv->variationType->relationLoaded('values')
+                        ? $pv->variationType->values->map(fn ($val) => [
+                            'id' => $val->id,
+                            'value' => $val->value,
+                            'hex' => $val->hex,
+                        ])->values()->all()
+                        : [],
+                ] : null,
             ])),
             'variant_stocks' => $this->whenLoaded('variantStocks', fn () => $this->variantStocks->map(fn ($stock) => [
                 'id' => $stock->id,
-                'size' => $stock->size instanceof ProductSize ? $stock->size->value : $stock->size,
-                'product_color_id' => $stock->product_color_id,
+                'variation_key' => $stock->variation_key,
                 'quantity' => $stock->quantity,
+                'price_cents' => $stock->price_cents,
                 'sku_variant' => $stock->sku_variant,
             ])),
         ];

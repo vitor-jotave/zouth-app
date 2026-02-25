@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\ProductSize;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -19,9 +18,9 @@ class ProductVariantStock extends Model
      */
     protected $fillable = [
         'product_id',
-        'size',
-        'product_color_id',
+        'variation_key',
         'quantity',
+        'price_cents',
         'sku_variant',
     ];
 
@@ -33,18 +32,14 @@ class ProductVariantStock extends Model
     protected function casts(): array
     {
         return [
-            'size' => ProductSize::class,
+            'variation_key' => 'array',
             'quantity' => 'integer',
+            'price_cents' => 'integer',
         ];
     }
 
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
-    }
-
-    public function color(): BelongsTo
-    {
-        return $this->belongsTo(ProductColor::class, 'product_color_id');
     }
 }

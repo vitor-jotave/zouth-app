@@ -10,39 +10,59 @@ interface Category {
     name: string;
 }
 
+interface VariationTypeOption {
+    id: number;
+    name: string;
+    is_color_type: boolean;
+    values: Array<{ id: number; value: string; hex?: string | null }>;
+}
+
 interface Product {
     id: number;
     name: string;
     sku: string;
     description?: string | null;
     product_category_id?: number | null;
-    has_size_variants: boolean;
-    has_color_variants: boolean;
     base_quantity: number;
     is_active: boolean;
     sort_order: number;
-    colors?: Array<{ id: number; name: string; hex?: string | null }>;
-    media?: Array<{ id: number; type: 'image' | 'video'; path: string; sort_order: number }>;
+    price_cents?: number | null;
+    media?: Array<{ id: number; type: 'image' | 'video'; path: string; url?: string; sort_order: number }>;
+    variations?: Array<{
+        id: number;
+        variation_type_id: number;
+        type?: {
+            id: number;
+            name: string;
+            is_color_type: boolean;
+            values: Array<{ id: number; value: string; hex?: string | null }>;
+        } | null;
+    }>;
     variant_stocks?: Array<{
         id: number;
-        size?: string | null;
-        product_color_id?: number | null;
+        variation_key: Record<string, string>;
         quantity: number;
+        price_cents?: number | null;
         sku_variant?: string | null;
     }>;
 }
 
 interface StockStructure {
-    has_size_variants: boolean;
-    has_color_variants: boolean;
+    variations: Array<{
+        id: number;
+        type: {
+            id: number;
+            name: string;
+            is_color_type: boolean;
+        };
+        values: Array<{ id: number; value: string; hex?: string | null }>;
+    }>;
     base_quantity: number;
-    sizes: string[];
-    colors: Array<{ id: number; name: string; hex?: string | null }>;
     stocks: Array<{
         id: number;
-        size?: string | null;
-        color?: { id: number; name: string; hex?: string | null } | null;
+        variation_key: Record<string, string>;
         quantity: number;
+        price_cents?: number | null;
         sku_variant?: string | null;
     }>;
 }
@@ -50,7 +70,7 @@ interface StockStructure {
 interface Props {
     product: { data: Product } | Product;
     categories: Category[];
-    sizes: string[];
+    variationTypes: VariationTypeOption[];
     stock_structure: StockStructure;
 }
 
@@ -60,7 +80,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Editar produto', href: '#' },
 ];
 
-export default function ProductsEdit({ product, categories, sizes, stock_structure }: Props) {
+export default function ProductsEdit({ product, categories, variationTypes, stock_structure }: Props) {
     const resolvedProduct = 'data' in product ? product.data : product;
 
     return (
@@ -89,7 +109,7 @@ export default function ProductsEdit({ product, categories, sizes, stock_structu
                     mode="edit"
                     product={resolvedProduct}
                     categories={categories}
-                    sizes={sizes}
+                    variationTypes={variationTypes}
                     stockStructure={stock_structure}
                 />
             </div>

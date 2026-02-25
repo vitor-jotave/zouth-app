@@ -11,35 +11,45 @@ class ProductStockService
         return $product->getTotalStock();
     }
 
+    /**
+     * Build a structured representation of the product's variation stock.
+     *
+     * @return array{
+     *     variations: array<int, array{id: int, type: array{id: int, name: string, is_color_type: bool}, values: array<int, array{id: int, value: string, hex: string|null}>}>,
+     *     base_quantity: int,
+     *     stocks: array<int, array{id: int, variation_key: array<string, string>, quantity: int, price_cents: int|null, sku_variant: string|null}>
+     * }
+     */
     public function getStockStructure(Product $product): array
     {
-        $variantStocks = $product->variantStocks()->with('color')->get();
+        $product->load(['productVariations.variationType.values', 'variantStocks']);
 
-        $sizes = $product->has_size_variants
-            ? $variantStocks->pluck('size')->filter()->unique()->values()
-            : collect();
+        $variations = $product->productVariations->map(fn ($pv) => [
+            'id' => $pv->id,
+            'type' => [
+                'id' => $pv->variationType->id,
+                'name' => $pv->variationType->name,
+                'is_color_type' => $pv->variationType->is_color_type,
+            ],
+            'values' => $pv->variationType->values->map(fn ($val) => [
+                'id' => $val->id,
+                'value' => $val->value,
+                'hex' => $val->hex,
+            ])->values()->all(),
+        ])->values()->all();
 
-        $colors = $product->has_color_variants
-            ? $product->colors()->orderBy('name')->get(['id', 'name', 'hex'])
-            : collect();
+        $stocks = $product->variantStocks->map(fn ($stock) => [
+            'id' => $stock->id,
+            'variation_key' => $stock->variation_key,
+            'quantity' => $stock->quantity,
+            'price_cents' => $stock->price_cents,
+            'sku_variant' => $stock->sku_variant,
+        ])->values()->all();
 
         return [
-            'has_size_variants' => $product->has_size_variants,
-            'has_color_variants' => $product->has_color_variants,
+            'variations' => $variations,
             'base_quantity' => $product->base_quantity,
-            'sizes' => $sizes,
-            'colors' => $colors,
-            'stocks' => $variantStocks->map(fn ($stock) => [
-                'id' => $stock->id,
-                'size' => $stock->size?->value,
-                'color' => $stock->color ? [
-                    'id' => $stock->color->id,
-                    'name' => $stock->color->name,
-                    'hex' => $stock->color->hex,
-                ] : null,
-                'quantity' => $stock->quantity,
-                'sku_variant' => $stock->sku_variant,
-            ]),
+            'stocks' => $stocks,
         ];
     }
 }

@@ -169,11 +169,8 @@ test('product store is blocked when product limit is reached', function () {
     $payload = [
         'name' => 'Produto Extra',
         'sku' => 'SKU-EXTRA',
-        'has_size_variants' => false,
-        'has_color_variants' => false,
         'base_quantity' => 0,
-        'sizes' => [],
-        'colors' => [],
+        'variations' => [],
         'variant_stocks' => [],
     ];
 
@@ -190,11 +187,8 @@ test('product store succeeds when under product limit', function () {
     $payload = [
         'name' => 'Produto OK',
         'sku' => 'SKU-OK',
-        'has_size_variants' => false,
-        'has_color_variants' => false,
         'base_quantity' => 0,
-        'sizes' => [],
-        'colors' => [],
+        'variations' => [],
         'variant_stocks' => [],
     ];
 
