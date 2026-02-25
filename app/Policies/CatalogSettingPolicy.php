@@ -12,7 +12,8 @@ class CatalogSettingPolicy
      */
     public function view(User $user, CatalogSetting $catalogSetting): bool
     {
-        return $user->current_manufacturer_id === $catalogSetting->manufacturer_id;
+        return $user->isManufacturerUser()
+            && $user->current_manufacturer_id === $catalogSetting->manufacturer_id;
     }
 
     /**
@@ -20,6 +21,7 @@ class CatalogSettingPolicy
      */
     public function update(User $user, CatalogSetting $catalogSetting): bool
     {
-        return $user->current_manufacturer_id === $catalogSetting->manufacturer_id;
+        return $user->isManufacturerUser()
+            && $user->current_manufacturer_id === $catalogSetting->manufacturer_id;
     }
 }

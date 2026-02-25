@@ -5,7 +5,6 @@ namespace App\Http\Middleware;
 use App\Services\TenantManager;
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureManufacturerTenant
@@ -26,14 +25,12 @@ class EnsureManufacturerTenant
         }
 
         if (! $user->current_manufacturer_id) {
-            Auth::logout();
             abort(403, 'No manufacturer assigned. Please contact support.');
         }
 
         $manufacturer = $user->currentManufacturer;
 
         if (! $manufacturer || ! $manufacturer->is_active) {
-            Auth::logout();
             abort(403, 'Your manufacturer account is not active.');
         }
 
@@ -44,7 +41,6 @@ class EnsureManufacturerTenant
             ->first();
 
         if (! $membership) {
-            Auth::logout();
             abort(403, 'Your membership is not active.');
         }
 

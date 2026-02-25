@@ -46,7 +46,7 @@ class StoreManufacturerRequest extends FormRequest
             'complement' => ['nullable', 'string', 'max:100'],
             'owner_name' => ['required', 'string', 'max:255'],
             'owner_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
-            'owner_temporary_password' => ['nullable', 'string', 'min:6', 'max:255'],
+            'owner_temporary_password' => ['nullable', 'string', 'min:12', 'max:255'],
         ];
     }
 

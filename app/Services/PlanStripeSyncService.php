@@ -18,18 +18,16 @@ class PlanStripeSyncService
         $stripe = Cashier::stripe();
 
         // Create or update Stripe Product
+        $productData = array_filter([
+            'name' => $plan->name,
+            'description' => $plan->description,
+            'active' => $plan->is_active,
+        ], fn ($value) => ! is_null($value));
+
         if ($plan->stripe_product_id) {
-            $stripe->products->update($plan->stripe_product_id, [
-                'name' => $plan->name,
-                'description' => $plan->description ?? '',
-                'active' => $plan->is_active,
-            ]);
+            $stripe->products->update($plan->stripe_product_id, $productData);
         } else {
-            $product = $stripe->products->create([
-                'name' => $plan->name,
-                'description' => $plan->description ?? '',
-                'active' => $plan->is_active,
-            ]);
+            $product = $stripe->products->create($productData);
 
             $plan->stripe_product_id = $product->id;
         }

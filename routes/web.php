@@ -27,12 +27,16 @@ Route::get('/', function () {
     ]);
 })->name('home');
 
-Route::get('catalog/{token}', [PublicCatalogController::class, 'show'])->name('public.catalog.show');
+Route::get('catalog/{token}', [PublicCatalogController::class, 'show'])
+    ->middleware('throttle:60,1')
+    ->name('public.catalog.show');
 
 // Public order routes
 Route::post('catalog/{catalogSetting:public_token}/orders', [PublicOrderController::class, 'store'])
+    ->middleware('throttle:10,1')
     ->name('public.order.store');
 Route::get('o/{publicToken}', [PublicOrderController::class, 'show'])
+    ->middleware('throttle:60,1')
     ->name('public.order.show');
 
 // Public plan selection routes (secured via signed URLs)

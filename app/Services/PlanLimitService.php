@@ -136,7 +136,7 @@ class PlanLimitService
             return true;
         }
 
-        $startOfMonth = CarbonImmutable::now()->startOfMonth();
+        $startOfMonth = $this->startOfCurrentMonth();
 
         $ordersThisMonth = $manufacturer->orders()
             ->where('created_at', '>=', $startOfMonth)
@@ -153,7 +153,7 @@ class PlanLimitService
      */
     public function violatedLimitsForPlan(Manufacturer $manufacturer, Plan $targetPlan): array
     {
-        $startOfMonth = CarbonImmutable::now()->startOfMonth();
+        $startOfMonth = $this->startOfCurrentMonth();
 
         $productCount = $manufacturer->products()->count();
         $userCount = $manufacturer->users()->wherePivot('status', 'active')->count();
@@ -303,7 +303,7 @@ class PlanLimitService
             return [];
         }
 
-        $startOfMonth = CarbonImmutable::now()->startOfMonth();
+        $startOfMonth = $this->startOfCurrentMonth();
 
         $productCount = $manufacturer->products()->count();
         $userCount = $manufacturer->users()->wherePivot('status', 'active')->count();
@@ -357,5 +357,17 @@ class PlanLimitService
             'limit' => $limit,
             'percentage' => ($limit && $limit > 0) ? (int) round(($current / $limit) * 100) : null,
         ];
+    }
+
+    /**
+     * Get the start of the current month in the application's business timezone (America/Sao_Paulo).
+     *
+     * Even though the database stores timestamps in UTC, the monthly billing period
+     * boundary should respect Brazil's local time so customers at 23h BRT on the
+     * last day of the month aren't counted in the next period.
+     */
+    private function startOfCurrentMonth(): CarbonImmutable
+    {
+        return CarbonImmutable::now('America/Sao_Paulo')->startOfMonth()->utc();
     }
 }

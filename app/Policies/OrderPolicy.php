@@ -9,16 +9,19 @@ class OrderPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->current_manufacturer_id !== null;
+        return $user->isManufacturerUser()
+            && $user->current_manufacturer_id !== null;
     }
 
     public function view(User $user, Order $order): bool
     {
-        return $user->current_manufacturer_id === $order->manufacturer_id;
+        return $user->isManufacturerUser()
+            && $user->current_manufacturer_id === $order->manufacturer_id;
     }
 
     public function updateStatus(User $user, Order $order): bool
     {
-        return $user->current_manufacturer_id === $order->manufacturer_id;
+        return $user->isManufacturerUser()
+            && $user->current_manufacturer_id === $order->manufacturer_id;
     }
 }

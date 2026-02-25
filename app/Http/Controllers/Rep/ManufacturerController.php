@@ -29,19 +29,23 @@ class ManufacturerController extends Controller
             });
         }
 
-        // Get manufacturers with affiliation status
-        $manufacturers = $query->get()->map(function ($manufacturer) use ($user) {
-            $affiliation = ManufacturerAffiliation::where('manufacturer_id', $manufacturer->id)
-                ->where('user_id', $user->id)
-                ->first();
+        // Get manufacturers with affiliation status (eager-loaded to avoid N+1)
+        $userAffiliations = ManufacturerAffiliation::where('user_id', $user->id)
+            ->pluck('status', 'manufacturer_id')
+            ->toArray();
 
+        $affiliationIds = ManufacturerAffiliation::where('user_id', $user->id)
+            ->pluck('id', 'manufacturer_id')
+            ->toArray();
+
+        $manufacturers = $query->get()->map(function ($manufacturer) use ($userAffiliations, $affiliationIds) {
             return [
                 'id' => $manufacturer->id,
                 'name' => $manufacturer->name,
                 'slug' => $manufacturer->slug,
                 'users_count' => $manufacturer->users_count,
-                'affiliation_status' => $affiliation?->status ?? 'none',
-                'affiliation_id' => $affiliation?->id,
+                'affiliation_status' => $userAffiliations[$manufacturer->id] ?? 'none',
+                'affiliation_id' => $affiliationIds[$manufacturer->id] ?? null,
             ];
         });
 

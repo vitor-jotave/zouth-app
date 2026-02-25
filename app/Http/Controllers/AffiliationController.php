@@ -18,12 +18,10 @@ class AffiliationController extends Controller
 
     public function index(Request $request): Response
     {
+        $this->authorize('viewAny', ManufacturerAffiliation::class);
+
         $user = $request->user();
         $manufacturer = Manufacturer::find($user->current_manufacturer_id);
-
-        if (! $manufacturer) {
-            abort(403, 'Você não está afiliado a nenhum fabricante.');
-        }
 
         $query = ManufacturerAffiliation::where('manufacturer_id', $manufacturer->id)
             ->with('user:id,name,email');
@@ -60,16 +58,13 @@ class AffiliationController extends Controller
 
     public function approve(ManufacturerAffiliation $affiliation): RedirectResponse
     {
-        $user = auth()->user();
-        $manufacturer = Manufacturer::find($user->current_manufacturer_id);
-
-        if (! $manufacturer || $affiliation->manufacturer_id !== $manufacturer->id) {
-            abort(403, 'Você não tem permissão para aprovar esta afiliação.');
-        }
+        $this->authorize('approve', $affiliation);
 
         if ($affiliation->status !== 'pending') {
             return redirect()->back()->with('error', 'Apenas afiliações pendentes podem ser aprovadas.');
         }
+
+        $manufacturer = Manufacturer::find($affiliation->manufacturer_id);
 
         if (! $this->limitService->canCreateRep($manufacturer)) {
             return redirect()->back()
@@ -84,12 +79,7 @@ class AffiliationController extends Controller
 
     public function reject(ManufacturerAffiliation $affiliation): RedirectResponse
     {
-        $user = auth()->user();
-        $manufacturer = Manufacturer::find($user->current_manufacturer_id);
-
-        if (! $manufacturer || $affiliation->manufacturer_id !== $manufacturer->id) {
-            abort(403, 'Você não tem permissão para rejeitar esta afiliação.');
-        }
+        $this->authorize('reject', $affiliation);
 
         if ($affiliation->status !== 'pending') {
             return redirect()->back()->with('error', 'Apenas afiliações pendentes podem ser rejeitadas.');
@@ -102,12 +92,7 @@ class AffiliationController extends Controller
 
     public function revoke(ManufacturerAffiliation $affiliation): RedirectResponse
     {
-        $user = auth()->user();
-        $manufacturer = Manufacturer::find($user->current_manufacturer_id);
-
-        if (! $manufacturer || $affiliation->manufacturer_id !== $manufacturer->id) {
-            abort(403, 'Você não tem permissão para revogar esta afiliação.');
-        }
+        $this->authorize('revoke', $affiliation);
 
         if ($affiliation->status !== 'active') {
             return redirect()->back()->with('error', 'Apenas afiliações ativas podem ser revogadas.');

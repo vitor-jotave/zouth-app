@@ -3,15 +3,22 @@
 namespace App\Providers;
 
 use App\Http\Responses\LoginResponse;
+use App\Http\Responses\RegisterResponse;
+use App\Http\Responses\VerifyEmailResponse;
+use App\Listeners\StripeEventListener;
 use App\Services\TenantManager;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use Laravel\Cashier\Cashier;
+use Laravel\Cashier\Events\WebhookReceived;
 use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
+use Laravel\Fortify\Contracts\RegisterResponse as RegisterResponseContract;
+use Laravel\Fortify\Contracts\VerifyEmailResponse as VerifyEmailResponseContract;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -22,6 +29,8 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->singleton(TenantManager::class);
         $this->app->singleton(LoginResponseContract::class, LoginResponse::class);
+        $this->app->singleton(RegisterResponseContract::class, RegisterResponse::class);
+        $this->app->singleton(VerifyEmailResponseContract::class, VerifyEmailResponse::class);
     }
 
     /**
@@ -30,6 +39,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Cashier::useCustomerModel(\App\Models\Manufacturer::class);
+
+        Event::listen(WebhookReceived::class, StripeEventListener::class);
 
         $this->configureDefaults();
         $this->configureUrl();

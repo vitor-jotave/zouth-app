@@ -4,7 +4,6 @@ use App\Models\Manufacturer;
 use App\Models\User;
 
 use function Pest\Laravel\actingAs;
-use function Pest\Laravel\assertGuest;
 
 beforeEach(function () {
     $this->withoutVite();
@@ -47,7 +46,6 @@ it('blocks manufacturer user with inactive manufacturer', function () {
     $response = $this->get('/dashboard');
 
     $response->assertForbidden();
-    assertGuest();
 });
 
 it('blocks manufacturer user without current_manufacturer_id', function () {
@@ -61,7 +59,6 @@ it('blocks manufacturer user without current_manufacturer_id', function () {
     $response = $this->get('/dashboard');
 
     $response->assertForbidden();
-    assertGuest();
 });
 
 it('blocks manufacturer user with blocked membership', function () {
@@ -80,7 +77,6 @@ it('blocks manufacturer user with blocked membership', function () {
     $response = $this->get('/dashboard');
 
     $response->assertForbidden();
-    assertGuest();
 });
 
 it('blocks superadmin from accessing manufacturer dashboard', function () {

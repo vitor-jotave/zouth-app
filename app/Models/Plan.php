@@ -12,6 +12,15 @@ class Plan extends Model
     use HasFactory;
 
     /**
+     * Default attribute values.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'currency' => 'BRL',
+    ];
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var array<int, string>

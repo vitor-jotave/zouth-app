@@ -1,6 +1,9 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import { Plus, Tags, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import InputError from '@/components/input-error';
+import { Pagination } from '@/components/pagination';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -20,9 +23,6 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Pagination } from '@/components/pagination';
-import InputError from '@/components/input-error';
 import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem } from '@/types';
 

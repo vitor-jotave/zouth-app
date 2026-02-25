@@ -11,7 +11,7 @@ class CatalogSettingBackgroundRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return true;
+        return $this->user()?->current_manufacturer_id !== null;
     }
 
     /**

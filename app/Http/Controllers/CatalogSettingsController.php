@@ -72,10 +72,10 @@ class CatalogSettingsController extends Controller
         $this->authorize('update', $setting);
 
         if ($setting->logo_path) {
-            Storage::delete($setting->logo_path);
+            Storage::disk('public')->delete($setting->logo_path);
         }
 
-        $path = $request->file('logo')->store('catalog-logos');
+        $path = $request->file('logo')->store('catalog-logos', 'public');
 
         $setting->update(['logo_path' => $path]);
 
@@ -91,7 +91,7 @@ class CatalogSettingsController extends Controller
         $this->authorize('update', $setting);
 
         if ($setting->logo_path) {
-            Storage::delete($setting->logo_path);
+            Storage::disk('public')->delete($setting->logo_path);
             $setting->update(['logo_path' => null]);
         }
 
@@ -107,10 +107,10 @@ class CatalogSettingsController extends Controller
         $this->authorize('update', $setting);
 
         if ($setting->background_image_path) {
-            Storage::delete($setting->background_image_path);
+            Storage::disk('public')->delete($setting->background_image_path);
         }
 
-        $path = $request->file('background_image')->store('catalog-backgrounds');
+        $path = $request->file('background_image')->store('catalog-backgrounds', 'public');
 
         $setting->update(['background_image_path' => $path]);
 
@@ -126,7 +126,7 @@ class CatalogSettingsController extends Controller
         $this->authorize('update', $setting);
 
         if ($setting->background_image_path) {
-            Storage::delete($setting->background_image_path);
+            Storage::disk('public')->delete($setting->background_image_path);
             $setting->update(['background_image_path' => null]);
         }
 
