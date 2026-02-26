@@ -96,23 +96,44 @@ const footerNavItems: NavItem[] = [];
 export function AppSidebar() {
     const { common, catalogo, atendimento } = useNavItems();
     const { activeService } = useActiveService();
-    const prevServiceRef = useRef<string>(activeService);
     const catalogoRef = useRef<HTMLDivElement>(null);
     const atendimentoRef = useRef<HTMLDivElement>(null);
+    const prevServiceRef = useRef<string>(activeService);
+    const isInitialRenderRef = useRef(true);
 
     const isManufacturerUser = catalogo.length > 0;
 
     useGSAP(
         () => {
             if (!isManufacturerUser) return;
+
+            // On every mount: set correct visibility instantly, no animation
+            if (isInitialRenderRef.current) {
+                isInitialRenderRef.current = false;
+                gsap.set(catalogoRef.current, { display: activeService === 'atendimento' ? 'none' : 'block' });
+                gsap.set(atendimentoRef.current, { display: activeService === 'atendimento' ? 'block' : 'none' });
+                return;
+            }
+
+            // Service actually changed — animate
             const prev = prevServiceRef.current;
             if (prev === activeService) return;
 
             const outRef = prev === 'atendimento' ? atendimentoRef : catalogoRef;
             const inRef = activeService === 'atendimento' ? atendimentoRef : catalogoRef;
-
             const outItems = outRef.current ? Array.from(outRef.current.querySelectorAll('li')) : [];
             const inEl = inRef.current;
+
+            const revealIn = () => {
+                if (!inEl) return;
+                gsap.set(inEl, { display: 'block' });
+                gsap.fromTo(
+                    Array.from(inEl.querySelectorAll('li')),
+                    { x: 14, opacity: 0 },
+                    { x: 0, opacity: 1, stagger: 0.05, duration: 0.22, ease: 'power2.out' },
+                );
+                prevServiceRef.current = activeService;
+            };
 
             if (outItems.length > 0) {
                 gsap.to(outItems, {
@@ -123,30 +144,12 @@ export function AppSidebar() {
                     ease: 'power2.in',
                     onComplete: () => {
                         gsap.set(outRef.current, { display: 'none' });
-                        if (inEl) {
-                            gsap.set(inEl, { display: 'block' });
-                            const inItems = Array.from(inEl.querySelectorAll('li'));
-                            gsap.fromTo(
-                                inItems,
-                                { x: 14, opacity: 0 },
-                                { x: 0, opacity: 1, stagger: 0.05, duration: 0.22, ease: 'power2.out' },
-                            );
-                        }
-                        prevServiceRef.current = activeService;
+                        revealIn();
                     },
                 });
             } else {
                 gsap.set(outRef.current, { display: 'none' });
-                if (inEl) {
-                    gsap.set(inEl, { display: 'block' });
-                    const inItems = Array.from(inEl.querySelectorAll('li'));
-                    gsap.fromTo(
-                        inItems,
-                        { x: 14, opacity: 0 },
-                        { x: 0, opacity: 1, stagger: 0.05, duration: 0.22, ease: 'power2.out' },
-                    );
-                }
-                prevServiceRef.current = activeService;
+                revealIn();
             }
         },
         { dependencies: [activeService] },
@@ -169,10 +172,10 @@ export function AppSidebar() {
 
                 {isManufacturerUser && (
                     <>
-                        <div ref={catalogoRef} style={{ display: activeService === 'atendimento' ? 'none' : 'block' }}>
+                        <div ref={catalogoRef}>
                             <NavMain items={catalogo} />
                         </div>
-                        <div ref={atendimentoRef} style={{ display: activeService === 'atendimento' ? 'block' : 'none' }}>
+                        <div ref={atendimentoRef} style={{ display: 'none' }}>
                             <NavMain items={atendimento} />
                         </div>
                     </>
