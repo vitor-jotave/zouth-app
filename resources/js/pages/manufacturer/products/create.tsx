@@ -19,7 +19,7 @@ interface VariationTypeOption {
 
 interface Props {
     categories: Category[];
-    variationTypes: VariationTypeOption[];
+    variation_types: VariationTypeOption[];
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -28,7 +28,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Novo produto', href: '/manufacturer/products/create' },
 ];
 
-export default function ProductsCreate({ categories, variationTypes }: Props) {
+export default function ProductsCreate({ categories, variation_types }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Novo produto" />
@@ -51,7 +51,7 @@ export default function ProductsCreate({ categories, variationTypes }: Props) {
                     </Link>
                 </div>
 
-                <ProductForm mode="create" categories={categories} variationTypes={variationTypes} />
+                <ProductForm mode="create" categories={categories} variationTypes={variation_types} />
             </div>
         </AppLayout>
     );

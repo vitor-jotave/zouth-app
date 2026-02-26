@@ -1,4 +1,3 @@
-import { router, useForm } from '@inertiajs/react';
 import {
     DndContext,
     KeyboardSensor,
@@ -16,6 +15,7 @@ import {
     verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { router, useForm } from '@inertiajs/react';
 import { CircleAlert, GripVertical, ImagePlus, Loader2, Package, Palette, Shirt, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ImageCropDialog } from '@/components/image-crop-dialog';
@@ -136,15 +136,15 @@ interface Props {
 
 const steps = [
     { key: 'basic', label: 'Dados basicos', icon: Package },
-    { key: 'media', label: 'Midia', icon: ImagePlus },
     { key: 'variants', label: 'Variacoes e estoque', icon: Shirt },
+    { key: 'media', label: 'Midia', icon: ImagePlus },
 ];
 
 /** Maps error field prefixes to their respective step index. */
 const STEP_FIELDS: Record<number, string[]> = {
     0: ['name', 'sku', 'description', 'product_category_id', 'price', 'sort_order', 'is_active'],
-    1: ['images', 'video'],
-    2: ['variations', 'variant_stocks', 'base_quantity'],
+    1: ['variations', 'variant_stocks', 'base_quantity'],
+    2: ['images', 'video'],
 };
 
 function getStepForError(errorKey: string): number {
@@ -294,7 +294,7 @@ function SortableMediaItem({ media, index, onDelete }: SortableMediaItemProps) {
 export function ProductForm({
     mode,
     categories,
-    variationTypes,
+    variationTypes = [],
     product,
     stockStructure,
 }: Props) {
@@ -773,7 +773,7 @@ export function ProductForm({
                 </Card>
             )}
 
-            {step === 1 && (
+            {step === 2 && (
                 <Card>
                     <CardHeader>
                         <CardTitle>Midia</CardTitle>
@@ -961,7 +961,7 @@ export function ProductForm({
                 </Card>
             )}
 
-            {step === 2 && (
+            {step === 1 && (
                 <Card>
                     <CardHeader>
                         <CardTitle>Variacoes e estoque</CardTitle>

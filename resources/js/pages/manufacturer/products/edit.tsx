@@ -70,7 +70,7 @@ interface StockStructure {
 interface Props {
     product: { data: Product } | Product;
     categories: Category[];
-    variationTypes: VariationTypeOption[];
+    variation_types: VariationTypeOption[];
     stock_structure: StockStructure;
 }
 
@@ -80,7 +80,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Editar produto', href: '#' },
 ];
 
-export default function ProductsEdit({ product, categories, variationTypes, stock_structure }: Props) {
+export default function ProductsEdit({ product, categories, variation_types, stock_structure }: Props) {
     const resolvedProduct = 'data' in product ? product.data : product;
 
     return (
@@ -109,7 +109,7 @@ export default function ProductsEdit({ product, categories, variationTypes, stoc
                     mode="edit"
                     product={resolvedProduct}
                     categories={categories}
-                    variationTypes={variationTypes}
+                    variationTypes={variation_types}
                     stockStructure={stock_structure}
                 />
             </div>
