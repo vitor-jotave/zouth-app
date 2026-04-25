@@ -35,7 +35,11 @@ class EvolutionWebhookController extends Controller
 
         $event = $request->input('event');
 
-        match ($event) {
+        // Evolution API v2 sends uppercase events (e.g. MESSAGES_UPSERT)
+        // Normalize to lowercase dot notation for matching
+        $normalizedEvent = strtolower(str_replace('_', '.', $event ?? ''));
+
+        match ($normalizedEvent) {
             'messages.upsert' => $this->handleMessageUpsert($instance, $request->all()),
             'messages.update' => $this->handleMessageUpdate($instance, $request->all()),
             'connection.update' => $this->handleConnectionUpdate($instance, $request->all()),
@@ -52,12 +56,34 @@ class EvolutionWebhookController extends Controller
     {
         $data = $payload['data'] ?? [];
 
-        if (empty($data)) {
+        // Evolution API v2 may send data as an array of messages
+        // or as a single message object. Normalize to a list.
+        $messages = [];
+        if (! empty($data) && isset($data['key'])) {
+            // Single message object
+            $messages = [$data];
+        } elseif (is_array($data) && ! empty($data) && ! isset($data['key'])) {
+            // Array of messages (check first element has 'key')
+            $messages = array_values($data);
+        }
+
+        if (empty($messages)) {
             return;
         }
 
+        foreach ($messages as $msgData) {
+            $this->processIncomingMessage($instance, $msgData);
+        }
+    }
+
+    /**
+     * Process a single incoming message from the webhook payload.
+     */
+    protected function processIncomingMessage(WhatsappInstance $instance, array $data): void
+    {
         $messageId = $data['key']['id'] ?? null;
-        $remoteJid = $data['key']['remoteJid'] ?? null;
+        // Evolution API v2 with LID: prefer remoteJidAlt (standard format) over remoteJid
+        $remoteJid = $data['key']['remoteJidAlt'] ?? $data['key']['remoteJid'] ?? null;
         $fromMe = $data['key']['fromMe'] ?? false;
 
         if (! $messageId || ! $remoteJid) {

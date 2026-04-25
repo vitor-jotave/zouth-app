@@ -44,6 +44,9 @@ class EvolutionApiService
                 'url' => $webhookUrl,
                 'byEvents' => false,
                 'base64' => false,
+                'headers' => [
+                    'apikey' => $this->apiKey,
+                ],
                 'events' => [
                     'MESSAGES_UPSERT',
                     'MESSAGES_UPDATE',
@@ -131,6 +134,27 @@ class EvolutionApiService
     {
         return $this->client()->get('/instance/fetchInstances', [
             'instanceName' => $instanceName,
+        ]);
+    }
+
+    /**
+     * Update the webhook configuration for an instance.
+     */
+    public function setWebhook(string $instanceName, string $webhookUrl): Response
+    {
+        return $this->client()->post("/webhook/set/{$instanceName}", [
+            'url' => $webhookUrl,
+            'enabled' => true,
+            'events' => [
+                'MESSAGES_UPSERT',
+                'MESSAGES_UPDATE',
+                'CONNECTION_UPDATE',
+            ],
+            'webhookByEvents' => false,
+            'webhookBase64' => false,
+            'headers' => [
+                'apikey' => $this->apiKey,
+            ],
         ]);
     }
 }
