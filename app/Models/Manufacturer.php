@@ -110,6 +110,11 @@ class Manufacturer extends Model
         return $this->hasMany(Order::class);
     }
 
+    public function customers(): HasMany
+    {
+        return $this->hasMany(Customer::class);
+    }
+
     public function whatsappInstances(): HasMany
     {
         return $this->hasMany(WhatsappInstance::class);

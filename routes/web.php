@@ -7,6 +7,7 @@ use App\Http\Controllers\AffiliationController;
 use App\Http\Controllers\CatalogSettingsController;
 use App\Http\Controllers\EvolutionWebhookController;
 use App\Http\Controllers\Manufacturer\BillingController;
+use App\Http\Controllers\Manufacturer\CustomerController as ManufacturerCustomerController;
 use App\Http\Controllers\Manufacturer\OrderController as ManufacturerOrderController;
 use App\Http\Controllers\Manufacturer\UserController as ManufacturerUserController;
 use App\Http\Controllers\Manufacturer\WhatsappChatController;
@@ -130,6 +131,13 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
             Route::put('{order}/notes', 'updateNotes')->name('update-notes');
         });
 
+        Route::controller(ManufacturerCustomerController::class)->prefix('customers')->name('customers.')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::get('{customer}', 'show')->name('show');
+            Route::put('{customer}', 'update')->name('update');
+        });
+
         Route::prefix('atendimento')->name('atendimento.')->group(function () {
             Route::get('setup', [WhatsappInstanceController::class, 'setup'])->name('setup');
             Route::post('instances', [WhatsappInstanceController::class, 'store'])->name('instances.store');
@@ -138,9 +146,11 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
             Route::delete('instances/{instance}', [WhatsappInstanceController::class, 'destroy'])->name('instances.destroy');
 
             Route::get('/', [WhatsappChatController::class, 'index'])->name('index');
+            Route::get('products', [WhatsappChatController::class, 'products'])->name('products');
             Route::get('conversations/list', [WhatsappChatController::class, 'conversationsList'])->name('conversations.list');
             Route::get('conversations/{conversation}/messages', [WhatsappChatController::class, 'messages'])->name('conversations.messages');
             Route::post('conversations/{conversation}/messages', [WhatsappChatController::class, 'sendMessage'])->name('conversations.send');
+            Route::post('conversations/{conversation}/products/{product}', [WhatsappChatController::class, 'sendProduct'])->name('conversations.products.send');
         });
 
         Route::controller(BillingController::class)->prefix('billing')->name('billing.')->group(function () {

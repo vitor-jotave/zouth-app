@@ -17,6 +17,10 @@ class WhatsappMessage extends Model
         'from_me',
         'sender_jid',
         'body',
+        'media_type',
+        'media_url',
+        'media_mimetype',
+        'media_file_name',
         'status',
         'message_timestamp',
     ];

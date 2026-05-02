@@ -26,6 +26,23 @@ function setupManufacturerWithPlan(array $planOverrides = []): array
     return [$manufacturer, $plan, $user];
 }
 
+function validPublicOrderPayload(array $overrides = []): array
+{
+    return [
+        'customer_name' => 'Cliente',
+        'customer_phone' => '(11) 99999-9999',
+        'customer_document_type' => 'cpf',
+        'customer_document' => '529.982.247-25',
+        'customer_zip_code' => '01001-000',
+        'customer_state' => 'SP',
+        'customer_city' => 'Sao Paulo',
+        'customer_neighborhood' => 'Se',
+        'customer_street' => 'Praca da Se',
+        'customer_address_number' => '100',
+        ...$overrides,
+    ];
+}
+
 test('canCreateProduct returns true when under limit', function () {
     [$manufacturer] = setupManufacturerWithPlan(['max_products' => 10]);
     $service = app(PlanLimitService::class);
@@ -215,11 +232,9 @@ test('public order is blocked when monthly order limit is reached', function () 
 
     $product = Product::factory()->create(['manufacturer_id' => $manufacturer->id, 'is_active' => true]);
 
-    $this->post("/catalog/{$catalogSetting->public_token}/orders", [
-        'customer_name' => 'Cliente',
-        'customer_phone' => '(11) 99999-9999',
+    $this->post("/catalog/{$catalogSetting->public_token}/orders", validPublicOrderPayload([
         'items' => [['product_id' => $product->id, 'quantity' => 1]],
-    ])->assertSessionHasErrors('limit');
+    ]))->assertSessionHasErrors('limit');
 });
 
 test('public order succeeds when under monthly order limit', function () {
@@ -232,11 +247,9 @@ test('public order succeeds when under monthly order limit', function () {
 
     $product = Product::factory()->create(['manufacturer_id' => $manufacturer->id, 'is_active' => true]);
 
-    $this->post("/catalog/{$catalogSetting->public_token}/orders", [
-        'customer_name' => 'Cliente',
-        'customer_phone' => '(11) 99999-9999',
+    $this->post("/catalog/{$catalogSetting->public_token}/orders", validPublicOrderPayload([
         'items' => [['product_id' => $product->id, 'quantity' => 1]],
-    ])->assertSessionMissing('errors');
+    ]))->assertSessionMissing('errors');
 
     expect(Order::count())->toBe(1);
 });
@@ -377,7 +390,12 @@ test('violatedLimitsForPlan returns multiple violations when several limits exce
 
 test('violatedLimitsForPlan returns empty for unlimited target plan', function () {
     [$manufacturer] = setupManufacturerWithPlan();
-    Product::factory()->count(50)->create(['manufacturer_id' => $manufacturer->id]);
+    for ($i = 0; $i < 50; $i++) {
+        Product::factory()->create([
+            'manufacturer_id' => $manufacturer->id,
+            'sku' => 'SKU-UNLIMITED-TARGET-'.$i,
+        ]);
+    }
     $targetPlan = Plan::factory()->create(['max_products' => null, 'max_users' => null, 'max_reps' => null, 'max_orders_per_month' => null]);
 
     $service = app(PlanLimitService::class);

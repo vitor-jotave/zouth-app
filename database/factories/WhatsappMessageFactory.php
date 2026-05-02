@@ -18,6 +18,10 @@ class WhatsappMessageFactory extends Factory
             'from_me' => false,
             'sender_jid' => fake()->numerify('5511########').'@s.whatsapp.net',
             'body' => fake()->sentence(),
+            'media_type' => null,
+            'media_url' => null,
+            'media_mimetype' => null,
+            'media_file_name' => null,
             'status' => 'delivered',
             'message_timestamp' => fake()->dateTimeBetween('-7 days', 'now'),
         ];

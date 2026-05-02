@@ -47,6 +47,22 @@ beforeEach(function () {
         'manufacturer_id' => $this->manufacturer->id,
         'is_active' => true,
     ]);
+
+    $this->validCustomerData = fn (array $overrides = []) => [
+        'customer_name' => 'Cliente Teste',
+        'customer_phone' => '(11) 99999-9999',
+        'customer_document_type' => 'cpf',
+        'customer_document' => '529.982.247-25',
+        'customer_zip_code' => '01001-000',
+        'customer_state' => 'SP',
+        'customer_city' => 'Sao Paulo',
+        'customer_neighborhood' => 'Se',
+        'customer_street' => 'Praca da Se',
+        'customer_address_number' => '100',
+        'customer_address_complement' => 'Sala 2',
+        'customer_address_reference' => 'Referência de Entrega',
+        ...$overrides,
+    ];
 });
 
 // ──────────────────────────────────────────────
@@ -56,14 +72,12 @@ beforeEach(function () {
 it('creates an order via the public catalog endpoint', function () {
     $response = $this->post(
         "/catalog/{$this->catalogSetting->public_token}/orders",
-        [
-            'customer_name' => 'Cliente Teste',
-            'customer_phone' => '(11) 99999-9999',
+        ($this->validCustomerData)([
             'items' => [
                 ['product_id' => $this->product1->id, 'quantity' => 2],
                 ['product_id' => $this->product2->id, 'quantity' => 1, 'size' => 'M', 'color' => 'Azul'],
             ],
-        ],
+        ]),
     );
 
     $order = Order::first();
@@ -73,6 +87,16 @@ it('creates an order via the public catalog endpoint', function () {
     expect($order->status)->toBe(OrderStatus::New);
     expect($order->customer_name)->toBe('Cliente Teste');
     expect($order->customer_phone)->toBe('(11) 99999-9999');
+    expect($order->customer_document_type)->toBe('cpf');
+    expect($order->customer_document)->toBe('52998224725');
+    expect($order->customer_zip_code)->toBe('01001000');
+    expect($order->customer_state)->toBe('SP');
+    expect($order->customer_city)->toBe('Sao Paulo');
+    expect($order->customer_neighborhood)->toBe('Se');
+    expect($order->customer_street)->toBe('Praca da Se');
+    expect($order->customer_address_number)->toBe('100');
+    expect($order->customer_address_complement)->toBe('Sala 2');
+    expect($order->customer_address_reference)->toBe('Referência de Entrega');
     expect($order->public_token)->toHaveLength(48);
 
     expect(OrderItem::where('order_id', $order->id)->count())->toBe(2);
@@ -95,18 +119,34 @@ it('creates an order via the public catalog endpoint', function () {
     $response->assertRedirect(route('public.order.show', $order->public_token));
 });
 
+it('creates a public order for a juridical person with cnpj', function () {
+    $this->post(
+        "/catalog/{$this->catalogSetting->public_token}/orders",
+        ($this->validCustomerData)([
+            'customer_document_type' => 'cnpj',
+            'customer_document' => '11.222.333/0001-81',
+            'items' => [['product_id' => $this->product1->id, 'quantity' => 1]],
+        ]),
+    )->assertRedirect();
+
+    $order = Order::first();
+
+    expect($order->customer_document_type)->toBe('cnpj');
+    expect($order->customer_document)->toBe('11222333000181');
+});
+
 it('generates a unique public token for each order', function () {
-    $this->post("/catalog/{$this->catalogSetting->public_token}/orders", [
+    $this->post("/catalog/{$this->catalogSetting->public_token}/orders", ($this->validCustomerData)([
         'customer_name' => 'A',
         'customer_email' => 'a@example.com',
         'items' => [['product_id' => $this->product1->id, 'quantity' => 1]],
-    ]);
+    ]));
 
-    $this->post("/catalog/{$this->catalogSetting->public_token}/orders", [
+    $this->post("/catalog/{$this->catalogSetting->public_token}/orders", ($this->validCustomerData)([
         'customer_name' => 'B',
         'customer_email' => 'b@example.com',
         'items' => [['product_id' => $this->product1->id, 'quantity' => 1]],
-    ]);
+    ]));
 
     $tokens = Order::pluck('public_token')->toArray();
     expect($tokens)->toHaveCount(2);
@@ -120,46 +160,94 @@ it('rejects an order with products from a different manufacturer', function () {
         'is_active' => true,
     ]);
 
-    $response = $this->post("/catalog/{$this->catalogSetting->public_token}/orders", [
+    $response = $this->post("/catalog/{$this->catalogSetting->public_token}/orders", ($this->validCustomerData)([
         'customer_name' => 'Hacker',
-        'customer_phone' => '(11) 99999-9999',
         'items' => [
             ['product_id' => $foreignProduct->id, 'quantity' => 1],
         ],
-    ]);
+    ]));
 
     $response->assertSessionHasErrors('items');
     expect(Order::count())->toBe(0);
 });
 
 it('rejects an order without items', function () {
-    $response = $this->post("/catalog/{$this->catalogSetting->public_token}/orders", [
+    $response = $this->post("/catalog/{$this->catalogSetting->public_token}/orders", ($this->validCustomerData)([
         'customer_name' => 'Teste',
-        'customer_phone' => '(11) 99999-9999',
         'items' => [],
-    ]);
+    ]));
 
     $response->assertSessionHasErrors('items');
 });
 
 it('requires at least phone or email', function () {
-    $response = $this->post("/catalog/{$this->catalogSetting->public_token}/orders", [
+    $response = $this->post("/catalog/{$this->catalogSetting->public_token}/orders", ($this->validCustomerData)([
         'customer_name' => 'Teste',
+        'customer_phone' => null,
+        'customer_email' => null,
         'items' => [['product_id' => $this->product1->id, 'quantity' => 1]],
-    ]);
+    ]));
 
     $response->assertSessionHasErrors(['customer_phone', 'customer_email']);
 });
 
 it('accepts order with email only (no phone)', function () {
-    $response = $this->post("/catalog/{$this->catalogSetting->public_token}/orders", [
+    $response = $this->post("/catalog/{$this->catalogSetting->public_token}/orders", ($this->validCustomerData)([
         'customer_name' => 'Teste',
+        'customer_phone' => null,
         'customer_email' => 'teste@example.com',
         'items' => [['product_id' => $this->product1->id, 'quantity' => 1]],
-    ]);
+    ]));
 
     $response->assertRedirect();
     expect(Order::count())->toBe(1);
+});
+
+it('requires customer document fields on public orders', function () {
+    $response = $this->post("/catalog/{$this->catalogSetting->public_token}/orders", ($this->validCustomerData)([
+        'customer_document_type' => null,
+        'customer_document' => null,
+        'items' => [['product_id' => $this->product1->id, 'quantity' => 1]],
+    ]));
+
+    $response->assertSessionHasErrors(['customer_document_type', 'customer_document']);
+    expect(Order::count())->toBe(0);
+});
+
+it('validates cpf and cnpj according to the selected document type', function (string $type, string $document) {
+    $response = $this->post("/catalog/{$this->catalogSetting->public_token}/orders", ($this->validCustomerData)([
+        'customer_document_type' => $type,
+        'customer_document' => $document,
+        'items' => [['product_id' => $this->product1->id, 'quantity' => 1]],
+    ]));
+
+    $response->assertSessionHasErrors('customer_document');
+    expect(Order::count())->toBe(0);
+})->with([
+    'invalid cpf' => ['cpf', '111.111.111-11'],
+    'invalid cnpj' => ['cnpj', '11.111.111/1111-11'],
+]);
+
+it('requires complete address fields on public orders', function () {
+    $response = $this->post("/catalog/{$this->catalogSetting->public_token}/orders", ($this->validCustomerData)([
+        'customer_zip_code' => null,
+        'customer_state' => null,
+        'customer_city' => null,
+        'customer_neighborhood' => null,
+        'customer_street' => null,
+        'customer_address_number' => null,
+        'items' => [['product_id' => $this->product1->id, 'quantity' => 1]],
+    ]));
+
+    $response->assertSessionHasErrors([
+        'customer_zip_code',
+        'customer_state',
+        'customer_city',
+        'customer_neighborhood',
+        'customer_street',
+        'customer_address_number',
+    ]);
+    expect(Order::count())->toBe(0);
 });
 
 it('associates sales rep when ref query param matches an active affiliation', function () {
@@ -172,11 +260,10 @@ it('associates sales rep when ref query param matches an active affiliation', fu
 
     $this->post(
         "/catalog/{$this->catalogSetting->public_token}/orders?ref={$rep->id}",
-        [
+        ($this->validCustomerData)([
             'customer_name' => 'Via Rep',
-            'customer_phone' => '(11) 99999-9999',
             'items' => [['product_id' => $this->product1->id, 'quantity' => 1]],
-        ],
+        ]),
     );
 
     $order = Order::first();

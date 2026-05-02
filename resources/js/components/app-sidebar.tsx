@@ -1,7 +1,21 @@
 import { useGSAP } from '@gsap/react';
 import { usePage } from '@inertiajs/react';
 import gsap from 'gsap';
-import { BookOpen, Building2, CreditCard, Folder, LayoutGrid, Layers, MessageSquare, Package, Palette, ShoppingCart, Tags, UserCheck, Users } from 'lucide-react';
+import {
+    BookOpen,
+    Building2,
+    CreditCard,
+    Folder,
+    LayoutGrid,
+    Layers,
+    MessageSquare,
+    Package,
+    Palette,
+    ShoppingCart,
+    Tags,
+    UserCheck,
+    Users,
+} from 'lucide-react';
 import { useRef } from 'react';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
@@ -28,7 +42,7 @@ function useDashboardUrl(): string {
     } else if (user?.user_type === 'sales_rep') {
         return '/rep/dashboard';
     }
-    
+
     return '/dashboard';
 }
 
@@ -49,7 +63,11 @@ function useNavItems() {
         return {
             common: [
                 ...common,
-                { title: 'Fabricantes', href: '/admin/manufacturers', icon: Building2 },
+                {
+                    title: 'Fabricantes',
+                    href: '/admin/manufacturers',
+                    icon: Building2,
+                },
                 { title: 'Planos', href: '/admin/plans', icon: CreditCard },
             ],
             catalogo: [] as NavItem[],
@@ -61,7 +79,11 @@ function useNavItems() {
         return {
             common: [
                 ...common,
-                { title: 'Fabricantes', href: '/rep/manufacturers', icon: Building2 },
+                {
+                    title: 'Fabricantes',
+                    href: '/rep/manufacturers',
+                    icon: Building2,
+                },
                 { title: 'Pedidos', href: '/rep/orders', icon: ShoppingCart },
             ],
             catalogo: [] as NavItem[],
@@ -74,16 +96,51 @@ function useNavItems() {
             common,
             catalogo: [
                 { title: 'Usuários', href: '/users', icon: Users },
-                { title: 'Produtos', href: '/manufacturer/products', icon: Package },
-                { title: 'Pedidos', href: '/manufacturer/orders', icon: ShoppingCart },
-                { title: 'Categorias', href: '/manufacturer/categories', icon: Tags },
-                { title: 'Variações', href: '/manufacturer/variation-types', icon: Layers },
-                { title: 'Catálogo', href: manufacturer.catalogSettings?.index().url ?? '/manufacturer/catalog-settings', icon: Palette },
+                {
+                    title: 'Clientes',
+                    href: '/manufacturer/customers',
+                    icon: BookOpen,
+                },
+                {
+                    title: 'Produtos',
+                    href: '/manufacturer/products',
+                    icon: Package,
+                },
+                {
+                    title: 'Pedidos',
+                    href: '/manufacturer/orders',
+                    icon: ShoppingCart,
+                },
+                {
+                    title: 'Categorias',
+                    href: '/manufacturer/categories',
+                    icon: Tags,
+                },
+                {
+                    title: 'Variações',
+                    href: '/manufacturer/variation-types',
+                    icon: Layers,
+                },
+                {
+                    title: 'Catálogo',
+                    href:
+                        manufacturer.catalogSettings?.index().url ??
+                        '/manufacturer/catalog-settings',
+                    icon: Palette,
+                },
                 { title: 'Afiliações', href: '/affiliations', icon: UserCheck },
-                { title: 'Assinatura', href: '/manufacturer/billing', icon: CreditCard },
+                {
+                    title: 'Assinatura',
+                    href: '/manufacturer/billing',
+                    icon: CreditCard,
+                },
             ] as NavItem[],
             atendimento: [
-                { title: 'Atendimento', href: '/manufacturer/atendimento', icon: MessageSquare },
+                {
+                    title: 'Atendimento',
+                    href: '/manufacturer/atendimento',
+                    icon: MessageSquare,
+                },
             ] as NavItem[],
         };
     }
@@ -110,8 +167,12 @@ export function AppSidebar() {
             // On every mount: set correct visibility instantly, no animation
             if (isInitialRenderRef.current) {
                 isInitialRenderRef.current = false;
-                gsap.set(catalogoRef.current, { display: activeService === 'atendimento' ? 'none' : 'block' });
-                gsap.set(atendimentoRef.current, { display: activeService === 'atendimento' ? 'block' : 'none' });
+                gsap.set(catalogoRef.current, {
+                    display: activeService === 'atendimento' ? 'none' : 'block',
+                });
+                gsap.set(atendimentoRef.current, {
+                    display: activeService === 'atendimento' ? 'block' : 'none',
+                });
                 return;
             }
 
@@ -119,9 +180,13 @@ export function AppSidebar() {
             const prev = prevServiceRef.current;
             if (prev === activeService) return;
 
-            const outRef = prev === 'atendimento' ? atendimentoRef : catalogoRef;
-            const inRef = activeService === 'atendimento' ? atendimentoRef : catalogoRef;
-            const outItems = outRef.current ? Array.from(outRef.current.querySelectorAll('li')) : [];
+            const outRef =
+                prev === 'atendimento' ? atendimentoRef : catalogoRef;
+            const inRef =
+                activeService === 'atendimento' ? atendimentoRef : catalogoRef;
+            const outItems = outRef.current
+                ? Array.from(outRef.current.querySelectorAll('li'))
+                : [];
             const inEl = inRef.current;
 
             const revealIn = () => {
@@ -130,7 +195,13 @@ export function AppSidebar() {
                 gsap.fromTo(
                     Array.from(inEl.querySelectorAll('li')),
                     { x: 14, opacity: 0 },
-                    { x: 0, opacity: 1, stagger: 0.05, duration: 0.22, ease: 'power2.out' },
+                    {
+                        x: 0,
+                        opacity: 1,
+                        stagger: 0.05,
+                        duration: 0.22,
+                        ease: 'power2.out',
+                    },
                 );
                 prevServiceRef.current = activeService;
             };

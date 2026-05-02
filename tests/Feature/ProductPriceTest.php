@@ -26,6 +26,20 @@ beforeEach(function () {
     ]);
 
     $this->actingAs($this->owner);
+
+    $this->validPublicOrderCustomerData = fn (array $overrides = []) => [
+        'customer_name' => 'Cliente Preco',
+        'customer_phone' => '(11) 99999-9999',
+        'customer_document_type' => 'cpf',
+        'customer_document' => '529.982.247-25',
+        'customer_zip_code' => '01001-000',
+        'customer_state' => 'SP',
+        'customer_city' => 'Sao Paulo',
+        'customer_neighborhood' => 'Se',
+        'customer_street' => 'Praca da Se',
+        'customer_address_number' => '100',
+        ...$overrides,
+    ];
 });
 
 // ──────────────────────────────────────────────
@@ -211,13 +225,13 @@ it('snapshots unit_price from product price_cents when creating an order', funct
 
     $response = $this->post(
         "/catalog/{$catalogSetting->public_token}/orders",
-        [
+        ($this->validPublicOrderCustomerData)([
             'customer_name' => 'Cliente Preco',
             'customer_email' => 'preco@test.com',
             'items' => [
                 ['product_id' => $product->id, 'quantity' => 3],
             ],
-        ],
+        ]),
     );
 
     $response->assertSessionHasNoErrors();
@@ -248,13 +262,13 @@ it('keeps unit_price null when product has no price', function () {
 
     $response = $this->post(
         "/catalog/{$catalogSetting->public_token}/orders",
-        [
+        ($this->validPublicOrderCustomerData)([
             'customer_name' => 'Cliente Sem Preco',
             'customer_email' => 'sempreco@test.com',
             'items' => [
                 ['product_id' => $product->id, 'quantity' => 1],
             ],
-        ],
+        ]),
     );
 
     $order = Order::first();

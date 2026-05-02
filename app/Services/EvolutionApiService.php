@@ -99,6 +99,25 @@ class EvolutionApiService
         ]);
     }
 
+    public function sendMedia(
+        string $instanceName,
+        string $remoteJid,
+        string $mediaType,
+        string $mimeType,
+        string $media,
+        string $fileName,
+        string $caption
+    ): Response {
+        return $this->client()->post("/message/sendMedia/{$instanceName}", [
+            'number' => $remoteJid,
+            'mediatype' => $mediaType,
+            'mimetype' => $mimeType,
+            'media' => $media,
+            'fileName' => $fileName,
+            'caption' => $caption,
+        ]);
+    }
+
     /**
      * Fetch chats (conversations) from an instance.
      */

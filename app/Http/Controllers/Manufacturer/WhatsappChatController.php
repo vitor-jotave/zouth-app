@@ -2,13 +2,19 @@
 
 namespace App\Http\Controllers\Manufacturer;
 
+use App\Enums\ProductMediaType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SendWhatsappMessageRequest;
+use App\Http\Requests\SendWhatsappProductMessageRequest;
+use App\Http\Resources\WhatsappProductResource;
+use App\Models\Product;
+use App\Models\ProductMedia;
 use App\Models\WhatsappConversation;
 use App\Services\EvolutionApiService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -75,6 +81,10 @@ class WhatsappChatController extends Controller
                         'message_id' => $message->message_id,
                         'from_me' => $message->from_me,
                         'body' => $message->body,
+                        'media_type' => $message->media_type,
+                        'media_url' => $message->media_url,
+                        'media_mimetype' => $message->media_mimetype,
+                        'media_file_name' => $message->media_file_name,
                         'status' => $message->status->value,
                         'message_timestamp' => $message->message_timestamp?->toIso8601String(),
                     ]);
@@ -116,6 +126,10 @@ class WhatsappChatController extends Controller
                 'message_id' => $message->message_id,
                 'from_me' => $message->from_me,
                 'body' => $message->body,
+                'media_type' => $message->media_type,
+                'media_url' => $message->media_url,
+                'media_mimetype' => $message->media_mimetype,
+                'media_file_name' => $message->media_file_name,
                 'status' => $message->status->value,
                 'message_timestamp' => $message->message_timestamp?->toIso8601String(),
             ]);
@@ -173,9 +187,111 @@ class WhatsappChatController extends Controller
                 'message_id' => $message->message_id,
                 'from_me' => $message->from_me,
                 'body' => $message->body,
+                'media_type' => $message->media_type,
+                'media_url' => $message->media_url,
+                'media_mimetype' => $message->media_mimetype,
+                'media_file_name' => $message->media_file_name,
                 'status' => $message->status->value,
                 'message_timestamp' => $message->message_timestamp->toIso8601String(),
             ],
+        ]);
+    }
+
+    public function products(Request $request): JsonResponse
+    {
+        $manufacturer = $request->user()->currentManufacturer;
+
+        $products = Product::query()
+            ->where('manufacturer_id', $manufacturer->id)
+            ->where('is_active', true)
+            ->with('media')
+            ->when($request->search, function ($query, string $search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                        ->orWhere('sku', 'like', "%{$search}%");
+                });
+            })
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->limit(25)
+            ->get();
+
+        return response()->json([
+            'products' => WhatsappProductResource::collection($products)->resolve(),
+        ]);
+    }
+
+    public function sendProduct(
+        SendWhatsappProductMessageRequest $request,
+        WhatsappConversation $conversation,
+        Product $product
+    ): JsonResponse {
+        $this->authorize('sendMessage', $conversation);
+
+        $manufacturerId = $request->user()->current_manufacturer_id;
+
+        if ($product->manufacturer_id !== $manufacturerId) {
+            abort(404);
+        }
+
+        $product->load('media');
+        $validated = $request->validated();
+        $caption = $this->buildProductCaption($product, $validated);
+        $instance = $conversation->instance;
+        $primaryImage = $this->primaryImage($product);
+        $mediaUrl = $primaryImage ? Storage::disk('s3')->url($primaryImage->path) : null;
+        $mimeType = $primaryImage ? $this->mimeTypeForPath($primaryImage->path) : null;
+        $fileName = $primaryImage ? basename($primaryImage->path) : null;
+
+        if ($validated['include_photo'] && $primaryImage && $mediaUrl && $mimeType && $fileName) {
+            $response = $this->evolution->sendMedia(
+                $instance->instance_name,
+                $conversation->remote_jid,
+                'image',
+                $mimeType,
+                $mediaUrl,
+                $fileName,
+                $caption,
+            );
+        } else {
+            $response = $this->evolution->sendText(
+                $instance->instance_name,
+                $conversation->remote_jid,
+                $caption,
+            );
+            $mediaUrl = null;
+            $mimeType = null;
+            $fileName = null;
+        }
+
+        if (! $response->successful()) {
+            return response()->json(['error' => 'Erro ao enviar produto.'], 422);
+        }
+
+        $data = $response->json();
+        $messageId = $data['key']['id'] ?? Str::uuid()->toString();
+
+        $message = $conversation->messages()->create([
+            'message_id' => $messageId,
+            'from_me' => true,
+            'sender_jid' => null,
+            'body' => $caption,
+            'media_type' => $mediaUrl ? 'image' : null,
+            'media_url' => $mediaUrl,
+            'media_mimetype' => $mimeType,
+            'media_file_name' => $fileName,
+            'status' => 'sent',
+            'message_timestamp' => now(),
+        ]);
+
+        $conversation->update([
+            'last_message_body' => $caption,
+            'last_message_from_me' => true,
+            'last_message_at' => $message->message_timestamp,
+        ]);
+
+        return response()->json([
+            'message' => $this->messagePayload($message),
         ]);
     }
 
@@ -209,5 +325,66 @@ class WhatsappChatController extends Controller
             ]);
 
         return response()->json(['conversations' => $conversations]);
+    }
+
+    /**
+     * @param  array{include_photo: bool, include_price: bool, include_description: bool, include_sku: bool}  $options
+     */
+    private function buildProductCaption(Product $product, array $options): string
+    {
+        $lines = ["*{$product->name}*"];
+
+        if ($options['include_price'] && $product->price_cents !== null) {
+            $lines[] = 'Preço: '.$this->formatPrice($product->price_cents);
+        }
+
+        if ($options['include_description'] && filled($product->description)) {
+            $lines[] = (string) $product->description;
+        }
+
+        if ($options['include_sku'] && filled($product->sku)) {
+            $lines[] = 'SKU: '.$product->sku;
+        }
+
+        return implode("\n", $lines);
+    }
+
+    private function formatPrice(int $priceCents): string
+    {
+        return 'R$ '.number_format($priceCents / 100, 2, ',', '.');
+    }
+
+    private function primaryImage(Product $product): ?ProductMedia
+    {
+        return $product->media
+            ->first(fn (ProductMedia $media) => $media->type === ProductMediaType::Image);
+    }
+
+    private function mimeTypeForPath(string $path): string
+    {
+        return match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
+            'png' => 'image/png',
+            'webp' => 'image/webp',
+            default => 'image/jpeg',
+        };
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function messagePayload($message): array
+    {
+        return [
+            'id' => $message->id,
+            'message_id' => $message->message_id,
+            'from_me' => $message->from_me,
+            'body' => $message->body,
+            'media_type' => $message->media_type,
+            'media_url' => $message->media_url,
+            'media_mimetype' => $message->media_mimetype,
+            'media_file_name' => $message->media_file_name,
+            'status' => $message->status->value,
+            'message_timestamp' => $message->message_timestamp->toIso8601String(),
+        ];
     }
 }
