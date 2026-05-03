@@ -23,6 +23,7 @@ class OrderItem extends Model
         'quantity',
         'size',
         'color',
+        'combo_components',
     ];
 
     protected function casts(): array
@@ -30,6 +31,7 @@ class OrderItem extends Model
         return [
             'unit_price' => 'decimal:2',
             'quantity' => 'integer',
+            'combo_components' => 'array',
         ];
     }
 

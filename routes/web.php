@@ -9,8 +9,10 @@ use App\Http\Controllers\EvolutionWebhookController;
 use App\Http\Controllers\Manufacturer\BillingController;
 use App\Http\Controllers\Manufacturer\CustomerController as ManufacturerCustomerController;
 use App\Http\Controllers\Manufacturer\OrderController as ManufacturerOrderController;
+use App\Http\Controllers\Manufacturer\ProductComboController;
 use App\Http\Controllers\Manufacturer\UserController as ManufacturerUserController;
 use App\Http\Controllers\Manufacturer\WhatsappChatController;
+use App\Http\Controllers\Manufacturer\WhatsappFunnelController;
 use App\Http\Controllers\Manufacturer\WhatsappInstanceController;
 use App\Http\Controllers\PlanSelectionController;
 use App\Http\Controllers\ProductCategoryController;
@@ -110,6 +112,10 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
             Route::get('/', 'index')->name('index');
             Route::get('create', 'create')->name('create');
             Route::post('/', 'store')->name('store');
+            Route::get('combos/create', [ProductComboController::class, 'create'])->name('combos.create');
+            Route::post('combos', [ProductComboController::class, 'store'])->name('combos.store');
+            Route::get('{product}/combo/edit', [ProductComboController::class, 'edit'])->name('combos.edit');
+            Route::put('{product}/combo', [ProductComboController::class, 'update'])->name('combos.update');
             Route::get('{product}/edit', 'edit')->name('edit');
             Route::put('{product}', 'update')->name('update');
             Route::delete('{product}', 'destroy')->name('destroy');
@@ -150,7 +156,19 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
             Route::get('conversations/list', [WhatsappChatController::class, 'conversationsList'])->name('conversations.list');
             Route::get('conversations/{conversation}/messages', [WhatsappChatController::class, 'messages'])->name('conversations.messages');
             Route::post('conversations/{conversation}/messages', [WhatsappChatController::class, 'sendMessage'])->name('conversations.send');
+            Route::post('conversations/{conversation}/products/pdf', [WhatsappChatController::class, 'sendProductsPdf'])->name('conversations.products.pdf');
             Route::post('conversations/{conversation}/products/{product}', [WhatsappChatController::class, 'sendProduct'])->name('conversations.products.send');
+            Route::post('conversations/{conversation}/funnels/{funnel}/runs', [WhatsappFunnelController::class, 'startRun'])->name('conversations.funnels.runs.store');
+            Route::get('funnel-runs/{run}', [WhatsappFunnelController::class, 'showRun'])->name('funnel-runs.show');
+
+            Route::controller(WhatsappFunnelController::class)->prefix('funis')->name('funis.')->group(function () {
+                Route::get('/', 'index')->name('index');
+                Route::post('/', 'store')->name('store');
+                Route::put('order', 'order')->name('order');
+                Route::get('{funnel}/edit', 'edit')->name('edit');
+                Route::put('{funnel}', 'update')->name('update');
+                Route::post('{funnel}/toggle', 'toggle')->name('toggle');
+            });
         });
 
         Route::controller(BillingController::class)->prefix('billing')->name('billing.')->group(function () {

@@ -75,6 +75,7 @@ class OrderService
             $productIds = collect($data['items'])->pluck('product_id')->unique();
             $products = Product::whereIn('id', $productIds)
                 ->where('manufacturer_id', $data['manufacturer_id'])
+                ->with(['comboItems.componentProduct'])
                 ->get()
                 ->keyBy('id');
 
@@ -95,6 +96,9 @@ class OrderService
                     'quantity' => $item['quantity'],
                     'size' => $item['size'] ?? null,
                     'color' => $item['color'] ?? null,
+                    'combo_components' => $product->isCombo()
+                        ? $this->comboComponentsSnapshot($product)
+                        : null,
                 ]);
             }
 
@@ -107,6 +111,20 @@ class OrderService
 
             return $order->load('items');
         });
+    }
+
+    /**
+     * @return array<int, array{product_id: int, product_name: string|null, product_sku: string|null, variation_key: array<string, string>|null, quantity: int}>
+     */
+    private function comboComponentsSnapshot(Product $combo): array
+    {
+        return $combo->comboItems->map(fn ($item) => [
+            'product_id' => $item->component_product_id,
+            'product_name' => $item->componentProduct?->name,
+            'product_sku' => $item->componentProduct?->sku,
+            'variation_key' => $item->variation_key,
+            'quantity' => $item->quantity,
+        ])->values()->all();
     }
 
     public function updateStatus(Order $order, OrderStatus $newStatus, ?int $userId = null): Order

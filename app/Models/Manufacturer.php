@@ -120,6 +120,11 @@ class Manufacturer extends Model
         return $this->hasMany(WhatsappInstance::class);
     }
 
+    public function whatsappFunnels(): HasMany
+    {
+        return $this->hasMany(WhatsappFunnel::class);
+    }
+
     /**
      * Get the active owner of this manufacturer.
      */

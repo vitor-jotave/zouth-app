@@ -24,6 +24,13 @@ interface OrderItem {
     quantity: number;
     size: string | null;
     color: string | null;
+    combo_components: Array<{
+        product_id: number;
+        product_name: string | null;
+        product_sku: string | null;
+        variation_key: Record<string, string> | null;
+        quantity: number;
+    }> | null;
 }
 
 interface StatusHistory {
@@ -89,6 +96,16 @@ const transitionIcons: Record<string, typeof Check> = {
     delivered: Check,
     cancelled: XCircle,
 };
+
+function variationSummary(key: Record<string, string> | null): string | null {
+    if (!key) {
+        return null;
+    }
+
+    return Object.entries(key)
+        .map(([name, value]) => `${name}: ${value}`)
+        .join(' / ');
+}
 
 const transitionVariants: Record<
     string,
@@ -269,8 +286,51 @@ export default function OrderShow({ order }: Props) {
                                     {Array.isArray(order.items) &&
                                         order.items.map((item) => (
                                             <TableRow key={item.id}>
-                                                <TableCell className="font-medium">
-                                                    {item.product_name}
+                                                <TableCell>
+                                                    <div className="font-medium">
+                                                        {item.product_name}
+                                                    </div>
+                                                    {item.combo_components &&
+                                                        item.combo_components
+                                                            .length > 0 && (
+                                                            <div className="mt-2 rounded-md bg-muted p-2 text-xs text-muted-foreground">
+                                                                <p className="mb-1 font-medium text-foreground">
+                                                                    Itens do
+                                                                    combo
+                                                                </p>
+                                                                {item.combo_components.map(
+                                                                    (
+                                                                        component,
+                                                                        index,
+                                                                    ) => (
+                                                                        <p
+                                                                            key={`${component.product_id}-${index}`}
+                                                                        >
+                                                                            {
+                                                                                component.quantity
+                                                                            }
+                                                                            x{' '}
+                                                                            {
+                                                                                component.product_name
+                                                                            }
+                                                                            {variationSummary(
+                                                                                component.variation_key,
+                                                                            ) && (
+                                                                                <span>
+                                                                                    {' '}
+                                                                                    (
+                                                                                    {variationSummary(
+                                                                                        component.variation_key,
+                                                                                    )}
+
+                                                                                    )
+                                                                                </span>
+                                                                            )}
+                                                                        </p>
+                                                                    ),
+                                                                )}
+                                                            </div>
+                                                        )}
                                                 </TableCell>
                                                 <TableCell className="text-xs text-muted-foreground">
                                                     {item.product_sku ?? '-'}

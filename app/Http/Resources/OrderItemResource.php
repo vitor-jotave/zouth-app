@@ -21,6 +21,7 @@ class OrderItemResource extends JsonResource
             'quantity' => $this->quantity,
             'size' => $this->size,
             'color' => $this->color,
+            'combo_components' => $this->combo_components,
         ];
     }
 }

@@ -6,11 +6,14 @@ use App\Enums\ProductMediaType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SendWhatsappMessageRequest;
 use App\Http\Requests\SendWhatsappProductMessageRequest;
+use App\Http\Requests\SendWhatsappProductPdfRequest;
 use App\Http\Resources\WhatsappProductResource;
 use App\Models\Product;
 use App\Models\ProductMedia;
 use App\Models\WhatsappConversation;
+use App\Models\WhatsappFunnel;
 use App\Services\EvolutionApiService;
+use App\Services\ProductCatalogPdfService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,13 +21,15 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class WhatsappChatController extends Controller
 {
     use AuthorizesRequests;
 
     public function __construct(
-        protected EvolutionApiService $evolution
+        protected EvolutionApiService $evolution,
+        protected ProductCatalogPdfService $productCatalogPdf,
     ) {}
 
     /**
@@ -41,6 +46,7 @@ class WhatsappChatController extends Controller
                 'conversations' => [],
                 'active_conversation' => null,
                 'messages' => [],
+                'funnels' => [],
             ]);
         }
 
@@ -107,6 +113,25 @@ class WhatsappChatController extends Controller
                 'display_name' => $activeConversation->displayName(),
             ] : null,
             'messages' => $messages,
+            'funnels' => WhatsappFunnel::query()
+                ->where('manufacturer_id', $manufacturer->id)
+                ->where('is_active', true)
+                ->with('steps')
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get()
+                ->map(fn (WhatsappFunnel $funnel) => [
+                    'id' => $funnel->id,
+                    'name' => $funnel->name,
+                    'code' => $funnel->code,
+                    'steps' => $funnel->steps->map(fn ($step) => [
+                        'id' => $step->id,
+                        'type' => $step->type,
+                        'sort_order' => $step->sort_order,
+                        'payload' => $step->payload,
+                    ])->values()->all(),
+                ])
+                ->values(),
         ]);
     }
 
@@ -280,6 +305,89 @@ class WhatsappChatController extends Controller
             'media_url' => $mediaUrl,
             'media_mimetype' => $mimeType,
             'media_file_name' => $fileName,
+            'status' => 'sent',
+            'message_timestamp' => now(),
+        ]);
+
+        $conversation->update([
+            'last_message_body' => $caption,
+            'last_message_from_me' => true,
+            'last_message_at' => $message->message_timestamp,
+        ]);
+
+        return response()->json([
+            'message' => $this->messagePayload($message),
+        ]);
+    }
+
+    public function sendProductsPdf(
+        SendWhatsappProductPdfRequest $request,
+        WhatsappConversation $conversation
+    ): JsonResponse {
+        $this->authorize('sendMessage', $conversation);
+
+        $manufacturer = $request->user()->currentManufacturer;
+        $validated = $request->validated();
+        $products = Product::query()
+            ->where('manufacturer_id', $manufacturer->id)
+            ->whereIn('id', $validated['product_ids'])
+            ->with('media')
+            ->get()
+            ->sortBy(fn (Product $product) => array_flip($validated['product_ids'])[$product->id])
+            ->values();
+
+        if ($products->count() !== count($validated['product_ids'])) {
+            abort(404);
+        }
+
+        try {
+            $pdf = $this->productCatalogPdf->generate($manufacturer, $products, [
+                'include_photo' => (bool) $validated['include_photo'],
+                'include_price' => (bool) $validated['include_price'],
+                'include_description' => (bool) $validated['include_description'],
+                'include_sku' => (bool) $validated['include_sku'],
+            ]);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json(['error' => 'Não foi possível gerar o PDF dos produtos.'], 422);
+        }
+
+        $instance = $conversation->instance;
+        $caption = $products->count().' produtos selecionados em PDF.';
+
+        try {
+            $response = $this->evolution->sendMedia(
+                $instance->instance_name,
+                $conversation->remote_jid,
+                'document',
+                'application/pdf',
+                $pdf['url'],
+                $pdf['file_name'],
+                $caption,
+            );
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json(['error' => 'Erro ao enviar PDF de produtos.'], 422);
+        }
+
+        if (! $response->successful()) {
+            return response()->json(['error' => 'Erro ao enviar PDF de produtos.'], 422);
+        }
+
+        $data = $response->json();
+        $messageId = $data['key']['id'] ?? Str::uuid()->toString();
+
+        $message = $conversation->messages()->create([
+            'message_id' => $messageId,
+            'from_me' => true,
+            'sender_jid' => null,
+            'body' => $caption,
+            'media_type' => 'document',
+            'media_url' => $pdf['url'],
+            'media_mimetype' => 'application/pdf',
+            'media_file_name' => $pdf['file_name'],
             'status' => 'sent',
             'message_timestamp' => now(),
         ]);

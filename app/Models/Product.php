@@ -20,6 +20,7 @@ class Product extends Model
     protected $fillable = [
         'manufacturer_id',
         'product_category_id',
+        'product_type',
         'name',
         'sku',
         'description',
@@ -42,6 +43,11 @@ class Product extends Model
             'sort_order' => 'integer',
             'price_cents' => 'integer',
         ];
+    }
+
+    public function isCombo(): bool
+    {
+        return $this->product_type === 'combo';
     }
 
     public function manufacturer(): BelongsTo
@@ -69,6 +75,16 @@ class Product extends Model
         return $this->hasMany(ProductVariantStock::class);
     }
 
+    public function comboItems(): HasMany
+    {
+        return $this->hasMany(ProductComboItem::class, 'combo_product_id');
+    }
+
+    public function comboComponentItems(): HasMany
+    {
+        return $this->hasMany(ProductComboItem::class, 'component_product_id');
+    }
+
     public function hasVariations(): bool
     {
         return $this->productVariations()->exists();
@@ -76,6 +92,24 @@ class Product extends Model
 
     public function getTotalStock(): int
     {
+        if ($this->isCombo()) {
+            $this->loadMissing(['comboItems.componentProduct.variantStocks', 'comboItems.componentVariantStock']);
+
+            if ($this->comboItems->isEmpty()) {
+                return 0;
+            }
+
+            return (int) $this->comboItems
+                ->map(function (ProductComboItem $item) {
+                    $available = $item->componentVariantStock
+                        ? $item->componentVariantStock->quantity
+                        : $item->componentProduct->getTotalStock();
+
+                    return intdiv((int) $available, max(1, $item->quantity));
+                })
+                ->min();
+        }
+
         if ($this->hasVariations()) {
             return (int) $this->variantStocks()->sum('quantity');
         }

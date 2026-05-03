@@ -83,6 +83,7 @@ interface CatalogSettings {
 
 interface Product {
     id: number;
+    product_type: 'product' | 'combo';
     name: string;
     sku: string;
     category?: string | null;
@@ -97,6 +98,13 @@ interface Product {
         variation_key: Record<string, string>;
         quantity: number;
         price_cents?: number | null;
+    }>;
+    combo_items: Array<{
+        product_id: number;
+        product_name: string | null;
+        product_sku: string | null;
+        variation_key: Record<string, string> | null;
+        quantity: number;
     }>;
     total_stock: number;
     price_cents?: number | null;
@@ -175,6 +183,41 @@ function formatPrice(priceCents?: number | null): string {
         style: 'currency',
         currency: 'BRL',
     }).format(priceCents / 100);
+}
+
+function variationSummary(key: Record<string, string> | null): string | null {
+    if (!key) {
+        return null;
+    }
+
+    return Object.entries(key)
+        .map(([name, value]) => `${name}: ${value}`)
+        .join(' / ');
+}
+
+function ComboSummary({ product }: { product: Product }) {
+    if (product.product_type !== 'combo' || product.combo_items.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className="rounded-md bg-black/5 p-2 text-xs">
+            <div className="mb-1 font-semibold">Itens do combo</div>
+            <ul className="space-y-0.5">
+                {product.combo_items.map((item, index) => (
+                    <li key={`${item.product_id}-${index}`}>
+                        {item.quantity}x {item.product_name}
+                        {variationSummary(item.variation_key) && (
+                            <span className="opacity-70">
+                                {' '}
+                                ({variationSummary(item.variation_key)})
+                            </span>
+                        )}
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
 }
 
 function onlyDigits(value: string): string {
@@ -339,6 +382,10 @@ function MinimalLayout({
                                     >
                                         {formatPrice(product.price_cents)}
                                     </p>
+                                    {product.product_type === 'combo' && (
+                                        <Badge variant="outline">Combo</Badge>
+                                    )}
+                                    <ComboSummary product={product} />
                                     <div className="flex items-center justify-between">
                                         {product.category && (
                                             <Badge
@@ -570,6 +617,10 @@ function PlayfulLayout({
                                     >
                                         {formatPrice(product.price_cents)}
                                     </p>
+                                    {product.product_type === 'combo' && (
+                                        <Badge variant="outline">Combo</Badge>
+                                    )}
+                                    <ComboSummary product={product} />
                                     <div className="flex flex-wrap gap-2">
                                         {product.category && (
                                             <Badge
@@ -778,6 +829,10 @@ function BoutiqueLayout({
                                             {formatPrice(product.price_cents)}
                                         </p>
                                     </div>
+                                    {product.product_type === 'combo' && (
+                                        <Badge variant="outline">Combo</Badge>
+                                    )}
+                                    <ComboSummary product={product} />
                                     <div className="flex items-center gap-3">
                                         <span className="text-xs opacity-40">
                                             SKU {product.sku}
@@ -1165,6 +1220,9 @@ export default function PublicCatalog({
                                                     item.product.price_cents,
                                                 )}
                                             </p>
+                                            <ComboSummary
+                                                product={item.product}
+                                            />
                                         </div>
                                         <div className="flex items-center gap-1">
                                             <Button

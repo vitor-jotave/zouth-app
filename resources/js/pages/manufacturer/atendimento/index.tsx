@@ -1,15 +1,21 @@
 import { Head, router } from '@inertiajs/react';
 import {
+    AlertCircle,
+    Bot,
     Check,
     CheckCheck,
     Clock,
+    FileText,
     MessageSquare,
+    Mic,
+    Play,
     Search,
     Send,
     Settings,
     Shirt,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -74,6 +80,37 @@ interface ProductSendOptions {
     include_sku: boolean;
 }
 
+interface WhatsappFunnelStep {
+    id: number;
+    type: 'wait' | 'text' | 'audio' | 'product';
+    sort_order: number;
+    payload: Record<string, any>;
+}
+
+interface WhatsappFunnel {
+    id: number;
+    name: string;
+    code: string;
+    steps: WhatsappFunnelStep[];
+}
+
+interface WhatsappFunnelRunStep extends WhatsappFunnelStep {
+    status: 'pending' | 'waiting' | 'sending' | 'sent' | 'failed';
+    message_id: number | null;
+    error_message: string | null;
+}
+
+interface WhatsappFunnelRun {
+    id: number;
+    status: 'pending' | 'running' | 'completed' | 'failed';
+    funnel: {
+        id: number;
+        name: string;
+        code: string;
+    };
+    steps: WhatsappFunnelRunStep[];
+}
+
 interface ActiveConversation {
     id: number;
     remote_jid: string;
@@ -89,6 +126,7 @@ interface Props {
     conversations: Conversation[];
     active_conversation: ActiveConversation | null;
     messages: Message[];
+    funnels: WhatsappFunnel[];
 }
 
 function formatTime(dateStr: string | null): string {
@@ -180,11 +218,44 @@ function buildProductCaption(
     return lines.join('\n');
 }
 
+function funnelStepLabel(step: WhatsappFunnelStep): string {
+    switch (step.type) {
+        case 'wait':
+            return `Aguardar ${step.payload.seconds ?? 1}s`;
+        case 'text':
+            return step.payload.body ?? 'Mensagem de texto';
+        case 'audio':
+            return step.payload.file_name ?? 'Enviar áudio';
+        case 'product':
+            return 'Enviar produto';
+        default:
+            return 'Passo';
+    }
+}
+
+function funnelStepStatusLabel(
+    status: WhatsappFunnelRunStep['status'],
+): string {
+    switch (status) {
+        case 'waiting':
+            return 'Aguardando';
+        case 'sending':
+            return 'Enviando';
+        case 'sent':
+            return 'Enviado';
+        case 'failed':
+            return 'Erro';
+        default:
+            return 'Pendente';
+    }
+}
+
 export default function AtendimentoIndex({
     instance_connected,
     conversations: initialConversations,
     active_conversation,
     messages: initialMessages,
+    funnels,
 }: Props) {
     const [conversations, setConversations] = useState(initialConversations);
     const [messages, setMessages] = useState(initialMessages);
@@ -195,8 +266,12 @@ export default function AtendimentoIndex({
     const [productSearch, setProductSearch] = useState('');
     const [products, setProducts] = useState<WhatsappProduct[]>([]);
     const [productsLoading, setProductsLoading] = useState(false);
+    const [productError, setProductError] = useState<string | null>(null);
     const [selectedProduct, setSelectedProduct] =
         useState<WhatsappProduct | null>(null);
+    const [selectedProducts, setSelectedProducts] = useState<WhatsappProduct[]>(
+        [],
+    );
     const [productOptions, setProductOptions] = useState<ProductSendOptions>({
         include_photo: true,
         include_price: true,
@@ -204,8 +279,18 @@ export default function AtendimentoIndex({
         include_sku: false,
     });
     const [sendingProduct, setSendingProduct] = useState(false);
+    const [selectedFunnel, setSelectedFunnel] = useState<WhatsappFunnel | null>(
+        null,
+    );
+    const [funnelDialogOpen, setFunnelDialogOpen] = useState(false);
+    const [startingFunnel, setStartingFunnel] = useState(false);
+    const [activeRun, setActiveRun] = useState<WhatsappFunnelRun | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const funnelRunning =
+        activeRun?.status === 'pending' || activeRun?.status === 'running';
+    const selectedProductIds = selectedProducts.map((product) => product.id);
+    const sendingMultipleProducts = selectedProducts.length > 1;
 
     // Update state when props change (Inertia navigation)
     useEffect(() => {
@@ -269,6 +354,54 @@ export default function AtendimentoIndex({
         };
     }, [productDialogOpen, productSearch]);
 
+    useEffect(() => {
+        if (!activeRun || !funnelRunning) return;
+
+        const interval = window.setInterval(async () => {
+            try {
+                const res = await fetch(
+                    `/manufacturer/atendimento/funnel-runs/${activeRun.id}`,
+                    {
+                        headers: {
+                            Accept: 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                    },
+                );
+
+                if (res.ok) {
+                    const data = await res.json();
+                    setActiveRun(data.run);
+                }
+            } catch {
+                // Ignore
+            }
+
+            if (active_conversation) {
+                try {
+                    const res = await fetch(
+                        `/manufacturer/atendimento/conversations/${active_conversation.id}/messages`,
+                        {
+                            headers: {
+                                Accept: 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                        },
+                    );
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        setMessages(data.messages);
+                    }
+                } catch {
+                    // Ignore
+                }
+            }
+        }, 2000);
+
+        return () => window.clearInterval(interval);
+    }, [activeRun, funnelRunning, active_conversation]);
+
     // Poll for new messages every 5s
     useEffect(() => {
         if (!instance_connected) return;
@@ -325,7 +458,14 @@ export default function AtendimentoIndex({
     }, []);
 
     const sendMessage = useCallback(async () => {
-        if (!active_conversation || !messageInput.trim() || sending) return;
+        if (
+            !active_conversation ||
+            !messageInput.trim() ||
+            sending ||
+            funnelRunning
+        ) {
+            return;
+        }
         setSending(true);
 
         try {
@@ -354,52 +494,154 @@ export default function AtendimentoIndex({
         } finally {
             setSending(false);
         }
-    }, [active_conversation, messageInput, sending]);
+    }, [active_conversation, messageInput, sending, funnelRunning]);
 
-    const selectProduct = useCallback((product: WhatsappProduct) => {
-        setSelectedProduct(product);
-        setProductOptions({
-            include_photo: Boolean(product.primary_image_url),
-            include_price: product.price_cents !== null,
-            include_description: Boolean(product.description),
-            include_sku: false,
-        });
-    }, []);
+    const selectProduct = useCallback(
+        (product: WhatsappProduct) => {
+            setSelectedProduct(product);
+            setSelectedProducts((current) => {
+                const isSelected = current.some(
+                    (item) => item.id === product.id,
+                );
+
+                if (isSelected) {
+                    return current.filter((item) => item.id !== product.id);
+                }
+
+                return [...current, product];
+            });
+            setProductOptions((current) => ({
+                include_photo:
+                    selectedProducts.length > 0
+                        ? current.include_photo
+                        : Boolean(product.primary_image_url),
+                include_price:
+                    selectedProducts.length > 0
+                        ? current.include_price
+                        : product.price_cents !== null,
+                include_description:
+                    selectedProducts.length > 0
+                        ? current.include_description
+                        : Boolean(product.description),
+                include_sku: current.include_sku,
+            }));
+        },
+        [selectedProducts.length],
+    );
 
     const sendProduct = useCallback(async () => {
-        if (!active_conversation || !selectedProduct || sendingProduct) return;
+        if (
+            !active_conversation ||
+            selectedProducts.length === 0 ||
+            sendingProduct ||
+            funnelRunning
+        ) {
+            return;
+        }
 
         setSendingProduct(true);
+        setProductError(null);
+
+        try {
+            const endpoint =
+                selectedProducts.length > 1
+                    ? `/manufacturer/atendimento/conversations/${active_conversation.id}/products/pdf`
+                    : `/manufacturer/atendimento/conversations/${active_conversation.id}/products/${selectedProducts[0].id}`;
+            const payload =
+                selectedProducts.length > 1
+                    ? {
+                          product_ids: selectedProducts.map(
+                              (product) => product.id,
+                          ),
+                          ...productOptions,
+                      }
+                    : productOptions;
+
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-XSRF-TOKEN': xsrfToken(),
+                },
+                body: JSON.stringify(payload),
+            });
+
+            const data = await res.json().catch(() => null);
+
+            if (!res.ok) {
+                setProductError(
+                    data?.error ??
+                        'Não foi possível enviar os produtos. Tente novamente.',
+                );
+
+                return;
+            }
+
+            setMessages((prev) => [...prev, data.message]);
+            setProductDialogOpen(false);
+            setSelectedProduct(null);
+            setSelectedProducts([]);
+            setProductSearch('');
+            inputRef.current?.focus();
+        } catch {
+            setProductError(
+                'Não foi possível enviar os produtos. Tente novamente.',
+            );
+        } finally {
+            setSendingProduct(false);
+        }
+    }, [
+        active_conversation,
+        selectedProducts,
+        sendingProduct,
+        productOptions,
+        funnelRunning,
+    ]);
+
+    const openFunnelPreview = useCallback((funnel: WhatsappFunnel) => {
+        setSelectedFunnel(funnel);
+        setFunnelDialogOpen(true);
+    }, []);
+
+    const startFunnel = useCallback(async () => {
+        if (
+            !active_conversation ||
+            !selectedFunnel ||
+            startingFunnel ||
+            funnelRunning
+        ) {
+            return;
+        }
+
+        setStartingFunnel(true);
 
         try {
             const res = await fetch(
-                `/manufacturer/atendimento/conversations/${active_conversation.id}/products/${selectedProduct.id}`,
+                `/manufacturer/atendimento/conversations/${active_conversation.id}/funnels/${selectedFunnel.id}/runs`,
                 {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
                         Accept: 'application/json',
                         'X-Requested-With': 'XMLHttpRequest',
                         'X-XSRF-TOKEN': xsrfToken(),
                     },
-                    body: JSON.stringify(productOptions),
                 },
             );
 
             if (res.ok) {
                 const data = await res.json();
-                setMessages((prev) => [...prev, data.message]);
-                setProductDialogOpen(false);
-                setSelectedProduct(null);
-                setProductSearch('');
-                inputRef.current?.focus();
+                setActiveRun(data.run);
+                setFunnelDialogOpen(false);
+                setSelectedFunnel(null);
             }
         } catch {
             // Ignore
         } finally {
-            setSendingProduct(false);
+            setStartingFunnel(false);
         }
-    }, [active_conversation, selectedProduct, sendingProduct, productOptions]);
+    }, [active_conversation, selectedFunnel, startingFunnel, funnelRunning]);
 
     const handleKeyDown = useCallback(
         (e: React.KeyboardEvent) => {
@@ -420,8 +662,10 @@ export default function AtendimentoIndex({
                   c.contact_phone?.includes(searchQuery),
           )
         : conversations;
-    const productPreview = selectedProduct
-        ? buildProductCaption(selectedProduct, productOptions)
+    const previewProduct =
+        selectedProducts.length === 1 ? selectedProducts[0] : selectedProduct;
+    const productPreview = previewProduct
+        ? buildProductCaption(previewProduct, productOptions)
         : '';
 
     // Not connected — redirect to setup
@@ -590,16 +834,70 @@ export default function AtendimentoIndex({
                                                         : 'rounded-tl-none bg-white'
                                                 }`}
                                             >
-                                                {msg.media_url && (
-                                                    <img
-                                                        src={msg.media_url}
-                                                        alt={
-                                                            msg.media_file_name ??
-                                                            'Mídia enviada'
-                                                        }
-                                                        className="mb-2 max-h-64 w-full rounded-md object-cover"
-                                                    />
-                                                )}
+                                                {msg.media_url &&
+                                                    msg.media_type ===
+                                                        'audio' && (
+                                                        <div className="mb-2 flex min-w-64 items-center gap-3 rounded-md bg-white/70 p-2">
+                                                            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                                                                <Mic className="size-4" />
+                                                            </div>
+                                                            <div className="min-w-0 flex-1">
+                                                                <audio
+                                                                    controls
+                                                                    preload="metadata"
+                                                                    src={
+                                                                        msg.media_url
+                                                                    }
+                                                                    className="h-9 w-full"
+                                                                />
+                                                                {msg.media_file_name && (
+                                                                    <p className="mt-1 truncate text-[10px] text-gray-500">
+                                                                        {
+                                                                            msg.media_file_name
+                                                                        }
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                {msg.media_url &&
+                                                    msg.media_type ===
+                                                        'document' && (
+                                                        <a
+                                                            href={msg.media_url}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="mb-2 flex min-w-64 items-center gap-3 rounded-md bg-white/70 p-3 text-sm transition-colors hover:bg-white"
+                                                        >
+                                                            <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-red-100 text-red-700">
+                                                                <FileText className="size-5" />
+                                                            </div>
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="truncate font-medium">
+                                                                    {msg.media_file_name ??
+                                                                        'Catálogo em PDF'}
+                                                                </p>
+                                                                <p className="text-xs text-gray-500">
+                                                                    Documento
+                                                                    PDF
+                                                                </p>
+                                                            </div>
+                                                        </a>
+                                                    )}
+                                                {msg.media_url &&
+                                                    msg.media_type !==
+                                                        'audio' &&
+                                                    msg.media_type !==
+                                                        'document' && (
+                                                        <img
+                                                            src={msg.media_url}
+                                                            alt={
+                                                                msg.media_file_name ??
+                                                                'Mídia enviada'
+                                                            }
+                                                            className="mb-2 max-h-64 w-full rounded-md object-cover"
+                                                        />
+                                                    )}
                                                 {msg.body && (
                                                     <p className="text-sm whitespace-pre-wrap">
                                                         {msg.body}
@@ -626,14 +924,82 @@ export default function AtendimentoIndex({
 
                             {/* Message input */}
                             <div className="border-t bg-white px-4 py-3">
+                                <div className="mx-auto mb-3 max-w-3xl space-y-2">
+                                    {funnels.length > 0 && (
+                                        <div className="flex flex-wrap gap-2">
+                                            {funnels.map((funnel) => (
+                                                <Button
+                                                    key={funnel.id}
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        openFunnelPreview(
+                                                            funnel,
+                                                        )
+                                                    }
+                                                    disabled={funnelRunning}
+                                                >
+                                                    <Bot className="mr-2 size-4" />
+                                                    {funnel.name}
+                                                </Button>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {activeRun && (
+                                        <div className="rounded-lg border bg-muted/40 p-3">
+                                            <div className="mb-2 flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2 text-sm font-medium">
+                                                    <Bot className="size-4" />
+                                                    {activeRun.funnel.name}
+                                                </div>
+                                                <Badge variant="outline">
+                                                    {activeRun.status ===
+                                                    'completed'
+                                                        ? 'Concluído'
+                                                        : activeRun.status ===
+                                                            'failed'
+                                                          ? 'Erro'
+                                                          : 'Em andamento'}
+                                                </Badge>
+                                            </div>
+                                            <div className="grid gap-2 sm:grid-cols-2">
+                                                {activeRun.steps.map((step) => (
+                                                    <div
+                                                        key={step.id}
+                                                        className="flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-xs"
+                                                    >
+                                                        <span className="truncate">
+                                                            {step.sort_order}.{' '}
+                                                            {funnelStepLabel(
+                                                                step,
+                                                            )}
+                                                        </span>
+                                                        <span className="shrink-0 text-muted-foreground">
+                                                            {funnelStepStatusLabel(
+                                                                step.status,
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                                 <div className="mx-auto flex max-w-3xl items-center gap-2">
                                     <Button
                                         size="icon"
                                         variant="outline"
-                                        onClick={() =>
-                                            setProductDialogOpen(true)
+                                        onClick={() => {
+                                            setProductError(null);
+                                            setProductDialogOpen(true);
+                                        }}
+                                        disabled={
+                                            sending ||
+                                            sendingProduct ||
+                                            funnelRunning
                                         }
-                                        disabled={sending || sendingProduct}
                                         className="shrink-0"
                                         title="Enviar produto"
                                         aria-label="Enviar produto"
@@ -647,15 +1013,21 @@ export default function AtendimentoIndex({
                                             setMessageInput(e.target.value)
                                         }
                                         onKeyDown={handleKeyDown}
-                                        placeholder="Digite uma mensagem..."
+                                        placeholder={
+                                            funnelRunning
+                                                ? 'Funil em andamento...'
+                                                : 'Digite uma mensagem...'
+                                        }
                                         className="flex-1"
-                                        disabled={sending}
+                                        disabled={sending || funnelRunning}
                                     />
                                     <Button
                                         size="icon"
                                         onClick={sendMessage}
                                         disabled={
-                                            !messageInput.trim() || sending
+                                            !messageInput.trim() ||
+                                            sending ||
+                                            funnelRunning
                                         }
                                         className="shrink-0 bg-emerald-500 hover:bg-emerald-600"
                                     >
@@ -680,6 +1052,13 @@ export default function AtendimentoIndex({
                             a mensagem antes do envio.
                         </DialogDescription>
                     </DialogHeader>
+
+                    {productError && (
+                        <Alert variant="destructive">
+                            <AlertCircle className="size-4" />
+                            <AlertDescription>{productError}</AlertDescription>
+                        </Alert>
+                    )}
 
                     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
                         <div className="space-y-3">
@@ -706,59 +1085,91 @@ export default function AtendimentoIndex({
                                     </div>
                                 ) : (
                                     <div className="divide-y">
-                                        {products.map((product) => (
-                                            <button
-                                                key={product.id}
-                                                type="button"
-                                                onClick={() =>
-                                                    selectProduct(product)
-                                                }
-                                                className={`flex w-full gap-3 p-3 text-left transition-colors hover:bg-gray-50 ${
-                                                    selectedProduct?.id ===
-                                                    product.id
-                                                        ? 'bg-emerald-50'
-                                                        : ''
-                                                }`}
-                                            >
-                                                {product.primary_image_url ? (
-                                                    <img
-                                                        src={
-                                                            product.primary_image_url
-                                                        }
-                                                        alt={product.name}
-                                                        className="size-14 shrink-0 rounded-md object-cover"
-                                                    />
-                                                ) : (
-                                                    <div className="flex size-14 shrink-0 items-center justify-center rounded-md bg-gray-100">
-                                                        <Shirt className="size-5 text-gray-400" />
-                                                    </div>
-                                                )}
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="truncate text-sm font-medium">
-                                                        {product.name}
-                                                    </p>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        {formatPrice(
-                                                            product.price_cents,
-                                                        ) ??
-                                                            'Preço não informado'}
-                                                    </p>
-                                                    {product.sku && (
-                                                        <p className="truncate text-xs text-muted-foreground">
-                                                            SKU {product.sku}
-                                                        </p>
+                                        {products.map((product) => {
+                                            const isSelected =
+                                                selectedProductIds.includes(
+                                                    product.id,
+                                                );
+
+                                            return (
+                                                <button
+                                                    key={product.id}
+                                                    type="button"
+                                                    onClick={() =>
+                                                        selectProduct(product)
+                                                    }
+                                                    className={`flex w-full gap-3 p-3 text-left transition-colors hover:bg-gray-50 ${
+                                                        isSelected
+                                                            ? 'bg-emerald-50'
+                                                            : ''
+                                                    }`}
+                                                >
+                                                    <span
+                                                        className={`mt-4 flex size-5 shrink-0 items-center justify-center rounded border ${
+                                                            isSelected
+                                                                ? 'border-emerald-600 bg-emerald-600 text-white'
+                                                                : 'border-gray-300 bg-white'
+                                                        }`}
+                                                    >
+                                                        {isSelected && (
+                                                            <Check className="size-3" />
+                                                        )}
+                                                    </span>
+                                                    {product.primary_image_url ? (
+                                                        <img
+                                                            src={
+                                                                product.primary_image_url
+                                                            }
+                                                            alt={product.name}
+                                                            className="size-14 shrink-0 rounded-md object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="flex size-14 shrink-0 items-center justify-center rounded-md bg-gray-100">
+                                                            <Shirt className="size-5 text-gray-400" />
+                                                        </div>
                                                     )}
-                                                </div>
-                                            </button>
-                                        ))}
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="truncate text-sm font-medium">
+                                                            {product.name}
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {formatPrice(
+                                                                product.price_cents,
+                                                            ) ??
+                                                                'Preço não informado'}
+                                                        </p>
+                                                        {product.sku && (
+                                                            <p className="truncate text-xs text-muted-foreground">
+                                                                SKU{' '}
+                                                                {product.sku}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </ScrollArea>
                         </div>
 
                         <div className="space-y-4 rounded-lg border p-4">
-                            {selectedProduct ? (
+                            {selectedProducts.length > 0 ? (
                                 <>
+                                    <div className="rounded-md bg-muted p-3 text-sm">
+                                        <p className="font-medium">
+                                            {selectedProducts.length === 1
+                                                ? '1 produto selecionado'
+                                                : `${selectedProducts.length} produtos selecionados`}
+                                        </p>
+                                        {selectedProducts.length > 1 && (
+                                            <p className="mt-1 text-xs text-muted-foreground">
+                                                Vários produtos serão enviados
+                                                em um PDF formatado.
+                                            </p>
+                                        )}
+                                    </div>
+
                                     <div className="space-y-3">
                                         <div className="flex items-center gap-2">
                                             <Checkbox
@@ -767,7 +1178,10 @@ export default function AtendimentoIndex({
                                                     productOptions.include_photo
                                                 }
                                                 disabled={
-                                                    !selectedProduct.primary_image_url
+                                                    selectedProducts.length ===
+                                                        1 &&
+                                                    !selectedProducts[0]
+                                                        .primary_image_url
                                                 }
                                                 onCheckedChange={(checked) =>
                                                     setProductOptions(
@@ -794,8 +1208,10 @@ export default function AtendimentoIndex({
                                                     productOptions.include_price
                                                 }
                                                 disabled={
-                                                    selectedProduct.price_cents ===
-                                                    null
+                                                    selectedProducts.length ===
+                                                        1 &&
+                                                    selectedProducts[0]
+                                                        .price_cents === null
                                                 }
                                                 onCheckedChange={(checked) =>
                                                     setProductOptions(
@@ -822,7 +1238,10 @@ export default function AtendimentoIndex({
                                                     productOptions.include_description
                                                 }
                                                 disabled={
-                                                    !selectedProduct.description
+                                                    selectedProducts.length ===
+                                                        1 &&
+                                                    !selectedProducts[0]
+                                                        .description
                                                 }
                                                 onCheckedChange={(checked) =>
                                                     setProductOptions(
@@ -848,7 +1267,11 @@ export default function AtendimentoIndex({
                                                 checked={
                                                     productOptions.include_sku
                                                 }
-                                                disabled={!selectedProduct.sku}
+                                                disabled={
+                                                    selectedProducts.length ===
+                                                        1 &&
+                                                    !selectedProducts[0].sku
+                                                }
                                                 onCheckedChange={(checked) =>
                                                     setProductOptions(
                                                         (prev) => ({
@@ -874,21 +1297,49 @@ export default function AtendimentoIndex({
                                             Prévia
                                         </p>
                                         <div className="rounded-lg bg-[#d9fdd3] p-3 text-sm">
-                                            {productOptions.include_photo &&
-                                                selectedProduct.primary_image_url && (
-                                                    <img
-                                                        src={
-                                                            selectedProduct.primary_image_url
-                                                        }
-                                                        alt={
-                                                            selectedProduct.name
-                                                        }
-                                                        className="mb-2 max-h-48 w-full rounded-md object-cover"
-                                                    />
-                                                )}
-                                            <p className="whitespace-pre-wrap">
-                                                {productPreview}
-                                            </p>
+                                            {sendingMultipleProducts ? (
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center gap-2 font-medium">
+                                                        <FileText className="size-4" />
+                                                        PDF com produtos
+                                                        selecionados
+                                                    </div>
+                                                    <ul className="space-y-1 text-xs text-gray-700">
+                                                        {selectedProducts.map(
+                                                            (product) => (
+                                                                <li
+                                                                    key={
+                                                                        product.id
+                                                                    }
+                                                                    className="truncate"
+                                                                >
+                                                                    {
+                                                                        product.name
+                                                                    }
+                                                                </li>
+                                                            ),
+                                                        )}
+                                                    </ul>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    {productOptions.include_photo &&
+                                                        previewProduct?.primary_image_url && (
+                                                            <img
+                                                                src={
+                                                                    previewProduct.primary_image_url
+                                                                }
+                                                                alt={
+                                                                    previewProduct.name
+                                                                }
+                                                                className="mb-2 max-h-48 w-full rounded-md object-cover"
+                                                            />
+                                                        )}
+                                                    <p className="whitespace-pre-wrap">
+                                                        {productPreview}
+                                                    </p>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
                                 </>
@@ -913,9 +1364,89 @@ export default function AtendimentoIndex({
                         <Button
                             type="button"
                             onClick={sendProduct}
-                            disabled={!selectedProduct || sendingProduct}
+                            disabled={
+                                selectedProducts.length === 0 || sendingProduct
+                            }
                         >
-                            {sendingProduct ? 'Enviando...' : 'Enviar produto'}
+                            {sendingProduct
+                                ? 'Enviando...'
+                                : sendingMultipleProducts
+                                  ? 'Enviar PDF'
+                                  : 'Enviar produto'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={funnelDialogOpen} onOpenChange={setFunnelDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Disparar funil</DialogTitle>
+                        <DialogDescription>
+                            Revise a sequência antes de enviar para a conversa.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {selectedFunnel && (
+                        <div className="space-y-3">
+                            <div className="rounded-lg border p-3">
+                                <div className="flex items-center gap-2 font-medium">
+                                    <Bot className="size-4" />
+                                    {selectedFunnel.name}
+                                </div>
+                                <p className="mt-1 font-mono text-xs text-muted-foreground">
+                                    {selectedFunnel.code}
+                                </p>
+                            </div>
+
+                            <div className="space-y-2">
+                                {selectedFunnel.steps.map((step) => (
+                                    <div
+                                        key={step.id}
+                                        className="flex items-start gap-3 rounded-lg border p-3 text-sm"
+                                    >
+                                        <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-medium">
+                                            {step.sort_order}
+                                        </div>
+                                        <div>
+                                            <p className="font-medium">
+                                                {funnelStepLabel(step)}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {step.type === 'product'
+                                                    ? 'Produto com as informações configuradas no funil'
+                                                    : step.type === 'audio'
+                                                      ? 'Áudio enviado como mídia'
+                                                      : step.type === 'wait'
+                                                        ? 'Pausa antes do próximo passo'
+                                                        : 'Mensagem de texto'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setFunnelDialogOpen(false)}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            type="button"
+                            onClick={startFunnel}
+                            disabled={
+                                !selectedFunnel ||
+                                startingFunnel ||
+                                funnelRunning
+                            }
+                        >
+                            <Play className="mr-2 size-4" />
+                            {startingFunnel ? 'Iniciando...' : 'Disparar'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

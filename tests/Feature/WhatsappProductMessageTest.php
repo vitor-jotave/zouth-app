@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\ProductMediaType;
+use App\Models\CatalogSetting;
 use App\Models\Manufacturer;
 use App\Models\Product;
 use App\Models\ProductMedia;
@@ -9,6 +10,8 @@ use App\Models\WhatsappConversation;
 use App\Models\WhatsappInstance;
 use App\Models\WhatsappMessage;
 use App\Services\EvolutionApiService;
+use App\Services\ProductCatalogPdfService;
+use Illuminate\Support\Facades\Storage;
 
 function createWhatsappProductTestContext(): array
 {
@@ -165,6 +168,111 @@ it('falls back to a text message when photo is not selected or unavailable', fun
         ->assertJsonPath('message.media_type', null);
 
     expect(WhatsappMessage::first()->body)->not->toContain('Preço', 'Descrição', 'JEANS-01');
+});
+
+it('sends multiple selected products as a formatted pdf document', function () {
+    Storage::fake('public');
+    Storage::fake('s3');
+    [$user, $manufacturer, $instance, $conversation] = createWhatsappProductTestContext();
+    CatalogSetting::factory()->forManufacturer($manufacturer)->create([
+        'brand_name' => 'Zouth Kids',
+        'logo_path' => null,
+    ]);
+
+    $firstProduct = Product::factory()->forManufacturer($manufacturer)->create([
+        'name' => 'Vestido Floral',
+        'sku' => 'VEST-FLORAL',
+        'description' => 'Vestido leve com estampa floral.',
+        'price_cents' => 15990,
+    ]);
+    $secondProduct = Product::factory()->forManufacturer($manufacturer)->create([
+        'name' => 'Camisa Azul',
+        'sku' => 'CAM-AZUL',
+        'description' => 'Camisa em algodão.',
+        'price_cents' => 8990,
+    ]);
+    ProductMedia::factory()->create([
+        'product_id' => $firstProduct->id,
+        'type' => ProductMediaType::Image->value,
+        'path' => 'products/vestido-floral.jpg',
+    ]);
+    ProductMedia::factory()->create([
+        'product_id' => $secondProduct->id,
+        'type' => ProductMediaType::Image->value,
+        'path' => 'products/camisa-azul.jpg',
+    ]);
+
+    $mock = $this->mock(EvolutionApiService::class);
+    $mock->shouldReceive('sendMedia')
+        ->once()
+        ->withArgs(function (
+            string $instanceName,
+            string $remoteJid,
+            string $mediaType,
+            string $mimeType,
+            string $media,
+            string $fileName,
+            string $caption
+        ) use ($instance, $conversation) {
+            return $instanceName === $instance->instance_name
+                && $remoteJid === $conversation->remote_jid
+                && $mediaType === 'document'
+                && $mimeType === 'application/pdf'
+                && str_contains($media, 'whatsapp-product-catalogs')
+                && str_ends_with($fileName, '.pdf')
+                && str_contains($caption, '2 produtos selecionados');
+        })
+        ->andReturn(new \Illuminate\Http\Client\Response(
+            new \GuzzleHttp\Psr7\Response(201, [], json_encode([
+                'key' => ['id' => 'catalog-pdf-123'],
+            ]))
+        ));
+
+    $this->actingAs($user)
+        ->postJson("/manufacturer/atendimento/conversations/{$conversation->id}/products/pdf", [
+            'product_ids' => [$firstProduct->id, $secondProduct->id],
+            'include_photo' => true,
+            'include_price' => true,
+            'include_description' => true,
+            'include_sku' => true,
+        ])
+        ->assertOk()
+        ->assertJsonPath('message.message_id', 'catalog-pdf-123')
+        ->assertJsonPath('message.media_type', 'document')
+        ->assertJsonPath('message.media_mimetype', 'application/pdf');
+
+    $message = WhatsappMessage::firstWhere('message_id', 'catalog-pdf-123');
+
+    expect($message->body)->toContain('2 produtos selecionados');
+    expect($message->media_file_name)->toEndWith('.pdf');
+    expect(Storage::disk('public')->exists('whatsapp-product-catalogs/'.$message->media_file_name))->toBeTrue();
+});
+
+it('returns a controlled error when the product pdf cannot be generated', function () {
+    [$user, $manufacturer, , $conversation] = createWhatsappProductTestContext();
+
+    $firstProduct = Product::factory()->forManufacturer($manufacturer)->create();
+    $secondProduct = Product::factory()->forManufacturer($manufacturer)->create();
+
+    $this->mock(ProductCatalogPdfService::class)
+        ->shouldReceive('generate')
+        ->once()
+        ->andThrow(new \RuntimeException('Storage unavailable'));
+
+    $this->mock(EvolutionApiService::class)
+        ->shouldReceive('sendMedia')
+        ->never();
+
+    $this->actingAs($user)
+        ->postJson("/manufacturer/atendimento/conversations/{$conversation->id}/products/pdf", [
+            'product_ids' => [$firstProduct->id, $secondProduct->id],
+            'include_photo' => true,
+            'include_price' => true,
+            'include_description' => true,
+            'include_sku' => false,
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('error', 'Não foi possível gerar o PDF dos produtos.');
 });
 
 it('forbids sending a product from another manufacturer or to another manufacturer conversation', function () {

@@ -44,6 +44,11 @@ class WhatsappConversation extends Model
         return $this->hasMany(WhatsappMessage::class);
     }
 
+    public function funnelRuns(): HasMany
+    {
+        return $this->hasMany(WhatsappFunnelRun::class);
+    }
+
     /**
      * Get a display name for this conversation.
      */

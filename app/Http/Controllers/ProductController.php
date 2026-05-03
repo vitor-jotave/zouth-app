@@ -39,7 +39,7 @@ class ProductController extends Controller
         }
 
         $products = Product::where('manufacturer_id', $manufacturer->id)
-            ->with(['category', 'media'])
+            ->with(['category', 'media', 'comboItems.componentProduct', 'comboItems.componentVariantStock'])
             ->when($request->search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('name', 'like', '%'.$search.'%')
@@ -140,8 +140,12 @@ class ProductController extends Controller
             ->with('success', 'Produto criado com sucesso.');
     }
 
-    public function edit(Product $product): Response
+    public function edit(Product $product): Response|RedirectResponse
     {
+        if ($product->isCombo()) {
+            return redirect()->route('manufacturer.products.combos.edit', $product);
+        }
+
         $manufacturer = $this->tenantManager->get();
 
         if (! $manufacturer) {

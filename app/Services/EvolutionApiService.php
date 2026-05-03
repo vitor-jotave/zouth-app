@@ -118,6 +118,35 @@ class EvolutionApiService
         ]);
     }
 
+    public function sendWhatsAppAudio(string $instanceName, string $remoteJid, string $audio): Response
+    {
+        return $this->client()->post("/message/sendWhatsAppAudio/{$instanceName}", [
+            'number' => $remoteJid,
+            'audio' => $audio,
+        ]);
+    }
+
+    public function sendPresence(string $instanceName, string $remoteJid, string $presence, int $delayMs): Response
+    {
+        $number = $this->recipientNumber($remoteJid);
+
+        return $this->client()->post("/chat/sendPresence/{$instanceName}", [
+            'number' => $number,
+            'options' => [
+                'delay' => $delayMs,
+                'presence' => $presence,
+                'number' => $number,
+            ],
+        ]);
+    }
+
+    private function recipientNumber(string $remoteJid): string
+    {
+        $number = explode('@', $remoteJid, 2)[0];
+
+        return preg_replace('/\D+/', '', $number) ?? $number;
+    }
+
     /**
      * Fetch chats (conversations) from an instance.
      */

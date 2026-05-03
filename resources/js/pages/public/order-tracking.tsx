@@ -1,5 +1,12 @@
 import { Head } from '@inertiajs/react';
-import { Check, ClipboardCopy, Clock, Package, Truck, XCircle } from 'lucide-react';
+import {
+    Check,
+    ClipboardCopy,
+    Clock,
+    Package,
+    Truck,
+    XCircle,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,6 +19,13 @@ interface OrderItem {
     quantity: number;
     size: string | null;
     color: string | null;
+    combo_components: Array<{
+        product_id: number;
+        product_name: string | null;
+        product_sku: string | null;
+        variation_key: Record<string, string> | null;
+        quantity: number;
+    }> | null;
 }
 
 interface StatusHistory {
@@ -42,14 +56,51 @@ interface Props {
     };
 }
 
-const statusConfig: Record<string, { color: string; icon: typeof Check; bgColor: string }> = {
-    new: { color: 'text-blue-700', icon: Clock, bgColor: 'bg-blue-50 border-blue-200' },
-    confirmed: { color: 'text-indigo-700', icon: Check, bgColor: 'bg-indigo-50 border-indigo-200' },
-    preparing: { color: 'text-amber-700', icon: Package, bgColor: 'bg-amber-50 border-amber-200' },
-    shipped: { color: 'text-purple-700', icon: Truck, bgColor: 'bg-purple-50 border-purple-200' },
-    delivered: { color: 'text-green-700', icon: Check, bgColor: 'bg-green-50 border-green-200' },
-    cancelled: { color: 'text-red-700', icon: XCircle, bgColor: 'bg-red-50 border-red-200' },
+const statusConfig: Record<
+    string,
+    { color: string; icon: typeof Check; bgColor: string }
+> = {
+    new: {
+        color: 'text-blue-700',
+        icon: Clock,
+        bgColor: 'bg-blue-50 border-blue-200',
+    },
+    confirmed: {
+        color: 'text-indigo-700',
+        icon: Check,
+        bgColor: 'bg-indigo-50 border-indigo-200',
+    },
+    preparing: {
+        color: 'text-amber-700',
+        icon: Package,
+        bgColor: 'bg-amber-50 border-amber-200',
+    },
+    shipped: {
+        color: 'text-purple-700',
+        icon: Truck,
+        bgColor: 'bg-purple-50 border-purple-200',
+    },
+    delivered: {
+        color: 'text-green-700',
+        icon: Check,
+        bgColor: 'bg-green-50 border-green-200',
+    },
+    cancelled: {
+        color: 'text-red-700',
+        icon: XCircle,
+        bgColor: 'bg-red-50 border-red-200',
+    },
 };
+
+function variationSummary(key: Record<string, string> | null): string | null {
+    if (!key) {
+        return null;
+    }
+
+    return Object.entries(key)
+        .map(([name, value]) => `${name}: ${value}`)
+        .join(' / ');
+}
 
 const statusOrder = ['new', 'confirmed', 'preparing', 'shipped', 'delivered'];
 
@@ -62,15 +113,18 @@ export default function OrderTracking({ order, manufacturer }: Props) {
 
     const copyLink = () => {
         const url = window.location.href;
-        
+
         if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(url).then(() => {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-            }).catch(() => {
-                // Fallback se clipboard falhar
-                fallbackCopy(url);
-            });
+            navigator.clipboard
+                .writeText(url)
+                .then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                })
+                .catch(() => {
+                    // Fallback se clipboard falhar
+                    fallbackCopy(url);
+                });
         } else {
             // Fallback para navegadores sem clipboard API
             fallbackCopy(url);
@@ -96,28 +150,37 @@ export default function OrderTracking({ order, manufacturer }: Props) {
 
     return (
         <div className="min-h-screen bg-gray-50">
-            <Head title={`Pedido #${order.public_token.slice(0, 8).toUpperCase()}`} />
+            <Head
+                title={`Pedido #${order.public_token.slice(0, 8).toUpperCase()}`}
+            />
 
             <div className="mx-auto max-w-2xl px-4 py-12">
                 {/* Header */}
                 <div className="mb-8 text-center">
-                    <p className="text-sm text-muted-foreground">{manufacturer.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                        {manufacturer.name}
+                    </p>
                     <h1 className="mt-2 text-2xl font-bold">
                         Pedido #{order.public_token.slice(0, 8).toUpperCase()}
                     </h1>
                     <p className="mt-1 text-sm text-muted-foreground">
-                        {new Date(order.created_at).toLocaleDateString('pt-BR', {
-                            day: '2-digit',
-                            month: 'long',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                        })}
+                        {new Date(order.created_at).toLocaleDateString(
+                            'pt-BR',
+                            {
+                                day: '2-digit',
+                                month: 'long',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                            },
+                        )}
                     </p>
                 </div>
 
                 {/* Status badge */}
-                <div className={`mb-8 flex items-center justify-center gap-3 rounded-lg border p-4 ${config.bgColor}`}>
+                <div
+                    className={`mb-8 flex items-center justify-center gap-3 rounded-lg border p-4 ${config.bgColor}`}
+                >
                     <StatusIcon className={`h-6 w-6 ${config.color}`} />
                     <span className={`text-lg font-semibold ${config.color}`}>
                         {order.status_label}
@@ -132,9 +195,18 @@ export default function OrderTracking({ order, manufacturer }: Props) {
                                 const stepConfig = statusConfig[step];
                                 const StepIcon = stepConfig.icon;
                                 const isActive = index <= currentIndex;
-                                const label = { new: 'Novo', confirmed: 'Confirmado', preparing: 'Preparando', shipped: 'Enviado', delivered: 'Entregue' }[step];
+                                const label = {
+                                    new: 'Novo',
+                                    confirmed: 'Confirmado',
+                                    preparing: 'Preparando',
+                                    shipped: 'Enviado',
+                                    delivered: 'Entregue',
+                                }[step];
                                 return (
-                                    <div key={step} className="flex flex-1 flex-col items-center gap-1">
+                                    <div
+                                        key={step}
+                                        className="flex flex-1 flex-col items-center gap-1"
+                                    >
                                         <div
                                             className={`flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors ${
                                                 isActive
@@ -144,7 +216,9 @@ export default function OrderTracking({ order, manufacturer }: Props) {
                                         >
                                             <StepIcon className="h-4 w-4" />
                                         </div>
-                                        <span className={`text-xs ${isActive ? 'font-medium text-gray-900' : 'text-gray-400'}`}>
+                                        <span
+                                            className={`text-xs ${isActive ? 'font-medium text-gray-900' : 'text-gray-400'}`}
+                                        >
                                             {label}
                                         </span>
                                     </div>
@@ -156,7 +230,9 @@ export default function OrderTracking({ order, manufacturer }: Props) {
                                 <div
                                     key={index}
                                     className={`h-1 flex-1 rounded-full ${
-                                        index < currentIndex ? 'bg-green-500' : 'bg-gray-200'
+                                        index < currentIndex
+                                            ? 'bg-green-500'
+                                            : 'bg-gray-200'
                                     }`}
                                 />
                             ))}
@@ -170,22 +246,71 @@ export default function OrderTracking({ order, manufacturer }: Props) {
                         <h2 className="font-semibold">Itens do pedido</h2>
                     </div>
                     <div className="divide-y">
-                        {order.items.map(item => (
-                            <div key={item.id} className="flex items-center justify-between p-4">
+                        {order.items.map((item) => (
+                            <div
+                                key={item.id}
+                                className="flex items-center justify-between p-4"
+                            >
                                 <div>
-                                    <p className="font-medium">{item.product_name}</p>
+                                    <p className="font-medium">
+                                        {item.product_name}
+                                    </p>
                                     <div className="flex gap-2 text-xs text-muted-foreground">
-                                        {item.product_sku && <span>SKU {item.product_sku}</span>}
-                                        {item.size && <span>Tam: {item.size}</span>}
-                                        {item.color && <span>Cor: {item.color}</span>}
+                                        {item.product_sku && (
+                                            <span>SKU {item.product_sku}</span>
+                                        )}
+                                        {item.size && (
+                                            <span>Tam: {item.size}</span>
+                                        )}
+                                        {item.color && (
+                                            <span>Cor: {item.color}</span>
+                                        )}
                                     </div>
                                     {item.unit_price != null && (
                                         <p className="mt-1 text-xs font-medium">
-                                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(item.unit_price))}
+                                            {new Intl.NumberFormat('pt-BR', {
+                                                style: 'currency',
+                                                currency: 'BRL',
+                                            }).format(Number(item.unit_price))}
                                         </p>
                                     )}
+                                    {item.combo_components &&
+                                        item.combo_components.length > 0 && (
+                                            <div className="mt-2 rounded-md bg-gray-50 p-2 text-xs text-muted-foreground">
+                                                <p className="mb-1 font-medium text-foreground">
+                                                    Itens do combo
+                                                </p>
+                                                {item.combo_components.map(
+                                                    (component, index) => (
+                                                        <p
+                                                            key={`${component.product_id}-${index}`}
+                                                        >
+                                                            {component.quantity}
+                                                            x{' '}
+                                                            {
+                                                                component.product_name
+                                                            }
+                                                            {variationSummary(
+                                                                component.variation_key,
+                                                            ) && (
+                                                                <span>
+                                                                    {' '}
+                                                                    (
+                                                                    {variationSummary(
+                                                                        component.variation_key,
+                                                                    )}
+                                                                    )
+                                                                </span>
+                                                            )}
+                                                        </p>
+                                                    ),
+                                                )}
+                                            </div>
+                                        )}
                                 </div>
-                                <Badge variant="outline">Qtd: {item.quantity}</Badge>
+                                <Badge variant="outline">
+                                    Qtd: {item.quantity}
+                                </Badge>
                             </div>
                         ))}
                     </div>
@@ -203,10 +328,15 @@ export default function OrderTracking({ order, manufacturer }: Props) {
                             <h2 className="font-semibold">Historico</h2>
                         </div>
                         <div className="divide-y">
-                            {order.status_history.map(entry => (
-                                <div key={entry.id} className="flex items-center justify-between p-4">
+                            {order.status_history.map((entry) => (
+                                <div
+                                    key={entry.id}
+                                    className="flex items-center justify-between p-4"
+                                >
                                     <div>
-                                        <p className="text-sm font-medium">{entry.to_label}</p>
+                                        <p className="text-sm font-medium">
+                                            {entry.to_label}
+                                        </p>
                                         {entry.changed_by && (
                                             <p className="text-xs text-muted-foreground">
                                                 por {entry.changed_by}
@@ -214,7 +344,9 @@ export default function OrderTracking({ order, manufacturer }: Props) {
                                         )}
                                     </div>
                                     <span className="text-xs text-muted-foreground">
-                                        {new Date(entry.created_at).toLocaleDateString('pt-BR', {
+                                        {new Date(
+                                            entry.created_at,
+                                        ).toLocaleDateString('pt-BR', {
                                             day: '2-digit',
                                             month: 'short',
                                             hour: '2-digit',
@@ -229,9 +361,19 @@ export default function OrderTracking({ order, manufacturer }: Props) {
 
                 {/* Copy link */}
                 <div className="text-center">
-                    <Button variant="outline" onClick={copyLink} className="gap-2">
-                        {copied ? <Check className="h-4 w-4" /> : <ClipboardCopy className="h-4 w-4" />}
-                        {copied ? 'Link copiado!' : 'Copiar link de acompanhamento'}
+                    <Button
+                        variant="outline"
+                        onClick={copyLink}
+                        className="gap-2"
+                    >
+                        {copied ? (
+                            <Check className="h-4 w-4" />
+                        ) : (
+                            <ClipboardCopy className="h-4 w-4" />
+                        )}
+                        {copied
+                            ? 'Link copiado!'
+                            : 'Copiar link de acompanhamento'}
                     </Button>
                 </div>
             </div>

@@ -9,6 +9,7 @@ import {
     LayoutGrid,
     Layers,
     MessageSquare,
+    Route,
     Package,
     Palette,
     ShoppingCart,
@@ -140,6 +141,11 @@ function useNavItems() {
                     title: 'Atendimento',
                     href: '/manufacturer/atendimento',
                     icon: MessageSquare,
+                },
+                {
+                    title: 'Funis',
+                    href: '/manufacturer/atendimento/funis',
+                    icon: Route,
                 },
             ] as NavItem[],
         };

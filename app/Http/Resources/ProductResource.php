@@ -18,6 +18,7 @@ class ProductResource extends JsonResource
             'id' => $this->id,
             'manufacturer_id' => $this->manufacturer_id,
             'product_category_id' => $this->product_category_id,
+            'product_type' => $this->product_type,
             'name' => $this->name,
             'sku' => $this->sku,
             'description' => $this->description,
@@ -51,6 +52,15 @@ class ProductResource extends JsonResource
                 'price_cents' => $stock->price_cents,
                 'sku_variant' => $stock->sku_variant,
             ])),
+            'combo_items' => $this->whenLoaded('comboItems', fn () => $this->comboItems->map(fn ($item) => [
+                'id' => $item->id,
+                'component_product_id' => $item->component_product_id,
+                'component_variant_stock_id' => $item->component_variant_stock_id,
+                'product_name' => $item->componentProduct?->name,
+                'product_sku' => $item->componentProduct?->sku,
+                'variation_key' => $item->variation_key,
+                'quantity' => $item->quantity,
+            ])->values()),
         ];
     }
 }

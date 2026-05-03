@@ -34,6 +34,7 @@ class ProductCatalogResource extends JsonResource
 
         return [
             'id' => $this->id,
+            'product_type' => $this->product_type,
             'name' => $this->name,
             'sku' => $this->sku,
             'category' => $this->category?->name,
@@ -45,6 +46,13 @@ class ProductCatalogResource extends JsonResource
                 'quantity' => $stock->quantity,
                 'price_cents' => $stock->price_cents,
             ]) ?? [],
+            'combo_items' => $this->comboItems?->map(fn ($item) => [
+                'product_id' => $item->component_product_id,
+                'product_name' => $item->componentProduct?->name,
+                'product_sku' => $item->componentProduct?->sku,
+                'variation_key' => $item->variation_key,
+                'quantity' => $item->quantity,
+            ])->values() ?? [],
             'total_stock' => $this->getTotalStock(),
             'price_cents' => $this->price_cents,
         ];
