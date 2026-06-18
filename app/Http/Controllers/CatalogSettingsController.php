@@ -39,7 +39,7 @@ class CatalogSettingsController extends Controller
                 'name' => $product->name,
                 'sku' => $product->sku,
                 'category' => $product->category?->name,
-                'primary_image' => ($primaryImage = $product->media->where('type', 'image')->sortBy('sort_order')->first()) ? Storage::url($primaryImage->path) : null,
+                'primary_image' => ($primaryImage = $product->media->where('type', 'image')->sortBy('sort_order')->first()) ? Storage::disk('s3')->url($primaryImage->path) : null,
                 'total_stock' => $product->variantStocks->sum('quantity'),
             ]);
 

@@ -38,8 +38,8 @@ class ProductCatalogResource extends JsonResource
             'name' => $this->name,
             'sku' => $this->sku,
             'category' => $this->category?->name,
-            'primary_image' => $primaryImage ? Storage::url($primaryImage->path) : null,
-            'images' => $images->map(fn ($item) => Storage::url($item->path))->values(),
+            'primary_image' => $primaryImage ? Storage::disk('s3')->url($primaryImage->path) : null,
+            'images' => $images->map(fn ($item) => Storage::disk('s3')->url($item->path))->values(),
             'variations' => $variations,
             'variant_stocks' => $this->variantStocks?->map(fn ($stock) => [
                 'variation_key' => $stock->variation_key,
