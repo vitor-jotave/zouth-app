@@ -15,6 +15,7 @@ class VariationValue extends Model
         'variation_type_id',
         'value',
         'hex',
+        'image_path',
         'display_order',
     ];
 

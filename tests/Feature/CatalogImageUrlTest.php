@@ -34,9 +34,10 @@ it('serializes public catalog product images from the s3 disk', function () {
         ->and($payload['images']->all())->toBe(['https://cdn.zouth.app/products/10/photo.jpg']);
 });
 
-it('serializes catalog logo and background images from the public disk', function () {
+it('serializes catalog logo and background images from the catalog media disk', function () {
     config([
         'filesystems.default' => 's3',
+        'filesystems.catalog_media_disk' => 's3',
         'filesystems.disks.s3.url' => 'https://cdn.zouth.app',
         'filesystems.disks.public.url' => 'https://zouth.app/storage',
     ]);
@@ -48,8 +49,8 @@ it('serializes catalog logo and background images from the public disk', functio
 
     $payload = (new CatalogSettingResource($setting))->resolve(request());
 
-    expect($payload['logo_url'])->toBe('https://zouth.app/storage/catalog-logos/logo.png')
-        ->and($payload['background_image_url'])->toBe('https://zouth.app/storage/catalog-backgrounds/background.jpg');
+    expect($payload['logo_url'])->toBe('https://cdn.zouth.app/catalog-logos/logo.png')
+        ->and($payload['background_image_url'])->toBe('https://cdn.zouth.app/catalog-backgrounds/background.jpg');
 });
 
 it('allows configured s3 media hosts in the production content security policy', function () {

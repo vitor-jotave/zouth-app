@@ -95,6 +95,7 @@ it('creates a sellable combo with component products', function () {
 
     expect($combo)->not->toBeNull();
     expect($combo->product_type)->toBe('combo');
+    expect($combo->description)->toBe('Body e calca coordenados.');
     expect($combo->price_cents)->toBe(12990);
     expect($combo->getTotalStock())->toBe(5);
     expect($combo->comboItems)->toHaveCount(2);
@@ -104,6 +105,44 @@ it('creates a sellable combo with component products', function () {
         'component_product_id' => $body->id,
         'quantity' => 2,
     ]);
+});
+
+it('updates and reloads combo description', function () {
+    $body = Product::factory()->forManufacturer($this->manufacturer)->create([
+        'name' => 'Body Branco',
+        'sku' => 'BODY-BR',
+        'base_quantity' => 10,
+        'is_active' => true,
+    ]);
+
+    $this->post('/manufacturer/products/combos', comboPayload([
+        'description' => 'Descrição antiga do combo.',
+        'combo_items' => [
+            ['component_product_id' => $body->id, 'quantity' => 1],
+        ],
+    ]))->assertRedirect();
+
+    $combo = Product::where('sku', 'COMBO-001')->firstOrFail();
+
+    $response = $this->put("/manufacturer/products/{$combo->id}/combo", comboPayload([
+        'description' => 'Descrição nova do combo.',
+        'combo_items' => [
+            ['component_product_id' => $body->id, 'quantity' => 2],
+        ],
+    ]));
+
+    $response->assertRedirect();
+
+    $this->assertDatabaseHas('products', [
+        'id' => $combo->id,
+        'description' => 'Descrição nova do combo.',
+    ]);
+
+    $this->get("/manufacturer/products/{$combo->id}/combo/edit")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('product.description', 'Descrição nova do combo.')
+        );
 });
 
 it('creates a combo using a specific product variation stock', function () {

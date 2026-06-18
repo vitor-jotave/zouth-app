@@ -17,6 +17,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Catalog Media Disk
+    |--------------------------------------------------------------------------
+    |
+    | Catalog logos and background images should live beside public media in
+    | production. When the app default disk is S3/R2, use it automatically.
+    |
+    */
+
+    'catalog_media_disk' => env(
+        'CATALOG_MEDIA_DISK',
+        env('FILESYSTEM_DISK', 'local') === 's3' ? 's3' : 'public'
+    ),
+
+    /*
+    |--------------------------------------------------------------------------
     | Filesystem Disks
     |--------------------------------------------------------------------------
     |

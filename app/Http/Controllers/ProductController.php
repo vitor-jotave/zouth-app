@@ -99,6 +99,7 @@ class ProductController extends Controller
                     'id' => $val->id,
                     'value' => $val->value,
                     'hex' => $val->hex,
+                    'image_url' => $val->image_path ? Storage::disk('s3')->url($val->image_path) : null,
                 ])->values()->all(),
             ])->values()->all(),
         ]);
@@ -166,7 +167,7 @@ class ProductController extends Controller
         $stockStructure = $this->stockService->getStockStructure($product);
 
         return Inertia::render('manufacturer/products/edit', [
-            'product' => new ProductResource($product),
+            'product' => (new ProductResource($product))->resolve(),
             'categories' => $categories,
             'variation_types' => $variationTypes->map(fn ($type) => [
                 'id' => $type->id,
@@ -176,6 +177,7 @@ class ProductController extends Controller
                     'id' => $val->id,
                     'value' => $val->value,
                     'hex' => $val->hex,
+                    'image_url' => $val->image_path ? Storage::disk('s3')->url($val->image_path) : null,
                 ])->values()->all(),
             ])->values()->all(),
             'stock_structure' => $stockStructure,

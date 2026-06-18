@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Models\VariationType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\File;
 
 class VariationTypeStoreRequest extends FormRequest
 {
@@ -30,6 +31,7 @@ class VariationTypeStoreRequest extends FormRequest
             'values' => ['array'],
             'values.*.value' => ['required', 'string', 'max:100'],
             'values.*.hex' => ['nullable', 'string', 'max:7'],
+            'values.*.image' => ['nullable', File::image()->max(2048)],
         ];
     }
 

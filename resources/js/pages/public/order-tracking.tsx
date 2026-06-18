@@ -45,6 +45,7 @@ interface Order {
     customer_name: string;
     items: OrderItem[];
     total_items: number;
+    total_amount: string;
     status_history: StatusHistory[];
     created_at: string;
 }
@@ -100,6 +101,13 @@ function variationSummary(key: Record<string, string> | null): string | null {
     return Object.entries(key)
         .map(([name, value]) => `${name}: ${value}`)
         .join(' / ');
+}
+
+function formatCurrency(value: string | number | null): string {
+    return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+    }).format(Number(value ?? 0));
 }
 
 const statusOrder = ['new', 'confirmed', 'preparing', 'shipped', 'delivered'];
@@ -268,10 +276,7 @@ export default function OrderTracking({ order, manufacturer }: Props) {
                                     </div>
                                     {item.unit_price != null && (
                                         <p className="mt-1 text-xs font-medium">
-                                            {new Intl.NumberFormat('pt-BR', {
-                                                style: 'currency',
-                                                currency: 'BRL',
-                                            }).format(Number(item.unit_price))}
+                                            {formatCurrency(item.unit_price)}
                                         </p>
                                     )}
                                     {item.combo_components &&
@@ -314,10 +319,18 @@ export default function OrderTracking({ order, manufacturer }: Props) {
                             </div>
                         ))}
                     </div>
-                    <div className="border-t p-4">
+                    <div className="flex items-center justify-between gap-4 border-t bg-gray-50 p-4">
                         <p className="text-sm font-medium">
                             Total: {order.total_items} item(ns)
                         </p>
+                        <div className="text-right">
+                            <p className="text-xs text-muted-foreground">
+                                Valor total
+                            </p>
+                            <p className="text-lg font-bold text-gray-950">
+                                {formatCurrency(order.total_amount)}
+                            </p>
+                        </div>
                     </div>
                 </div>
 

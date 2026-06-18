@@ -87,6 +87,7 @@ class PublicOrderController extends Controller
                 'customer_name' => $order->customer_name,
                 'items' => OrderItemResource::collection($order->items)->resolve($request),
                 'total_items' => $order->items->sum('quantity'),
+                'total_amount' => number_format($order->totalAmount(), 2, '.', ''),
                 'status_history' => OrderStatusHistoryResource::collection($order->statusHistory)->resolve($request),
                 'created_at' => $order->created_at?->toISOString(),
             ],

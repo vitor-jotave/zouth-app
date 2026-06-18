@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Storage;
 beforeEach(function () {
     $this->withoutVite();
     Storage::fake('public');
+    config(['filesystems.catalog_media_disk' => 'public']);
 
     $this->manufacturer = Manufacturer::factory()->create(['is_active' => true]);
     $this->user = User::factory()->create([

@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Storage;
 
 class ProductResource extends JsonResource
 {
@@ -41,6 +42,7 @@ class ProductResource extends JsonResource
                             'id' => $val->id,
                             'value' => $val->value,
                             'hex' => $val->hex,
+                            'image_url' => $val->image_path ? Storage::disk('s3')->url($val->image_path) : null,
                         ])->values()->all()
                         : [],
                 ] : null,

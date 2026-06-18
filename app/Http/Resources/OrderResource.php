@@ -41,6 +41,7 @@ class OrderResource extends JsonResource
                 'name' => $this->salesRep->name,
             ]),
             'total_items' => $this->whenLoaded('items', fn () => $this->items->sum('quantity')),
+            'total_amount' => $this->whenLoaded('items', fn () => number_format($this->totalAmount(), 2, '.', '')),
             'allowed_transitions' => collect($this->status->allowedTransitions())->map(fn ($s) => [
                 'value' => $s->value,
                 'label' => $s->label(),

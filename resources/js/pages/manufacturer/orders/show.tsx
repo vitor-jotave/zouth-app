@@ -67,6 +67,7 @@ interface Order {
     tracking_ref: string | null;
     items: OrderItem[];
     total_items: number;
+    total_amount: string;
     status_history: StatusHistory[];
     sales_rep: { id: number; name: string } | null;
     allowed_transitions: Array<{ value: string; label: string }>;
@@ -148,6 +149,13 @@ function formatZipCode(zipCode: string | null): string | null {
     if (digits.length !== 8) return zipCode;
 
     return digits.replace(/^(\d{5})(\d{3})$/, '$1-$2');
+}
+
+function formatCurrency(value: string | number | null): string {
+    return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+    }).format(Number(value ?? 0));
 }
 
 export default function OrderShow({ order }: Props) {
@@ -343,17 +351,8 @@ export default function OrderShow({ order }: Props) {
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     {item.unit_price != null
-                                                        ? new Intl.NumberFormat(
-                                                              'pt-BR',
-                                                              {
-                                                                  style: 'currency',
-                                                                  currency:
-                                                                      'BRL',
-                                                              },
-                                                          ).format(
-                                                              Number(
-                                                                  item.unit_price,
-                                                              ),
+                                                        ? formatCurrency(
+                                                              item.unit_price,
                                                           )
                                                         : '-'}
                                                 </TableCell>
@@ -364,6 +363,19 @@ export default function OrderShow({ order }: Props) {
                                         ))}
                                 </TableBody>
                             </Table>
+                            <div className="flex items-center justify-between gap-4 border-t bg-muted/30 px-4 py-3">
+                                <p className="text-sm font-medium">
+                                    Total: {order.total_items} item(ns)
+                                </p>
+                                <div className="text-right">
+                                    <p className="text-xs text-muted-foreground">
+                                        Valor total
+                                    </p>
+                                    <p className="text-lg font-bold">
+                                        {formatCurrency(order.total_amount)}
+                                    </p>
+                                </div>
+                            </div>
                         </div>
 
                         {/* Status history */}

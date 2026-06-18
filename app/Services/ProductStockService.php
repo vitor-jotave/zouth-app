@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Product;
+use Illuminate\Support\Facades\Storage;
 
 class ProductStockService
 {
@@ -15,7 +16,7 @@ class ProductStockService
      * Build a structured representation of the product's variation stock.
      *
      * @return array{
-     *     variations: array<int, array{id: int, type: array{id: int, name: string, is_color_type: bool}, values: array<int, array{id: int, value: string, hex: string|null}>}>,
+     *     variations: array<int, array{id: int, type: array{id: int, name: string, is_color_type: bool}, values: array<int, array{id: int, value: string, hex: string|null, image_url: string|null}>}>,
      *     base_quantity: int,
      *     stocks: array<int, array{id: int, variation_key: array<string, string>, quantity: int, price_cents: int|null, sku_variant: string|null}>
      * }
@@ -35,6 +36,7 @@ class ProductStockService
                 'id' => $val->id,
                 'value' => $val->value,
                 'hex' => $val->hex,
+                'image_url' => $val->image_path ? Storage::disk('s3')->url($val->image_path) : null,
             ])->values()->all(),
         ])->values()->all();
 

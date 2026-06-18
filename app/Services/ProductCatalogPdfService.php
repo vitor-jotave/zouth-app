@@ -150,7 +150,7 @@ class ProductCatalogPdfService
 
     private function drawLogo(GdImage $image, ?CatalogSetting $catalogSetting, int $x, int $y): void
     {
-        $logo = $catalogSetting?->logo_path ? $this->imageFromStorage('public', $catalogSetting->logo_path) : null;
+        $logo = $catalogSetting?->logo_path ? $this->imageFromStorage($this->catalogMediaDisk(), $catalogSetting->logo_path) : null;
 
         if ($logo) {
             $this->drawFittedImage($image, $logo, $x, $y, 140, 70);
@@ -161,6 +161,11 @@ class ProductCatalogPdfService
 
         imagefilledrectangle($image, $x, $y, $x + 140, $y + 70, $this->color($image, '#0F172A'));
         $this->drawText($image, 'Zouth', 22, $x + 24, $y + 44, '#FFFFFF', true);
+    }
+
+    private function catalogMediaDisk(): string
+    {
+        return (string) config('filesystems.catalog_media_disk', 'public');
     }
 
     private function drawImagePlaceholder(GdImage $image, int $x, int $y, int $width, int $height): void

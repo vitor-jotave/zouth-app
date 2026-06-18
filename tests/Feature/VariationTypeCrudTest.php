@@ -8,6 +8,8 @@ use App\Models\ProductVariation;
 use App\Models\User;
 use App\Models\VariationType;
 use App\Models\VariationValue;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 beforeEach(function () {
     $plan = Plan::factory()->premium()->create();
@@ -110,6 +112,32 @@ it('creates a color type variation with hex values', function () {
     expect($type->values->first()->hex)->toBe('#0000FF');
 });
 
+it('creates a color type variation with image values', function () {
+    Storage::fake('s3');
+
+    $response = $this->post('/manufacturer/variation-types', [
+        'name' => 'Estampa',
+        'is_color_type' => true,
+        'values' => [
+            [
+                'value' => 'Bolinhas',
+                'hex' => null,
+                'image' => UploadedFile::fake()->image('bolinhas.png', 80, 80),
+            ],
+        ],
+    ]);
+
+    $response->assertRedirect();
+
+    $type = VariationType::where('name', 'Estampa')->first();
+    $value = $type->values->first();
+
+    expect($value->hex)->toBeNull();
+    expect($value->image_path)->not->toBeNull();
+    expect(str_starts_with($value->image_path, 'variation-values/'))->toBeTrue();
+    Storage::disk('s3')->assertExists($value->image_path);
+});
+
 it('requires a name to create a variation type', function () {
     $response = $this->post('/manufacturer/variation-types', [
         'name' => '',
@@ -207,6 +235,43 @@ it('removes values not included in update', function () {
 
     expect(VariationValue::find($removed->id))->toBeNull();
     expect(VariationValue::find($kept->id))->not->toBeNull();
+});
+
+it('replaces a variation value image on update', function () {
+    Storage::fake('s3');
+    Storage::disk('s3')->put('variation-values/old.png', 'old');
+
+    $type = VariationType::factory()->colorType()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'name' => 'Estampa',
+    ]);
+    $value = VariationValue::factory()->create([
+        'variation_type_id' => $type->id,
+        'value' => 'Bolinhas',
+        'image_path' => 'variation-values/old.png',
+    ]);
+
+    $response = $this->post("/manufacturer/variation-types/{$type->id}", [
+        '_method' => 'put',
+        'name' => 'Estampa',
+        'is_color_type' => true,
+        'values' => [
+            [
+                'id' => $value->id,
+                'value' => 'Bolinhas',
+                'hex' => null,
+                'image' => UploadedFile::fake()->image('bolinhas-nova.png', 80, 80),
+            ],
+        ],
+    ]);
+
+    $response->assertRedirect();
+
+    $value->refresh();
+
+    expect($value->image_path)->not->toBe('variation-values/old.png');
+    Storage::disk('s3')->assertMissing('variation-values/old.png');
+    Storage::disk('s3')->assertExists($value->image_path);
 });
 
 // --- Destroy ---

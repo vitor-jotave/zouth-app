@@ -81,4 +81,13 @@ class Order extends Model
     {
         return (int) $this->items()->sum('quantity');
     }
+
+    public function totalAmount(): float
+    {
+        $items = $this->relationLoaded('items')
+            ? $this->items
+            : $this->items()->get(['unit_price', 'quantity']);
+
+        return round((float) $items->sum(fn (OrderItem $item) => (float) $item->unit_price * $item->quantity), 2);
+    }
 }

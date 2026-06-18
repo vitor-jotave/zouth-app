@@ -110,6 +110,7 @@ it('updates catalog branding settings', function () {
 
 it('uploads a catalog logo', function () {
     Storage::fake('public');
+    config(['filesystems.catalog_media_disk' => 'public']);
 
     $response = $this->actingAs($this->user)->post(
         route('manufacturer.catalog-settings.logo'),
@@ -122,6 +123,23 @@ it('uploads a catalog logo', function () {
     expect($setting)->not->toBeNull();
 
     Storage::disk('public')->assertExists($setting->logo_path);
+});
+
+it('uploads catalog logo to the configured catalog media disk', function () {
+    Storage::fake('s3');
+    config(['filesystems.catalog_media_disk' => 's3']);
+
+    $response = $this->actingAs($this->user)->post(
+        route('manufacturer.catalog-settings.logo'),
+        ['logo' => UploadedFile::fake()->image('logo.png')]
+    );
+
+    $response->assertRedirect();
+
+    $setting = CatalogSetting::first();
+    expect($setting)->not->toBeNull();
+
+    Storage::disk('s3')->assertExists($setting->logo_path);
 });
 
 it('rotates the public catalog link', function () {
@@ -154,6 +172,22 @@ it('renders the public catalog and tracks visits', function () {
         'manufacturer_id' => $this->manufacturer->id,
         'public_token' => 'public-token',
     ]);
+});
+
+it('includes product description in public catalog props for quick view', function () {
+    $setting = createCatalogSettingFor($this->manufacturer);
+
+    Product::factory()->forManufacturer($this->manufacturer)->withoutCategory()->create([
+        'name' => 'Macacão Bordado',
+        'sku' => 'MAC-BORDADO',
+        'description' => 'Macacão em algodão com bordado delicado.',
+        'is_active' => true,
+    ]);
+
+    $response = $this->get(route('public.catalog.show', ['token' => $setting->public_token]));
+    $productProps = collect($response->inertiaProps('products.data'))->firstWhere('name', 'Macacão Bordado');
+
+    expect($productProps['description'])->toBe('Macacão em algodão com bordado delicado.');
 });
 
 it('filters public catalog products by name or sku search', function () {
@@ -248,6 +282,85 @@ it('filters public catalog products by dynamic variation values', function () {
     expect($response->inertiaProps("filters.variations.{$color->id}"))->toBe(['Vermelho']);
     expect(collect($response->inertiaProps('filter_options.variation_types.0.values'))->pluck('value')->all())
         ->toBe(['Azul', 'Vermelho']);
+});
+
+it('limits public catalog product card variations to values available on that product', function () {
+    $setting = createCatalogSettingFor($this->manufacturer);
+    $color = VariationType::factory()->colorType()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+    ]);
+    $size = VariationType::factory()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'name' => 'Tamanho',
+    ]);
+
+    foreach ([
+        ['value' => 'Azul', 'hex' => '#3b82f6'],
+        ['value' => 'Vermelho', 'hex' => '#ef4444'],
+        ['value' => 'Verde', 'hex' => '#22c55e'],
+    ] as $value) {
+        VariationValue::factory()->create([
+            'variation_type_id' => $color->id,
+            ...$value,
+        ]);
+    }
+
+    foreach (['P', 'M', 'G'] as $value) {
+        VariationValue::factory()->create([
+            'variation_type_id' => $size->id,
+            'value' => $value,
+        ]);
+    }
+
+    $product = Product::factory()->forManufacturer($this->manufacturer)->withoutCategory()->create([
+        'name' => 'Body Azul P',
+    ]);
+    ProductVariation::create(['product_id' => $product->id, 'variation_type_id' => $color->id]);
+    ProductVariation::create(['product_id' => $product->id, 'variation_type_id' => $size->id]);
+    ProductVariantStock::factory()->create([
+        'product_id' => $product->id,
+        'variation_key' => ['Cor' => 'Azul', 'Tamanho' => 'P'],
+        'quantity' => 4,
+    ]);
+
+    $response = $this->get(route('public.catalog.show', ['token' => $setting->public_token]));
+    $productProps = collect($response->inertiaProps('products.data'))->firstWhere('name', 'Body Azul P');
+
+    expect(collect($productProps['variations'])->firstWhere('type_name', 'Cor')['values'])
+        ->toBe([['value' => 'Azul', 'hex' => '#3b82f6', 'image_url' => null]]);
+    expect(collect($productProps['variations'])->firstWhere('type_name', 'Tamanho')['values'])
+        ->toBe([['value' => 'P', 'hex' => null, 'image_url' => null]]);
+});
+
+it('exposes variation image swatches in public catalog products and filters', function () {
+    $setting = createCatalogSettingFor($this->manufacturer);
+    $color = VariationType::factory()->colorType()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'name' => 'Cor',
+    ]);
+
+    VariationValue::factory()->create([
+        'variation_type_id' => $color->id,
+        'value' => 'Bolinhas',
+        'hex' => null,
+        'image_path' => 'variation-values/bolinhas.png',
+    ]);
+
+    $product = Product::factory()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'name' => 'Body Bolinhas',
+        'is_active' => true,
+    ]);
+
+    attachCatalogVariation($product, $color, 'Bolinhas');
+
+    $response = $this->get(route('public.catalog.show', ['token' => $setting->public_token]));
+    $productProps = collect($response->inertiaProps('products.data'))->firstWhere('name', 'Body Bolinhas');
+    $productColor = collect($productProps['variations'])->firstWhere('type_name', 'Cor');
+    $filterColor = collect($response->inertiaProps('filter_options.variation_types'))->firstWhere('name', 'Cor');
+
+    expect($productColor['values'][0]['image_url'])->toContain('variation-values/bolinhas.png');
+    expect($filterColor['values'][0]['image_url'])->toContain('variation-values/bolinhas.png');
 });
 
 it('combines search category and variation filters in the public catalog', function () {

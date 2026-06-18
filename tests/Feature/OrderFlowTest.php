@@ -277,6 +277,16 @@ it('associates sales rep when ref query param matches an active affiliation', fu
 
 it('shows order tracking page for a valid token', function () {
     $order = Order::factory()->forManufacturer($this->manufacturer)->create();
+    OrderItem::factory()->create([
+        'order_id' => $order->id,
+        'unit_price' => '129.90',
+        'quantity' => 3,
+    ]);
+    OrderItem::factory()->create([
+        'order_id' => $order->id,
+        'unit_price' => '54.90',
+        'quantity' => 2,
+    ]);
 
     $response = $this->get("/o/{$order->public_token}");
 
@@ -285,6 +295,8 @@ it('shows order tracking page for a valid token', function () {
         ->component('public/order-tracking')
         ->has('order')
         ->where('order.public_token', $order->public_token)
+        ->where('order.total_items', 5)
+        ->where('order.total_amount', '499.50')
     );
 });
 
@@ -340,7 +352,16 @@ it('searches orders by customer name', function () {
 
 it('shows a specific order belonging to the manufacturer', function () {
     $order = Order::factory()->forManufacturer($this->manufacturer)->create();
-    OrderItem::factory()->create(['order_id' => $order->id]);
+    OrderItem::factory()->create([
+        'order_id' => $order->id,
+        'unit_price' => '129.90',
+        'quantity' => 3,
+    ]);
+    OrderItem::factory()->create([
+        'order_id' => $order->id,
+        'unit_price' => '54.90',
+        'quantity' => 2,
+    ]);
 
     $response = $this->actingAs($this->owner)->get("/manufacturer/orders/{$order->id}");
 
@@ -349,6 +370,8 @@ it('shows a specific order belonging to the manufacturer', function () {
         ->component('manufacturer/orders/show')
         ->has('order')
         ->where('order.id', $order->id)
+        ->where('order.total_items', 5)
+        ->where('order.total_amount', '499.50')
     );
 });
 

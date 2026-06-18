@@ -7,6 +7,7 @@ import {
     ClipboardCopy,
     Filter,
     Heart,
+    Maximize2,
     Minus,
     Package,
     Plus,
@@ -102,13 +103,18 @@ interface Product {
     product_type: 'product' | 'combo';
     name: string;
     sku: string;
+    description?: string | null;
     category?: string | null;
     primary_image?: string | null;
     images: string[];
     variations: Array<{
         type_name: string;
         is_color_type: boolean;
-        values: Array<{ value: string; hex?: string | null }>;
+        values: Array<{
+            value: string;
+            hex?: string | null;
+            image_url?: string | null;
+        }>;
     }>;
     variant_stocks: Array<{
         variation_key: Record<string, string>;
@@ -163,6 +169,7 @@ interface CatalogFilterOptions {
         values: Array<{
             value: string;
             hex?: string | null;
+            image_url?: string | null;
         }>;
     }>;
 }
@@ -215,6 +222,7 @@ interface LayoutProps {
     products: Paginated<Product>;
     tokens: typeof LAYOUT_TOKENS.minimal;
     onAddToCart: (product: Product) => void;
+    onOpenQuickView: (product: Product) => void;
     addedProductId: number | null;
     selectedVariations: SelectedVariations;
     catalogToken: string;
@@ -344,13 +352,21 @@ function ProductVariations({
                                     }`}
                                 >
                                     {variation.is_color_type ? (
-                                        <span
-                                            className="h-full w-full rounded-full border border-black/10"
-                                            style={{
-                                                backgroundColor:
-                                                    value.hex ?? '#e5e7eb',
-                                            }}
-                                        />
+                                        value.image_url ? (
+                                            <img
+                                                src={value.image_url}
+                                                alt=""
+                                                className="h-full w-full rounded-full border border-black/10 object-cover"
+                                            />
+                                        ) : (
+                                            <span
+                                                className="h-full w-full rounded-full border border-black/10"
+                                                style={{
+                                                    backgroundColor:
+                                                        value.hex ?? '#e5e7eb',
+                                                }}
+                                            />
+                                        )
                                     ) : (
                                         value.value
                                     )}
@@ -378,6 +394,7 @@ function ProductImageSlider({
     placeholderStyle,
     style,
     children,
+    onOpen,
 }: {
     product: Product;
     className: string;
@@ -387,6 +404,7 @@ function ProductImageSlider({
     placeholderStyle?: CSSProperties;
     style?: CSSProperties;
     children?: ReactNode;
+    onOpen?: () => void;
 }) {
     const productImages = product.images ?? [];
     const images =
@@ -432,7 +450,24 @@ function ProductImageSlider({
     };
 
     return (
-        <div className={`relative overflow-hidden ${className}`} style={style}>
+        <div
+            className={`relative overflow-hidden ${onOpen ? 'cursor-zoom-in' : ''} ${className}`}
+            style={style}
+            role={onOpen ? 'button' : undefined}
+            tabIndex={onOpen ? 0 : undefined}
+            onClick={onOpen}
+            onKeyDown={(event) => {
+                if (!onOpen) {
+                    return;
+                }
+
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onOpen();
+                }
+            }}
+            aria-label={onOpen ? `Ver detalhes de ${product.name}` : undefined}
+        >
             {currentImage ? (
                 <img
                     src={currentImage}
@@ -446,6 +481,13 @@ function ProductImageSlider({
             )}
 
             {children}
+
+            {onOpen && (
+                <div className="pointer-events-none absolute top-3 left-3 z-10 inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-gray-900 opacity-0 shadow-sm transition group-hover:opacity-100">
+                    <Maximize2 className="h-3.5 w-3.5" />
+                    Ver detalhes
+                </div>
+            )}
 
             {hasMultipleImages && (
                 <>
@@ -483,6 +525,127 @@ function ProductImageSlider({
                 </>
             )}
         </div>
+    );
+}
+
+function ProductQuickViewModal({
+    product,
+    selectedValues,
+    isAdded,
+    onClose,
+    onSelectVariation,
+    onAddToCart,
+}: {
+    product: Product | null;
+    selectedValues: Record<string, string>;
+    isAdded: boolean;
+    onClose: () => void;
+    onSelectVariation: (variationName: string, value: string) => void;
+    onAddToCart: (product: Product) => void;
+}) {
+    if (!product) {
+        return null;
+    }
+
+    const canAdd = productHasRequiredSelection(product, selectedValues);
+
+    return (
+        <Dialog
+            open={Boolean(product)}
+            onOpenChange={(open) => !open && onClose()}
+        >
+            <DialogContent className="max-h-[92vh] overflow-y-auto p-0 sm:max-w-5xl">
+                <div className="grid gap-0 lg:grid-cols-[minmax(0,1.08fr)_minmax(360px,0.92fr)]">
+                    <ProductImageSlider
+                        product={product}
+                        className="aspect-4/5 bg-gray-100 lg:min-h-[620px]"
+                        imageClassName="h-full w-full object-cover"
+                    />
+
+                    <div className="flex flex-col gap-5 p-6 sm:p-8">
+                        <DialogHeader className="space-y-2 text-left">
+                            <div className="flex flex-wrap items-center gap-2">
+                                {product.category && (
+                                    <Badge variant="outline">
+                                        {product.category}
+                                    </Badge>
+                                )}
+                                {product.product_type === 'combo' && (
+                                    <Badge variant="outline">Combo</Badge>
+                                )}
+                            </div>
+                            <DialogTitle className="text-2xl font-semibold tracking-tight">
+                                {product.name}
+                            </DialogTitle>
+                            <DialogDescription className="text-sm">
+                                SKU {product.sku}
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <p
+                            className={`text-lg font-semibold ${product.price_cents == null ? 'italic opacity-55' : ''}`}
+                            style={
+                                product.price_cents != null
+                                    ? { color: 'var(--brand-primary)' }
+                                    : {}
+                            }
+                        >
+                            {formatPrice(product.price_cents)}
+                        </p>
+
+                        {product.description && (
+                            <div className="space-y-2 border-t pt-5">
+                                <h3 className="text-sm font-semibold">
+                                    Descrição
+                                </h3>
+                                <p className="text-sm leading-relaxed text-gray-600">
+                                    {product.description}
+                                </p>
+                            </div>
+                        )}
+
+                        <ComboSummary product={product} />
+
+                        {product.variations.length > 0 && (
+                            <div className="space-y-3 border-t pt-5">
+                                <h3 className="text-sm font-semibold">
+                                    Opções
+                                </h3>
+                                <ProductVariations
+                                    product={product}
+                                    selectedValues={selectedValues}
+                                    onSelect={onSelectVariation}
+                                />
+                            </div>
+                        )}
+
+                        <div className="mt-auto flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between">
+                            <p className="text-xs text-gray-500">
+                                {product.total_stock > 0
+                                    ? `${product.total_stock} unidade(s) disponíveis`
+                                    : 'Produto sem estoque disponível'}
+                            </p>
+                            <Button
+                                type="button"
+                                disabled={!canAdd}
+                                onClick={() => onAddToCart(product)}
+                                className="gap-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                style={{
+                                    backgroundColor: isAdded
+                                        ? 'var(--brand-accent)'
+                                        : 'var(--brand-primary)',
+                                }}
+                            >
+                                <AddToCartContent
+                                    isAdded={isAdded}
+                                    canAdd={canAdd}
+                                />
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
     );
 }
 
@@ -740,14 +903,24 @@ function CatalogFiltersDrawer({
                                                             aria-label={`${type.name}: ${value.value}`}
                                                             title={value.value}
                                                         >
-                                                            <span
-                                                                className="h-full w-full rounded-full border border-black/10"
-                                                                style={{
-                                                                    backgroundColor:
-                                                                        value.hex ??
-                                                                        '#e5e7eb',
-                                                                }}
-                                                            />
+                                                            {value.image_url ? (
+                                                                <img
+                                                                    src={
+                                                                        value.image_url
+                                                                    }
+                                                                    alt=""
+                                                                    className="h-full w-full rounded-full border border-black/10 object-cover"
+                                                                />
+                                                            ) : (
+                                                                <span
+                                                                    className="h-full w-full rounded-full border border-black/10"
+                                                                    style={{
+                                                                        backgroundColor:
+                                                                            value.hex ??
+                                                                            '#e5e7eb',
+                                                                    }}
+                                                                />
+                                                            )}
                                                         </button>
                                                     );
                                                 }
@@ -902,6 +1075,7 @@ function MinimalLayout({
     products,
     tokens,
     onAddToCart,
+    onOpenQuickView,
     addedProductId,
     selectedVariations,
     catalogToken,
@@ -1014,6 +1188,7 @@ function MinimalLayout({
                                         product={product}
                                         className="aspect-4/5 bg-gray-100"
                                         imageClassName="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                        onOpen={() => onOpenQuickView(product)}
                                     />
                                     <div
                                         style={{ padding: tokens.cardPadding }}
@@ -1105,6 +1280,7 @@ function PlayfulLayout({
     products,
     tokens,
     onAddToCart,
+    onOpenQuickView,
     addedProductId,
     selectedVariations,
     catalogToken,
@@ -1269,6 +1445,7 @@ function PlayfulLayout({
                                         placeholderStyle={{
                                             background: `linear-gradient(135deg, ${settings.primary_color}10, ${settings.accent_color}10)`,
                                         }}
+                                        onOpen={() => onOpenQuickView(product)}
                                     >
                                         <div className="absolute top-3 right-3">
                                             <div
@@ -1381,6 +1558,7 @@ function BoutiqueLayout({
     products,
     tokens,
     onAddToCart,
+    onOpenQuickView,
     addedProductId,
     selectedVariations,
     catalogToken,
@@ -1518,6 +1696,7 @@ function BoutiqueLayout({
                                         style={{
                                             borderRadius: tokens.radius,
                                         }}
+                                        onOpen={() => onOpenQuickView(product)}
                                     >
                                         {product.total_stock === 0 && (
                                             <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
@@ -1625,6 +1804,9 @@ export default function PublicCatalog({
     // Cart state
     const [cart, setCart] = useState<CartItem[]>([]);
     const [cartOpen, setCartOpen] = useState(false);
+    const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(
+        null,
+    );
     const [addedProductId, setAddedProductId] = useState<number | null>(null);
     const [selectedVariations, setSelectedVariations] =
         useState<SelectedVariations>({});
@@ -1893,6 +2075,7 @@ export default function PublicCatalog({
                         products={products}
                         tokens={tokens}
                         onAddToCart={addToCart}
+                        onOpenQuickView={setQuickViewProduct}
                         addedProductId={addedProductId}
                         selectedVariations={selectedVariations}
                         catalogToken={catalog_token}
@@ -1908,6 +2091,7 @@ export default function PublicCatalog({
                         products={products}
                         tokens={tokens}
                         onAddToCart={addToCart}
+                        onOpenQuickView={setQuickViewProduct}
                         addedProductId={addedProductId}
                         selectedVariations={selectedVariations}
                         catalogToken={catalog_token}
@@ -1923,6 +2107,7 @@ export default function PublicCatalog({
                         products={products}
                         tokens={tokens}
                         onAddToCart={addToCart}
+                        onOpenQuickView={setQuickViewProduct}
                         addedProductId={addedProductId}
                         selectedVariations={selectedVariations}
                         catalogToken={catalog_token}
@@ -1932,6 +2117,29 @@ export default function PublicCatalog({
                     />
                 )}
             </div>
+
+            <ProductQuickViewModal
+                product={quickViewProduct}
+                selectedValues={
+                    quickViewProduct
+                        ? (selectedVariations[quickViewProduct.id] ?? {})
+                        : {}
+                }
+                isAdded={
+                    quickViewProduct
+                        ? addedProductId === quickViewProduct.id
+                        : false
+                }
+                onClose={() => setQuickViewProduct(null)}
+                onSelectVariation={(variationName, value) => {
+                    if (!quickViewProduct) {
+                        return;
+                    }
+
+                    selectVariation(quickViewProduct.id, variationName, value);
+                }}
+                onAddToCart={addToCart}
+            />
 
             {/* Floating cart button */}
             {cartTotal > 0 && (

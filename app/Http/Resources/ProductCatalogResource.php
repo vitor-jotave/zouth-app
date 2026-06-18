@@ -22,21 +22,45 @@ class ProductCatalogResource extends JsonResource
             : $item->type === ProductMediaType::Image->value);
         $primaryImage = $images->first();
 
-        // Build variation info from product_variations relationship
-        $variations = ($this->productVariations ?? collect())->map(fn ($pv) => [
-            'type_name' => $pv->variationType->name ?? '',
-            'is_color_type' => $pv->variationType->is_color_type ?? false,
-            'values' => ($pv->variationType->values ?? collect())->map(fn ($val) => [
-                'value' => $val->value,
-                'hex' => $val->hex,
-            ])->values()->all(),
-        ])->values()->all();
+        $variantStocks = $this->variantStocks ?? collect();
+
+        $variations = ($this->productVariations ?? collect())
+            ->map(function ($pv) use ($variantStocks) {
+                $type = $pv->variationType;
+                $typeName = $type->name ?? '';
+                $stockValues = $variantStocks
+                    ->map(fn ($stock) => data_get($stock->variation_key, $typeName))
+                    ->map(fn (mixed $value) => (string) $value)
+                    ->filter()
+                    ->unique()
+                    ->values();
+
+                $values = ($type->values ?? collect())
+                    ->filter(fn ($value) => $stockValues->contains($value->value))
+                    ->map(fn ($value) => [
+                        'value' => $value->value,
+                        'hex' => $value->hex,
+                        'image_url' => $value->image_path ? Storage::disk('s3')->url($value->image_path) : null,
+                    ])
+                    ->values()
+                    ->all();
+
+                return [
+                    'type_name' => $typeName,
+                    'is_color_type' => $type->is_color_type ?? false,
+                    'values' => $values,
+                ];
+            })
+            ->filter(fn (array $variation) => $variation['values'] !== [])
+            ->values()
+            ->all();
 
         return [
             'id' => $this->id,
             'product_type' => $this->product_type,
             'name' => $this->name,
             'sku' => $this->sku,
+            'description' => $this->description,
             'category' => $this->category?->name,
             'primary_image' => $primaryImage ? Storage::disk('s3')->url($primaryImage->path) : null,
             'images' => $images->map(fn ($item) => Storage::disk('s3')->url($item->path))->values(),

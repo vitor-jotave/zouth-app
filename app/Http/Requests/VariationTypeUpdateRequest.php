@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\File;
 
 class VariationTypeUpdateRequest extends FormRequest
 {
@@ -31,6 +32,8 @@ class VariationTypeUpdateRequest extends FormRequest
             'values.*.id' => ['nullable', 'integer'],
             'values.*.value' => ['required', 'string', 'max:100'],
             'values.*.hex' => ['nullable', 'string', 'max:7'],
+            'values.*.image' => ['nullable', File::image()->max(2048)],
+            'values.*.remove_image' => ['sometimes', 'boolean'],
         ];
     }
 

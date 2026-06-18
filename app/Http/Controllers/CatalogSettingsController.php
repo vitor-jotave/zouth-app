@@ -72,10 +72,10 @@ class CatalogSettingsController extends Controller
         $this->authorize('update', $setting);
 
         if ($setting->logo_path) {
-            Storage::disk('public')->delete($setting->logo_path);
+            $this->deleteCatalogMedia($setting->logo_path);
         }
 
-        $path = $request->file('logo')->store('catalog-logos', 'public');
+        $path = $request->file('logo')->store('catalog-logos', $this->catalogMediaDisk());
 
         $setting->update(['logo_path' => $path]);
 
@@ -91,7 +91,7 @@ class CatalogSettingsController extends Controller
         $this->authorize('update', $setting);
 
         if ($setting->logo_path) {
-            Storage::disk('public')->delete($setting->logo_path);
+            $this->deleteCatalogMedia($setting->logo_path);
             $setting->update(['logo_path' => null]);
         }
 
@@ -107,10 +107,10 @@ class CatalogSettingsController extends Controller
         $this->authorize('update', $setting);
 
         if ($setting->background_image_path) {
-            Storage::disk('public')->delete($setting->background_image_path);
+            $this->deleteCatalogMedia($setting->background_image_path);
         }
 
-        $path = $request->file('background_image')->store('catalog-backgrounds', 'public');
+        $path = $request->file('background_image')->store('catalog-backgrounds', $this->catalogMediaDisk());
 
         $setting->update(['background_image_path' => $path]);
 
@@ -126,7 +126,7 @@ class CatalogSettingsController extends Controller
         $this->authorize('update', $setting);
 
         if ($setting->background_image_path) {
-            Storage::disk('public')->delete($setting->background_image_path);
+            $this->deleteCatalogMedia($setting->background_image_path);
             $setting->update(['background_image_path' => null]);
         }
 
@@ -178,6 +178,18 @@ class CatalogSettingsController extends Controller
             ['manufacturer_id' => $manufacturer->id],
             CatalogSetting::defaults($manufacturer->name)
         );
+    }
+
+    private function catalogMediaDisk(): string
+    {
+        return (string) config('filesystems.catalog_media_disk', 'public');
+    }
+
+    private function deleteCatalogMedia(string $path): void
+    {
+        foreach (array_unique(['public', $this->catalogMediaDisk()]) as $disk) {
+            Storage::disk($disk)->delete($path);
+        }
     }
 
     /**

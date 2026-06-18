@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { Layers, Plus, Trash2, X } from 'lucide-react';
+import { ImagePlus, Layers, Plus, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +30,8 @@ interface VariationValue {
     id?: number;
     value: string;
     hex: string | null;
+    image_path?: string | null;
+    image_url?: string | null;
     display_order: number;
 }
 
@@ -53,6 +55,10 @@ interface FormValues {
     id?: number;
     value: string;
     hex: string;
+    image?: File | null;
+    image_url?: string | null;
+    image_preview_url?: string | null;
+    remove_image?: boolean;
 }
 
 interface CreateFormData {
@@ -72,8 +78,25 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Variações', href: '/manufacturer/variation-types' },
 ];
 
-function ColorSwatch({ hex }: { hex: string | null }) {
+function ColorSwatch({
+    hex,
+    imageUrl,
+}: {
+    hex: string | null;
+    imageUrl?: string | null;
+}) {
+    if (imageUrl) {
+        return (
+            <img
+                src={imageUrl}
+                alt=""
+                className="inline-block size-4 rounded-full border border-gray-300 object-cover"
+            />
+        );
+    }
+
     if (!hex) return null;
+
     return (
         <span
             className="inline-block size-4 rounded-full border border-gray-300"
@@ -100,7 +123,10 @@ export default function VariationTypesIndex({ variation_types }: Props) {
 
     // --- Create handlers ---
     const handleCreateAddValue = () => {
-        createForm.setData('values', [...createForm.data.values, { value: '', hex: '' }]);
+        createForm.setData('values', [
+            ...createForm.data.values,
+            { value: '', hex: '' },
+        ]);
     };
 
     const handleCreateRemoveValue = (index: number) => {
@@ -110,7 +136,11 @@ export default function VariationTypesIndex({ variation_types }: Props) {
         );
     };
 
-    const handleCreateValueChange = (index: number, field: 'value' | 'hex', val: string) => {
+    const handleCreateValueChange = (
+        index: number,
+        field: 'value' | 'hex',
+        val: string,
+    ) => {
         const updated = [...createForm.data.values];
         updated[index] = { ...updated[index], [field]: val };
         createForm.setData('values', updated);
@@ -119,6 +149,7 @@ export default function VariationTypesIndex({ variation_types }: Props) {
     const handleCreate = (event: React.FormEvent) => {
         event.preventDefault();
         createForm.post('/manufacturer/variation-types', {
+            forceFormData: true,
             onSuccess: () => {
                 createForm.reset();
                 createForm.setData('values', [{ value: '', hex: '' }]);
@@ -137,12 +168,19 @@ export default function VariationTypesIndex({ variation_types }: Props) {
                 id: v.id,
                 value: v.value,
                 hex: v.hex ?? '',
+                image: null,
+                image_url: v.image_url ?? null,
+                image_preview_url: null,
+                remove_image: false,
             })),
         });
     };
 
     const handleEditAddValue = () => {
-        editForm.setData('values', [...editForm.data.values, { value: '', hex: '' }]);
+        editForm.setData('values', [
+            ...editForm.data.values,
+            { value: '', hex: '' },
+        ]);
     };
 
     const handleEditRemoveValue = (index: number) => {
@@ -152,7 +190,11 @@ export default function VariationTypesIndex({ variation_types }: Props) {
         );
     };
 
-    const handleEditValueChange = (index: number, field: 'value' | 'hex', val: string) => {
+    const handleEditValueChange = (
+        index: number,
+        field: 'value' | 'hex',
+        val: string,
+    ) => {
         const updated = [...editForm.data.values];
         updated[index] = { ...updated[index], [field]: val };
         editForm.setData('values', updated);
@@ -162,11 +204,55 @@ export default function VariationTypesIndex({ variation_types }: Props) {
         event.preventDefault();
         if (!editingType) return;
 
-        editForm.put(`/manufacturer/variation-types/${editingType.id}`, {
+        editForm.transform((data) => ({
+            ...data,
+            _method: 'put',
+        }));
+
+        editForm.post(`/manufacturer/variation-types/${editingType.id}`, {
+            forceFormData: true,
             onSuccess: () => {
                 setEditingType(null);
             },
+            onFinish: () => {
+                editForm.transform((data) => data);
+            },
         });
+    };
+
+    const handleValueImageChange = (
+        form: typeof createForm | typeof editForm,
+        index: number,
+        file: File | null,
+    ) => {
+        const updated = [...form.data.values];
+        const current = updated[index];
+
+        updated[index] = {
+            ...current,
+            hex: file ? '' : current.hex,
+            image: file,
+            image_preview_url: file ? URL.createObjectURL(file) : null,
+            remove_image: file ? false : current.remove_image,
+        };
+
+        form.setData({ ...form.data, values: updated });
+    };
+
+    const handleValueImageRemove = (
+        form: typeof createForm | typeof editForm,
+        index: number,
+    ) => {
+        const updated = [...form.data.values];
+        updated[index] = {
+            ...updated[index],
+            image: null,
+            image_url: null,
+            image_preview_url: null,
+            remove_image: true,
+        };
+
+        form.setData({ ...form.data, values: updated });
     };
 
     // --- Delete handler ---
@@ -182,14 +268,20 @@ export default function VariationTypesIndex({ variation_types }: Props) {
         onAdd,
         onRemove,
         onChange,
+        onImageChange,
+        onImageRemove,
         errors,
+        fieldPrefix,
     }: {
         values: FormValues[];
         isColorType: boolean;
         onAdd: () => void;
         onRemove: (index: number) => void;
         onChange: (index: number, field: 'value' | 'hex', val: string) => void;
+        onImageChange: (index: number, file: File | null) => void;
+        onImageRemove: (index: number) => void;
         errors: Record<string, string>;
+        fieldPrefix: string;
     }) {
         return (
             <div className="space-y-2">
@@ -201,27 +293,85 @@ export default function VariationTypesIndex({ variation_types }: Props) {
                                 <Input
                                     placeholder="Ex: P, M, G ou Azul, Vermelho..."
                                     value={v.value}
-                                    onChange={(e) => onChange(index, 'value', e.target.value)}
+                                    onChange={(e) =>
+                                        onChange(index, 'value', e.target.value)
+                                    }
                                 />
                                 {errors[`values.${index}.value`] && (
-                                    <InputError message={errors[`values.${index}.value`]} />
+                                    <InputError
+                                        message={
+                                            errors[`values.${index}.value`]
+                                        }
+                                    />
                                 )}
                             </div>
                             {isColorType && (
                                 <div className="flex items-center gap-1">
+                                    {v.image_preview_url || v.image_url ? (
+                                        <div className="relative h-9 w-9 overflow-hidden rounded-md border bg-muted">
+                                            <img
+                                                src={
+                                                    v.image_preview_url ??
+                                                    v.image_url ??
+                                                    ''
+                                                }
+                                                alt=""
+                                                className="h-full w-full object-cover"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <Input
+                                            type="color"
+                                            value={v.hex || '#000000'}
+                                            onChange={(e) =>
+                                                onChange(
+                                                    index,
+                                                    'hex',
+                                                    e.target.value,
+                                                )
+                                            }
+                                            className="h-9 w-12 cursor-pointer p-1"
+                                        />
+                                    )}
                                     <Input
-                                        type="color"
-                                        value={v.hex || '#000000'}
-                                        onChange={(e) => onChange(index, 'hex', e.target.value)}
-                                        className="h-9 w-12 cursor-pointer p-1"
+                                        id={`${fieldPrefix}-image-${index}`}
+                                        type="file"
+                                        accept="image/*"
+                                        className="sr-only"
+                                        onChange={(e) =>
+                                            onImageChange(
+                                                index,
+                                                e.target.files?.[0] ?? null,
+                                            )
+                                        }
                                     />
-                                    {v.hex && (
+                                    <Label
+                                        htmlFor={`${fieldPrefix}-image-${index}`}
+                                        className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border bg-background hover:bg-accent hover:text-accent-foreground"
+                                        title="Enviar estampa"
+                                    >
+                                        <ImagePlus className="h-4 w-4" />
+                                    </Label>
+                                    {(v.hex ||
+                                        v.image_preview_url ||
+                                        v.image_url) && (
                                         <Button
                                             type="button"
                                             variant="ghost"
                                             size="sm"
                                             className="h-9 w-9 p-0"
-                                            onClick={() => onChange(index, 'hex', '')}
+                                            onClick={() => {
+                                                if (
+                                                    v.image_preview_url ||
+                                                    v.image_url
+                                                ) {
+                                                    onImageRemove(index);
+
+                                                    return;
+                                                }
+
+                                                onChange(index, 'hex', '');
+                                            }}
                                         >
                                             <X className="h-3 w-3" />
                                         </Button>
@@ -239,10 +389,20 @@ export default function VariationTypesIndex({ variation_types }: Props) {
                                     <Trash2 className="h-4 w-4" />
                                 </Button>
                             )}
+                            {isColorType && errors[`values.${index}.image`] && (
+                                <InputError
+                                    message={errors[`values.${index}.image`]}
+                                />
+                            )}
                         </div>
                     ))}
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={onAdd}>
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={onAdd}
+                >
                     <Plus className="mr-1 h-3 w-3" />
                     Adicionar valor
                 </Button>
@@ -257,9 +417,12 @@ export default function VariationTypesIndex({ variation_types }: Props) {
             <div className="flex h-full flex-1 flex-col gap-4 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold tracking-tight">Variações</h1>
+                        <h1 className="text-2xl font-bold tracking-tight">
+                            Variações
+                        </h1>
                         <p className="text-sm text-muted-foreground">
-                            Gerencie os tipos de variação dos seus produtos (ex: Tamanho, Cor, Material)
+                            Gerencie os tipos de variação dos seus produtos (ex:
+                            Tamanho, Cor, Material)
                         </p>
                     </div>
 
@@ -270,11 +433,12 @@ export default function VariationTypesIndex({ variation_types }: Props) {
                                 Nova variação
                             </Button>
                         </DialogTrigger>
-                        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+                        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
                             <DialogHeader>
                                 <DialogTitle>Nova variação</DialogTitle>
                                 <DialogDescription>
-                                    Crie um novo tipo de variação e seus valores.
+                                    Crie um novo tipo de variação e seus
+                                    valores.
                                 </DialogDescription>
                             </DialogHeader>
                             <form onSubmit={handleCreate} className="space-y-4">
@@ -284,9 +448,16 @@ export default function VariationTypesIndex({ variation_types }: Props) {
                                         id="create-name"
                                         placeholder="Ex: Tamanho, Cor, Material..."
                                         value={createForm.data.name}
-                                        onChange={(e) => createForm.setData('name', e.target.value)}
+                                        onChange={(e) =>
+                                            createForm.setData(
+                                                'name',
+                                                e.target.value,
+                                            )
+                                        }
                                     />
-                                    <InputError message={createForm.errors.name} />
+                                    <InputError
+                                        message={createForm.errors.name}
+                                    />
                                 </div>
 
                                 <div className="flex items-center gap-2">
@@ -294,11 +465,18 @@ export default function VariationTypesIndex({ variation_types }: Props) {
                                         id="create-is-color"
                                         checked={createForm.data.is_color_type}
                                         onCheckedChange={(checked) =>
-                                            createForm.setData('is_color_type', checked === true)
+                                            createForm.setData(
+                                                'is_color_type',
+                                                checked === true,
+                                            )
                                         }
                                     />
-                                    <Label htmlFor="create-is-color" className="cursor-pointer">
-                                        Este tipo representa cores (exibir swatch de cor)
+                                    <Label
+                                        htmlFor="create-is-color"
+                                        className="cursor-pointer"
+                                    >
+                                        Este tipo representa cores ou estampas
+                                        (exibir swatch)
                                     </Label>
                                 </div>
 
@@ -308,14 +486,35 @@ export default function VariationTypesIndex({ variation_types }: Props) {
                                     onAdd={handleCreateAddValue}
                                     onRemove={handleCreateRemoveValue}
                                     onChange={handleCreateValueChange}
+                                    onImageChange={(index, file) =>
+                                        handleValueImageChange(
+                                            createForm,
+                                            index,
+                                            file,
+                                        )
+                                    }
+                                    onImageRemove={(index) =>
+                                        handleValueImageRemove(
+                                            createForm,
+                                            index,
+                                        )
+                                    }
                                     errors={createForm.errors}
+                                    fieldPrefix="create-variation-value"
                                 />
 
                                 <div className="flex justify-end gap-2">
-                                    <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => setCreateOpen(false)}
+                                    >
                                         Cancelar
                                     </Button>
-                                    <Button type="submit" disabled={createForm.processing}>
+                                    <Button
+                                        type="submit"
+                                        disabled={createForm.processing}
+                                    >
                                         Criar variação
                                     </Button>
                                 </div>
@@ -331,17 +530,23 @@ export default function VariationTypesIndex({ variation_types }: Props) {
                                 <TableHead>Nome</TableHead>
                                 <TableHead>Tipo</TableHead>
                                 <TableHead>Valores</TableHead>
-                                <TableHead className="text-right">Ações</TableHead>
+                                <TableHead className="text-right">
+                                    Ações
+                                </TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {variation_types.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="py-10 text-center">
+                                    <TableCell
+                                        colSpan={4}
+                                        className="py-10 text-center"
+                                    >
                                         <div className="flex flex-col items-center gap-2">
                                             <Layers className="h-8 w-8 text-muted-foreground" />
                                             <p className="text-muted-foreground">
-                                                Nenhum tipo de variação cadastrado.
+                                                Nenhum tipo de variação
+                                                cadastrado.
                                             </p>
                                         </div>
                                     </TableCell>
@@ -349,36 +554,62 @@ export default function VariationTypesIndex({ variation_types }: Props) {
                             )}
                             {variation_types.map((type) => (
                                 <TableRow key={type.id}>
-                                    <TableCell className="font-medium">{type.name}</TableCell>
+                                    <TableCell className="font-medium">
+                                        {type.name}
+                                    </TableCell>
                                     <TableCell>
                                         {type.is_color_type ? (
-                                            <Badge variant="outline" className="gap-1">
+                                            <Badge
+                                                variant="outline"
+                                                className="gap-1"
+                                            >
                                                 <span className="inline-block size-2.5 rounded-full bg-gradient-to-r from-red-500 via-green-500 to-blue-500" />
                                                 Cor
                                             </Badge>
                                         ) : (
-                                            <Badge variant="secondary">Texto</Badge>
+                                            <Badge variant="secondary">
+                                                Texto
+                                            </Badge>
                                         )}
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex flex-wrap gap-1">
                                             {type.values.map((v) => (
-                                                <Badge key={v.id} variant="outline" className="gap-1">
-                                                    <ColorSwatch hex={v.hex ?? null} />
+                                                <Badge
+                                                    key={v.id}
+                                                    variant="outline"
+                                                    className="gap-1"
+                                                >
+                                                    <ColorSwatch
+                                                        hex={v.hex ?? null}
+                                                        imageUrl={v.image_url}
+                                                    />
                                                     {v.value}
                                                 </Badge>
                                             ))}
                                             {type.values.length === 0 && (
-                                                <span className="text-sm text-muted-foreground">Sem valores</span>
+                                                <span className="text-sm text-muted-foreground">
+                                                    Sem valores
+                                                </span>
                                             )}
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex justify-end gap-2">
-                                            <Button variant="outline" size="sm" onClick={() => openEdit(type)}>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => openEdit(type)}
+                                            >
                                                 Editar
                                             </Button>
-                                            <Button variant="destructive" size="sm" onClick={() => handleDelete(type.id)}>
+                                            <Button
+                                                variant="destructive"
+                                                size="sm"
+                                                onClick={() =>
+                                                    handleDelete(type.id)
+                                                }
+                                            >
                                                 <Trash2 className="mr-1 h-4 w-4" />
                                                 Excluir
                                             </Button>
@@ -398,10 +629,12 @@ export default function VariationTypesIndex({ variation_types }: Props) {
                     if (!open) setEditingType(null);
                 }}
             >
-                <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+                <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
                     <DialogHeader>
                         <DialogTitle>Editar variação</DialogTitle>
-                        <DialogDescription>Atualize o tipo de variação e seus valores.</DialogDescription>
+                        <DialogDescription>
+                            Atualize o tipo de variação e seus valores.
+                        </DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleEdit} className="space-y-4">
                         <div className="space-y-2">
@@ -410,7 +643,9 @@ export default function VariationTypesIndex({ variation_types }: Props) {
                                 id="edit-name"
                                 placeholder="Ex: Tamanho, Cor, Material..."
                                 value={editForm.data.name}
-                                onChange={(e) => editForm.setData('name', e.target.value)}
+                                onChange={(e) =>
+                                    editForm.setData('name', e.target.value)
+                                }
                             />
                             <InputError message={editForm.errors.name} />
                         </div>
@@ -420,11 +655,18 @@ export default function VariationTypesIndex({ variation_types }: Props) {
                                 id="edit-is-color"
                                 checked={editForm.data.is_color_type}
                                 onCheckedChange={(checked) =>
-                                    editForm.setData('is_color_type', checked === true)
+                                    editForm.setData(
+                                        'is_color_type',
+                                        checked === true,
+                                    )
                                 }
                             />
-                            <Label htmlFor="edit-is-color" className="cursor-pointer">
-                                Este tipo representa cores (exibir swatch de cor)
+                            <Label
+                                htmlFor="edit-is-color"
+                                className="cursor-pointer"
+                            >
+                                Este tipo representa cores ou estampas (exibir
+                                swatch)
                             </Label>
                         </div>
 
@@ -434,14 +676,28 @@ export default function VariationTypesIndex({ variation_types }: Props) {
                             onAdd={handleEditAddValue}
                             onRemove={handleEditRemoveValue}
                             onChange={handleEditValueChange}
+                            onImageChange={(index, file) =>
+                                handleValueImageChange(editForm, index, file)
+                            }
+                            onImageRemove={(index) =>
+                                handleValueImageRemove(editForm, index)
+                            }
                             errors={editForm.errors}
+                            fieldPrefix="edit-variation-value"
                         />
 
                         <div className="flex justify-end gap-2">
-                            <Button type="button" variant="outline" onClick={() => setEditingType(null)}>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setEditingType(null)}
+                            >
                                 Cancelar
                             </Button>
-                            <Button type="submit" disabled={editForm.processing}>
+                            <Button
+                                type="submit"
+                                disabled={editForm.processing}
+                            >
                                 Salvar
                             </Button>
                         </div>

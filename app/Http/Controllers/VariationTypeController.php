@@ -8,6 +8,7 @@ use App\Models\VariationType;
 use App\Services\TenantManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -42,6 +43,8 @@ class VariationTypeController extends Controller
                     'id' => $value->id,
                     'value' => $value->value,
                     'hex' => $value->hex,
+                    'image_path' => $value->image_path,
+                    'image_url' => $this->variationValueImageUrl($value->image_path),
                     'display_order' => $value->display_order,
                 ]),
             ]),
@@ -65,7 +68,8 @@ class VariationTypeController extends Controller
         foreach ($values as $index => $valueData) {
             $type->values()->create([
                 'value' => $valueData['value'],
-                'hex' => $valueData['hex'] ?? null,
+                'hex' => $type->is_color_type ? ($valueData['hex'] ?? null) : null,
+                'image_path' => $type->is_color_type ? $this->storeVariationValueImage($request, $index) : null,
                 'display_order' => $index,
             ]);
         }
@@ -82,24 +86,54 @@ class VariationTypeController extends Controller
             'is_color_type' => $request->validated('is_color_type', false),
         ]);
 
-        // Sync values: delete removed, update existing, create new
         $incomingValues = collect($request->validated('values', []));
         $existingIds = $incomingValues->pluck('id')->filter()->all();
 
-        // Delete values not in the incoming list
-        $variationType->values()->whereNotIn('id', $existingIds)->delete();
+        $removedValues = $variationType->values()
+            ->when($existingIds !== [], fn ($query) => $query->whereNotIn('id', $existingIds))
+            ->get();
+
+        foreach ($removedValues as $removedValue) {
+            $this->deleteVariationValueImage($removedValue->image_path);
+        }
+
+        $variationType->values()
+            ->when($existingIds !== [], fn ($query) => $query->whereNotIn('id', $existingIds))
+            ->delete();
 
         foreach ($incomingValues as $index => $valueData) {
+            $storedImagePath = $variationType->is_color_type
+                ? $this->storeVariationValueImage($request, $index)
+                : null;
+
             if (! empty($valueData['id'])) {
-                $variationType->values()->where('id', $valueData['id'])->update([
+                $value = $variationType->values()->where('id', $valueData['id'])->first();
+
+                if (! $value) {
+                    continue;
+                }
+
+                $imagePath = $value->image_path;
+
+                if ($storedImagePath) {
+                    $this->deleteVariationValueImage($imagePath);
+                    $imagePath = $storedImagePath;
+                } elseif ($request->boolean("values.{$index}.remove_image") || ! $variationType->is_color_type) {
+                    $this->deleteVariationValueImage($imagePath);
+                    $imagePath = null;
+                }
+
+                $value->update([
                     'value' => $valueData['value'],
-                    'hex' => $valueData['hex'] ?? null,
+                    'hex' => $variationType->is_color_type ? ($valueData['hex'] ?? null) : null,
+                    'image_path' => $imagePath,
                     'display_order' => $index,
                 ]);
             } else {
                 $variationType->values()->create([
                     'value' => $valueData['value'],
-                    'hex' => $valueData['hex'] ?? null,
+                    'hex' => $variationType->is_color_type ? ($valueData['hex'] ?? null) : null,
+                    'image_path' => $storedImagePath,
                     'display_order' => $index,
                 ]);
             }
@@ -119,10 +153,37 @@ class VariationTypeController extends Controller
                 ->with('error', 'Não é possível excluir um tipo de variação em uso por produtos.');
         }
 
+        foreach ($variationType->values as $value) {
+            $this->deleteVariationValueImage($value->image_path);
+        }
+
         $variationType->delete();
 
         return redirect()
             ->back()
             ->with('success', 'Tipo de variação excluído com sucesso.');
+    }
+
+    private function storeVariationValueImage(Request $request, int|string $index): ?string
+    {
+        $file = $request->file("values.{$index}.image");
+
+        if (! $file) {
+            return null;
+        }
+
+        return $file->store('variation-values', 's3');
+    }
+
+    private function deleteVariationValueImage(?string $path): void
+    {
+        if ($path) {
+            Storage::disk('s3')->delete($path);
+        }
+    }
+
+    private function variationValueImageUrl(?string $path): ?string
+    {
+        return $path ? Storage::disk('s3')->url($path) : null;
     }
 }

@@ -16,7 +16,16 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { router, useForm } from '@inertiajs/react';
-import { CircleAlert, GripVertical, ImagePlus, Loader2, Package, Palette, Shirt, X } from 'lucide-react';
+import {
+    CircleAlert,
+    GripVertical,
+    ImagePlus,
+    Loader2,
+    Package,
+    Palette,
+    Shirt,
+    X,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ImageCropDialog } from '@/components/image-crop-dialog';
 import { ImageDropzone } from '@/components/image-dropzone';
@@ -55,6 +64,7 @@ interface VariationTypeValue {
     id: number;
     value: string;
     hex?: string | null;
+    image_url?: string | null;
 }
 
 interface VariationTypeOption {
@@ -142,7 +152,15 @@ const steps = [
 
 /** Maps error field prefixes to their respective step index. */
 const STEP_FIELDS: Record<number, string[]> = {
-    0: ['name', 'sku', 'description', 'product_category_id', 'price', 'sort_order', 'is_active'],
+    0: [
+        'name',
+        'sku',
+        'description',
+        'product_category_id',
+        'price',
+        'sort_order',
+        'is_active',
+    ],
     1: ['variations', 'variant_stocks', 'base_quantity'],
     2: ['images', 'video'],
 };
@@ -150,7 +168,9 @@ const STEP_FIELDS: Record<number, string[]> = {
 function getStepForError(errorKey: string): number {
     for (const [stepStr, fields] of Object.entries(STEP_FIELDS)) {
         const stepIdx = Number(stepStr);
-        if (fields.some((f) => errorKey === f || errorKey.startsWith(`${f}.`))) {
+        if (
+            fields.some((f) => errorKey === f || errorKey.startsWith(`${f}.`))
+        ) {
             return stepIdx;
         }
     }
@@ -181,12 +201,17 @@ function buildVariantStocks(
     // Resolve type names for each selected variation
     const resolvedSets = variations
         .map((v) => {
-            const type = variationTypes.find((t) => t.id === v.variation_type_id);
+            const type = variationTypes.find(
+                (t) => t.id === v.variation_type_id,
+            );
             return type ? { name: type.name, values: v.values } : null;
         })
         .filter(Boolean) as { name: string; values: string[] }[];
 
-    if (resolvedSets.length === 0 || resolvedSets.some((s) => s.values.length === 0)) {
+    if (
+        resolvedSets.length === 0 ||
+        resolvedSets.some((s) => s.values.length === 0)
+    ) {
         return [];
     }
 
@@ -204,7 +229,9 @@ function buildVariantStocks(
 
     // Build a lookup from current stocks for quantity/price/sku preservation
     const normalize = (key: Record<string, string>) =>
-        JSON.stringify(Object.entries(key).sort(([a], [b]) => a.localeCompare(b)));
+        JSON.stringify(
+            Object.entries(key).sort(([a], [b]) => a.localeCompare(b)),
+        );
 
     const stockMap = new Map<string, ProductVariantStock>();
     currentStocks.forEach((s) => stockMap.set(normalize(s.variation_key), s));
@@ -277,7 +304,9 @@ function SortableMediaItem({ media, index, onDelete }: SortableMediaItemProps) {
                     <div className="text-sm font-medium">
                         {media.type === 'image' ? 'Imagem' : 'Video'}
                     </div>
-                    <div className="text-xs text-muted-foreground">Ordem {index + 1}</div>
+                    <div className="text-xs text-muted-foreground">
+                        Ordem {index + 1}
+                    </div>
                 </div>
             </div>
             <Button
@@ -363,7 +392,10 @@ export function ProductForm({
         base_quantity: product?.base_quantity ?? 0,
         is_active: product?.is_active ?? true,
         sort_order: product?.sort_order ?? 0,
-        price: product?.price_cents != null ? String(product.price_cents / 100).replace('.', ',') : '',
+        price:
+            product?.price_cents != null
+                ? String(product.price_cents / 100).replace('.', ',')
+                : '',
         variations: initialVariations,
         variant_stocks: initialStocks,
         images: [],
@@ -389,7 +421,11 @@ export function ProductForm({
     const hasVariants = data.variations.length > 0;
 
     const computedStocks = useMemo(() => {
-        return buildVariantStocks(data.variations, variationTypes, data.variant_stocks);
+        return buildVariantStocks(
+            data.variations,
+            variationTypes,
+            data.variant_stocks,
+        );
     }, [data.variations, variationTypes, data.variant_stocks]);
 
     // Steps with validation errors — used for badges + auto-navigation
@@ -438,15 +474,28 @@ export function ProductForm({
 
     const rebuildStocks = (nextVariations: ProductVariation[]) => {
         setData('variations', nextVariations);
-        setData('variant_stocks', buildVariantStocks(nextVariations, variationTypes, data.variant_stocks));
+        setData(
+            'variant_stocks',
+            buildVariantStocks(
+                nextVariations,
+                variationTypes,
+                data.variant_stocks,
+            ),
+        );
     };
 
     const toggleVariationType = (typeId: number, checked: boolean) => {
         if (checked) {
-            if (data.variations.some((v) => v.variation_type_id === typeId)) return;
-            rebuildStocks([...data.variations, { variation_type_id: typeId, values: [] }]);
+            if (data.variations.some((v) => v.variation_type_id === typeId))
+                return;
+            rebuildStocks([
+                ...data.variations,
+                { variation_type_id: typeId, values: [] },
+            ]);
         } else {
-            rebuildStocks(data.variations.filter((v) => v.variation_type_id !== typeId));
+            rebuildStocks(
+                data.variations.filter((v) => v.variation_type_id !== typeId),
+            );
         }
     };
 
@@ -456,7 +505,9 @@ export function ProductForm({
             const hasValue = v.values.includes(value);
             return {
                 ...v,
-                values: hasValue ? v.values.filter((val) => val !== value) : [...v.values, value],
+                values: hasValue
+                    ? v.values.filter((val) => val !== value)
+                    : [...v.values, value],
             };
         });
         rebuildStocks(nextVariations);
@@ -468,10 +519,14 @@ export function ProductForm({
         value: number | string | null,
     ) => {
         const normalize = (k: Record<string, string>) =>
-            JSON.stringify(Object.entries(k).sort(([a], [b]) => a.localeCompare(b)));
+            JSON.stringify(
+                Object.entries(k).sort(([a], [b]) => a.localeCompare(b)),
+            );
         const target = normalize(key);
         const nextStocks = computedStocks.map((stock) =>
-            normalize(stock.variation_key) === target ? { ...stock, [field]: value } : stock,
+            normalize(stock.variation_key) === target
+                ? { ...stock, [field]: value }
+                : stock,
         );
         setData('variant_stocks', nextStocks);
     };
@@ -481,13 +536,10 @@ export function ProductForm({
     // -----------------------------------------------------------------------
     const currentCropFile = cropQueue.length > 0 ? cropQueue[0] : null;
 
-    const handleFilesSelected = useCallback(
-        (files: File[]) => {
-            setCropQueue(files);
-            setCropDialogOpen(true);
-        },
-        [],
-    );
+    const handleFilesSelected = useCallback((files: File[]) => {
+        setCropQueue(files);
+        setCropDialogOpen(true);
+    }, []);
 
     const handleCropped = useCallback(
         (croppedFile: File) => {
@@ -688,7 +740,9 @@ export function ProductForm({
                                     onValueChange={(value) =>
                                         setData(
                                             'product_category_id',
-                                            value === 'none' ? '' : Number(value),
+                                            value === 'none'
+                                                ? ''
+                                                : Number(value),
                                         )
                                     }
                                 >
@@ -696,7 +750,9 @@ export function ProductForm({
                                         <SelectValue placeholder="Sem categoria" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="none">Sem categoria</SelectItem>
+                                        <SelectItem value="none">
+                                            Sem categoria
+                                        </SelectItem>
                                         {categories.map((category) => (
                                             <SelectItem
                                                 key={category.id}
@@ -707,7 +763,9 @@ export function ProductForm({
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                <InputError message={errors.product_category_id} />
+                                <InputError
+                                    message={errors.product_category_id}
+                                />
                             </div>
 
                             <div className="space-y-2">
@@ -738,8 +796,9 @@ export function ProductForm({
                                         setData('price', event.target.value)
                                     }
                                 />
-                                <p className="text-muted-foreground text-xs">
-                                    Deixe em branco para exibir &ldquo;Sob consulta&rdquo;
+                                <p className="text-xs text-muted-foreground">
+                                    Deixe em branco para exibir &ldquo;Sob
+                                    consulta&rdquo;
                                 </p>
                                 <InputError message={errors.price} />
                             </div>
@@ -788,7 +847,9 @@ export function ProductForm({
                                 currentCount={
                                     mode === 'create'
                                         ? data.images.length
-                                        : mediaItems.filter((m) => m.type === 'image').length
+                                        : mediaItems.filter(
+                                              (m) => m.type === 'image',
+                                          ).length
                                 }
                                 disabled={uploadingMedia}
                             />
@@ -808,7 +869,8 @@ export function ProductForm({
                         {mode === 'create' && data.images.length > 0 && (
                             <div className="space-y-2">
                                 <Label className="text-xs text-muted-foreground">
-                                    {data.images.length} foto(s) pronta(s) para envio
+                                    {data.images.length} foto(s) pronta(s) para
+                                    envio
                                 </Label>
                                 <div className="grid grid-cols-[repeat(auto-fill,minmax(5rem,1fr))] gap-2">
                                     {data.images.map((file, index) => (
@@ -828,7 +890,8 @@ export function ProductForm({
                                                     setData(
                                                         'images',
                                                         data.images.filter(
-                                                            (_, i) => i !== index,
+                                                            (_, i) =>
+                                                                i !== index,
                                                         ),
                                                     )
                                                 }
@@ -973,13 +1036,21 @@ export function ProductForm({
                                 <Label>Tipos de variacao</Label>
                                 <div className="flex flex-wrap items-center gap-6">
                                     {variationTypes.map((type) => (
-                                        <label key={type.id} className="flex items-center gap-2 text-sm">
+                                        <label
+                                            key={type.id}
+                                            className="flex items-center gap-2 text-sm"
+                                        >
                                             <Checkbox
                                                 checked={data.variations.some(
-                                                    (v) => v.variation_type_id === type.id,
+                                                    (v) =>
+                                                        v.variation_type_id ===
+                                                        type.id,
                                                 )}
                                                 onCheckedChange={(checked) =>
-                                                    toggleVariationType(type.id, Boolean(checked))
+                                                    toggleVariationType(
+                                                        type.id,
+                                                        Boolean(checked),
+                                                    )
                                                 }
                                             />
                                             {type.name}
@@ -991,8 +1062,9 @@ export function ProductForm({
 
                         {variationTypes.length === 0 && (
                             <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                                Nenhum tipo de variacao cadastrado. Cadastre tipos de variacao nas
-                                configuracoes do fabricante.
+                                Nenhum tipo de variacao cadastrado. Cadastre
+                                tipos de variacao nas configuracoes do
+                                fabricante.
                             </div>
                         )}
 
@@ -1007,30 +1079,57 @@ export function ProductForm({
                                     <Label>Valores de {type.name}</Label>
                                     <div className="flex flex-wrap gap-2">
                                         {type.values.map((val) => {
-                                            const isSelected = variation.values.includes(val.value);
+                                            const isSelected =
+                                                variation.values.includes(
+                                                    val.value,
+                                                );
                                             return (
                                                 <Button
                                                     key={val.id}
                                                     type="button"
-                                                    variant={isSelected ? 'default' : 'outline'}
+                                                    variant={
+                                                        isSelected
+                                                            ? 'default'
+                                                            : 'outline'
+                                                    }
                                                     onClick={() =>
-                                                        toggleVariationValue(type.id, val.value)
+                                                        toggleVariationValue(
+                                                            type.id,
+                                                            val.value,
+                                                        )
                                                     }
                                                     className="gap-2"
                                                 >
-                                                    {type.is_color_type && val.hex && (
-                                                        <span
-                                                            className="inline-block h-4 w-4 rounded-full border"
-                                                            style={{ backgroundColor: val.hex }}
-                                                        />
-                                                    )}
+                                                    {type.is_color_type &&
+                                                        val.image_url && (
+                                                            <img
+                                                                src={
+                                                                    val.image_url
+                                                                }
+                                                                alt=""
+                                                                className="h-4 w-4 rounded-full border object-cover"
+                                                            />
+                                                        )}
+                                                    {type.is_color_type &&
+                                                        !val.image_url &&
+                                                        val.hex && (
+                                                            <span
+                                                                className="inline-block h-4 w-4 rounded-full border"
+                                                                style={{
+                                                                    backgroundColor:
+                                                                        val.hex,
+                                                                }}
+                                                            />
+                                                        )}
                                                     {val.value}
                                                 </Button>
                                             );
                                         })}
                                     </div>
                                     <InputError
-                                        message={errors[`variations.${vIdx}.values`]}
+                                        message={
+                                            errors[`variations.${vIdx}.values`]
+                                        }
                                     />
                                 </div>
                             );
@@ -1043,7 +1142,9 @@ export function ProductForm({
                         {/* Base quantity (no variations) */}
                         {!hasVariants && (
                             <div className="space-y-2">
-                                <Label htmlFor="base_quantity">Quantidade base</Label>
+                                <Label htmlFor="base_quantity">
+                                    Quantidade base
+                                </Label>
                                 <Input
                                     id="base_quantity"
                                     type="number"
@@ -1071,25 +1172,35 @@ export function ProductForm({
                                 <div className="grid gap-3">
                                     {computedStocks.map((stock) => (
                                         <div
-                                            key={JSON.stringify(stock.variation_key)}
+                                            key={JSON.stringify(
+                                                stock.variation_key,
+                                            )}
                                             className="flex flex-wrap items-center gap-3 rounded-md border p-3"
                                         >
                                             <div className="flex flex-wrap gap-1.5">
-                                                {Object.entries(stock.variation_key).map(
-                                                    ([typeName, value]) => {
-                                                        const type = variationTypes.find(
-                                                            (t) => t.name === typeName,
+                                                {Object.entries(
+                                                    stock.variation_key,
+                                                ).map(([typeName, value]) => {
+                                                    const type =
+                                                        variationTypes.find(
+                                                            (t) =>
+                                                                t.name ===
+                                                                typeName,
                                                         );
-                                                        const val = type?.values.find(
-                                                            (v) => v.value === value,
+                                                    const val =
+                                                        type?.values.find(
+                                                            (v) =>
+                                                                v.value ===
+                                                                value,
                                                         );
-                                                        return (
-                                                            <Badge
-                                                                key={typeName}
-                                                                variant="outline"
-                                                                className="gap-1.5"
-                                                            >
-                                                                {type?.is_color_type && val?.hex && (
+                                                    return (
+                                                        <Badge
+                                                            key={typeName}
+                                                            variant="outline"
+                                                            className="gap-1.5"
+                                                        >
+                                                            {type?.is_color_type &&
+                                                                val?.hex && (
                                                                     <span
                                                                         className="inline-block h-3 w-3 rounded-full border"
                                                                         style={{
@@ -1098,11 +1209,10 @@ export function ProductForm({
                                                                         }}
                                                                     />
                                                                 )}
-                                                                {value}
-                                                            </Badge>
-                                                        );
-                                                    },
-                                                )}
+                                                            {value}
+                                                        </Badge>
+                                                    );
+                                                })}
                                             </div>
                                             <div className="flex flex-1 flex-wrap items-center gap-2">
                                                 <Input
@@ -1114,7 +1224,9 @@ export function ProductForm({
                                                         updateStockField(
                                                             stock.variation_key,
                                                             'quantity',
-                                                            Number(e.target.value),
+                                                            Number(
+                                                                e.target.value,
+                                                            ),
                                                         )
                                                     }
                                                     className="w-24"
@@ -1133,7 +1245,9 @@ export function ProductForm({
                                                 />
                                                 <Input
                                                     placeholder="SKU variacao"
-                                                    value={stock.sku_variant ?? ''}
+                                                    value={
+                                                        stock.sku_variant ?? ''
+                                                    }
                                                     onChange={(e) =>
                                                         updateStockField(
                                                             stock.variation_key,
@@ -1153,8 +1267,8 @@ export function ProductForm({
 
                         {hasVariants && computedStocks.length === 0 && (
                             <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                                Selecione ao menos um valor em cada tipo de variacao para gerar a
-                                grade de estoque.
+                                Selecione ao menos um valor em cada tipo de
+                                variacao para gerar a grade de estoque.
                             </div>
                         )}
                     </CardContent>
@@ -1163,7 +1277,11 @@ export function ProductForm({
 
             <div className="flex flex-wrap items-center justify-between gap-4">
                 {step > 0 ? (
-                    <Button type="button" variant="outline" onClick={handlePrev}>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handlePrev}
+                    >
                         Voltar
                     </Button>
                 ) : (
@@ -1177,7 +1295,9 @@ export function ProductForm({
                     )}
                     {step === steps.length - 1 && (
                         <Button type="submit" disabled={processing}>
-                            {processing && <Loader2 className="mr-2 size-4 animate-spin" />}
+                            {processing && (
+                                <Loader2 className="mr-2 size-4 animate-spin" />
+                            )}
                             {processing
                                 ? mode === 'create'
                                     ? 'Criando...'

@@ -10,6 +10,7 @@ use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\VariationType;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -163,13 +164,13 @@ class PublicCatalogController extends Controller
 
     private function normalizedSearchExpression(string $column): string
     {
-        $expression = $column;
+        $expression = "lower({$column})";
 
         foreach ($this->accentReplacementMap() as $accent => $replacement) {
             $expression = "replace({$expression}, '{$accent}', '{$replacement}')";
         }
 
-        return "lower({$expression})";
+        return $expression;
     }
 
     /**
@@ -183,54 +184,30 @@ class PublicCatalogController extends Controller
             'â' => 'a',
             'ã' => 'a',
             'ä' => 'a',
-            'Á' => 'A',
-            'À' => 'A',
-            'Â' => 'A',
-            'Ã' => 'A',
-            'Ä' => 'A',
             'é' => 'e',
             'è' => 'e',
             'ê' => 'e',
             'ë' => 'e',
-            'É' => 'E',
-            'È' => 'E',
-            'Ê' => 'E',
-            'Ë' => 'E',
             'í' => 'i',
             'ì' => 'i',
             'î' => 'i',
             'ï' => 'i',
-            'Í' => 'I',
-            'Ì' => 'I',
-            'Î' => 'I',
-            'Ï' => 'I',
             'ó' => 'o',
             'ò' => 'o',
             'ô' => 'o',
             'õ' => 'o',
             'ö' => 'o',
-            'Ó' => 'O',
-            'Ò' => 'O',
-            'Ô' => 'O',
-            'Õ' => 'O',
-            'Ö' => 'O',
             'ú' => 'u',
             'ù' => 'u',
             'û' => 'u',
             'ü' => 'u',
-            'Ú' => 'U',
-            'Ù' => 'U',
-            'Û' => 'U',
-            'Ü' => 'U',
             'ç' => 'c',
-            'Ç' => 'C',
             'ñ' => 'n',
-            'Ñ' => 'N',
         ];
     }
 
     /**
-     * @return array{categories: array<int, array{id: int, name: string}>, variation_types: array<int, array{id: int, name: string, is_color_type: bool, values: array<int, array{value: string, hex: string|null}>}>}
+     * @return array{categories: array<int, array{id: int, name: string}>, variation_types: array<int, array{id: int, name: string, is_color_type: bool, values: array<int, array{value: string, hex: string|null, image_url: string|null}>}>}
      */
     private function buildFilterOptions(CatalogSetting $setting): array
     {
@@ -268,6 +245,7 @@ class PublicCatalogController extends Controller
                     ->map(fn ($value) => [
                         'value' => $value->value,
                         'hex' => $value->hex,
+                        'image_url' => $value->image_path ? Storage::disk('s3')->url($value->image_path) : null,
                     ])
                     ->values()
                     ->all();

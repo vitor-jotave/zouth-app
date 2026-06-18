@@ -92,7 +92,7 @@ class ProductComboController extends Controller
         $product->load(['media', 'category', 'comboItems.componentProduct', 'comboItems.componentVariantStock']);
 
         return Inertia::render('manufacturer/products/combos/edit', [
-            'product' => new ProductResource($product),
+            'product' => (new ProductResource($product))->resolve(),
             'categories' => $this->categories($manufacturer->id),
             'component_products' => $this->componentProducts($manufacturer->id),
         ]);

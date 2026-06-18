@@ -50,10 +50,40 @@ it('creates a product without variants', function () {
     $this->assertDatabaseHas('products', [
         'sku' => 'SKU-BASIC',
         'manufacturer_id' => $this->manufacturer->id,
+        'description' => 'Produto simples',
         'base_quantity' => 12,
     ]);
 
     expect(ProductVariantStock::count())->toBe(0);
+});
+
+it('updates and reloads product description', function () {
+    $product = Product::factory()->forManufacturer($this->manufacturer)->withoutCategory()->create([
+        'description' => null,
+        'base_quantity' => 8,
+    ]);
+
+    $response = $this->put('/manufacturer/products/'.$product->id, [
+        'name' => $product->name,
+        'sku' => $product->sku,
+        'description' => 'Descrição atualizada do produto.',
+        'base_quantity' => 8,
+        'variations' => [],
+        'variant_stocks' => [],
+    ]);
+
+    $response->assertRedirect();
+
+    $this->assertDatabaseHas('products', [
+        'id' => $product->id,
+        'description' => 'Descrição atualizada do produto.',
+    ]);
+
+    $this->get('/manufacturer/products/'.$product->id.'/edit')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('product.description', 'Descrição atualizada do produto.')
+        );
 });
 
 it('creates single-type variants with stock rows', function () {
