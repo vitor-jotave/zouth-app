@@ -2,19 +2,34 @@ import { Head, router } from '@inertiajs/react';
 import {
     Box,
     Check,
+    ChevronLeft,
+    ChevronRight,
     ClipboardCopy,
+    Filter,
+    Heart,
     Minus,
     Package,
     Plus,
+    RotateCcw,
+    Search,
+    SlidersHorizontal,
     ShoppingCart,
     Sparkles,
     Star,
-    Heart,
     Trash2,
     X,
     Zap,
 } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import {
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+    type CSSProperties,
+    type FormEvent,
+    type MouseEvent,
+    type ReactNode,
+} from 'react';
 import { Pagination } from '@/components/pagination';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,6 +53,7 @@ import {
 import {
     Sheet,
     SheetContent,
+    SheetDescription,
     SheetFooter,
     SheetHeader,
     SheetTitle,
@@ -125,16 +141,43 @@ interface Props {
     catalog_settings: CatalogSettings;
     products: Paginated<Product>;
     catalog_token: string;
+    filters: CatalogFilters;
+    filter_options: CatalogFilterOptions;
+}
+
+interface CatalogFilters {
+    search: string;
+    category_id?: string | null;
+    variations: Record<string, string[]>;
+}
+
+interface CatalogFilterOptions {
+    categories: Array<{
+        id: number;
+        name: string;
+    }>;
+    variation_types: Array<{
+        id: number;
+        name: string;
+        is_color_type: boolean;
+        values: Array<{
+            value: string;
+            hex?: string | null;
+        }>;
+    }>;
 }
 
 interface CartItem {
+    key: string;
     product: Product;
     quantity: number;
     size?: string | null;
     color?: string | null;
+    selected_variations?: Record<string, string>;
 }
 
 type DocumentType = 'cpf' | 'cnpj';
+type SelectedVariations = Record<number, Record<string, string>>;
 
 const BRAZILIAN_STATES = [
     'AC',
@@ -172,6 +215,16 @@ interface LayoutProps {
     products: Paginated<Product>;
     tokens: typeof LAYOUT_TOKENS.minimal;
     onAddToCart: (product: Product) => void;
+    addedProductId: number | null;
+    selectedVariations: SelectedVariations;
+    catalogToken: string;
+    filters: CatalogFilters;
+    filterOptions: CatalogFilterOptions;
+    onSelectVariation: (
+        productId: number,
+        variationName: string,
+        value: string,
+    ) => void;
 }
 
 function formatPrice(priceCents?: number | null): string {
@@ -193,6 +246,593 @@ function variationSummary(key: Record<string, string> | null): string | null {
     return Object.entries(key)
         .map(([name, value]) => `${name}: ${value}`)
         .join(' / ');
+}
+
+function productHasRequiredSelection(
+    product: Product,
+    selectedValues: Record<string, string>,
+): boolean {
+    return product.variations.every((variation) =>
+        Boolean(selectedValues[variation.type_name]),
+    );
+}
+
+function cartOptionsFromSelection(
+    product: Product,
+    selectedValues: Record<string, string>,
+): Pick<CartItem, 'size' | 'color' | 'selected_variations'> {
+    const selected_variations =
+        product.variations.length > 0 ? selectedValues : undefined;
+    const colorVariation = product.variations.find(
+        (variation) => variation.is_color_type,
+    );
+    const sizeVariation = product.variations.find(
+        (variation) => !variation.is_color_type,
+    );
+
+    return {
+        color: colorVariation
+            ? (selectedValues[colorVariation.type_name] ?? null)
+            : null,
+        size: sizeVariation
+            ? (selectedValues[sizeVariation.type_name] ?? null)
+            : null,
+        selected_variations,
+    };
+}
+
+function cartItemKey(
+    productId: number,
+    selectedVariations?: Record<string, string>,
+): string {
+    if (!selectedVariations || Object.keys(selectedVariations).length === 0) {
+        return String(productId);
+    }
+
+    const variationKey = Object.entries(selectedVariations)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([name, value]) => `${name}:${value}`)
+        .join('|');
+
+    return `${productId}:${variationKey}`;
+}
+
+function ProductVariations({
+    product,
+    selectedValues,
+    onSelect,
+}: {
+    product: Product;
+    selectedValues: Record<string, string>;
+    onSelect: (variationName: string, value: string) => void;
+}) {
+    if (product.variations.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className="space-y-2">
+            {product.variations.map((variation) => {
+                const visibleValues = variation.values.slice(0, 6);
+                const remainingCount =
+                    variation.values.length - visibleValues.length;
+
+                return (
+                    <div key={variation.type_name}>
+                        <div className="flex flex-wrap gap-1.5">
+                            {visibleValues.map((value) => (
+                                <button
+                                    type="button"
+                                    key={`${variation.type_name}-${value.value}`}
+                                    aria-label={`${variation.type_name}: ${value.value}`}
+                                    title={`${variation.type_name}: ${value.value}`}
+                                    onClick={() =>
+                                        onSelect(
+                                            variation.type_name,
+                                            value.value,
+                                        )
+                                    }
+                                    className={`inline-flex h-8 min-w-8 items-center justify-center border bg-white/75 text-[11px] font-semibold transition-all hover:scale-105 hover:bg-white ${
+                                        selectedValues[variation.type_name] ===
+                                        value.value
+                                            ? 'border-black shadow-md ring-2 ring-black/20'
+                                            : 'border-black/10 ring-1 ring-black/5'
+                                    } ${
+                                        variation.is_color_type
+                                            ? 'rounded-full p-1'
+                                            : 'rounded-md px-2'
+                                    }`}
+                                >
+                                    {variation.is_color_type ? (
+                                        <span
+                                            className="h-full w-full rounded-full border border-black/10"
+                                            style={{
+                                                backgroundColor:
+                                                    value.hex ?? '#e5e7eb',
+                                            }}
+                                        />
+                                    ) : (
+                                        value.value
+                                    )}
+                                </button>
+                            ))}
+                            {remainingCount > 0 && (
+                                <span className="inline-flex min-h-6 items-center rounded-full bg-white/50 px-2 py-0.5 text-[11px] font-medium opacity-70 ring-1 ring-black/10">
+                                    +{remainingCount}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+function ProductImageSlider({
+    product,
+    className,
+    imageClassName,
+    placeholderClassName = 'flex h-full items-center justify-center',
+    placeholderIconClassName = 'h-12 w-12 opacity-20',
+    placeholderStyle,
+    style,
+    children,
+}: {
+    product: Product;
+    className: string;
+    imageClassName: string;
+    placeholderClassName?: string;
+    placeholderIconClassName?: string;
+    placeholderStyle?: CSSProperties;
+    style?: CSSProperties;
+    children?: ReactNode;
+}) {
+    const productImages = product.images ?? [];
+    const images =
+        productImages.length > 0
+            ? productImages
+            : product.primary_image
+              ? [product.primary_image]
+              : [];
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const currentImage = images[currentIndex] ?? null;
+    const hasMultipleImages = images.length > 1;
+
+    useEffect(() => {
+        setCurrentIndex(0);
+    }, [product.id, images.length]);
+
+    const showPrevious = (event: MouseEvent<HTMLButtonElement>) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        setCurrentIndex((current) =>
+            current === 0 ? images.length - 1 : current - 1,
+        );
+    };
+
+    const showNext = (event: MouseEvent<HTMLButtonElement>) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        setCurrentIndex((current) =>
+            current === images.length - 1 ? 0 : current + 1,
+        );
+    };
+
+    const selectImage = (
+        event: MouseEvent<HTMLButtonElement>,
+        index: number,
+    ) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        setCurrentIndex(index);
+    };
+
+    return (
+        <div className={`relative overflow-hidden ${className}`} style={style}>
+            {currentImage ? (
+                <img
+                    src={currentImage}
+                    alt={product.name}
+                    className={imageClassName}
+                />
+            ) : (
+                <div className={placeholderClassName} style={placeholderStyle}>
+                    <Box className={placeholderIconClassName} />
+                </div>
+            )}
+
+            {children}
+
+            {hasMultipleImages && (
+                <>
+                    <button
+                        type="button"
+                        onClick={showPrevious}
+                        className="absolute top-1/2 left-2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-gray-900 shadow-md transition hover:bg-white"
+                        aria-label="Imagem anterior"
+                    >
+                        <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={showNext}
+                        className="absolute top-1/2 right-2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-gray-900 shadow-md transition hover:bg-white"
+                        aria-label="Próxima imagem"
+                    >
+                        <ChevronRight className="h-4 w-4" />
+                    </button>
+                    <div className="absolute bottom-2 left-1/2 z-10 flex -translate-x-1/2 gap-1.5">
+                        {images.map((image, index) => (
+                            <button
+                                type="button"
+                                key={`${image}-${index}`}
+                                onClick={(event) => selectImage(event, index)}
+                                className={`h-2 rounded-full shadow-sm transition-all ${
+                                    index === currentIndex
+                                        ? 'w-5 bg-white'
+                                        : 'w-2 bg-white/60 hover:bg-white/90'
+                                }`}
+                                aria-label={`Ver imagem ${index + 1}`}
+                            />
+                        ))}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
+function normalizeSelectedFilterVariations(
+    variations: Record<string, string[]> | undefined,
+): Record<string, string[]> {
+    return Object.fromEntries(
+        Object.entries(variations ?? {})
+            .map(([typeId, values]) => [
+                typeId,
+                Array.isArray(values) ? values.filter(Boolean) : [],
+            ])
+            .filter(([, values]) => values.length > 0),
+    );
+}
+
+function countActiveFilters(filters: CatalogFilters): number {
+    const variationCount = Object.values(filters.variations ?? {}).reduce(
+        (total, values) => total + values.length,
+        0,
+    );
+
+    return (
+        (filters.search?.trim() ? 1 : 0) +
+        (filters.category_id ? 1 : 0) +
+        variationCount
+    );
+}
+
+function CatalogFiltersDrawer({
+    catalogToken,
+    filters,
+    filterOptions,
+}: {
+    catalogToken: string;
+    filters: CatalogFilters;
+    filterOptions: CatalogFilterOptions;
+}) {
+    const [open, setOpen] = useState(false);
+    const [search, setSearch] = useState(filters.search ?? '');
+    const [categoryId, setCategoryId] = useState(filters.category_id ?? null);
+    const [selectedVariations, setSelectedVariations] = useState<
+        Record<string, string[]>
+    >(normalizeSelectedFilterVariations(filters.variations));
+    const selectedVariationsRef = useRef<Record<string, string[]>>(
+        normalizeSelectedFilterVariations(filters.variations),
+    );
+
+    useEffect(() => {
+        setSearch(filters.search ?? '');
+        setCategoryId(filters.category_id ?? null);
+        const normalizedVariations = normalizeSelectedFilterVariations(
+            filters.variations,
+        );
+        selectedVariationsRef.current = normalizedVariations;
+        setSelectedVariations(normalizedVariations);
+    }, [filters.search, filters.category_id, filters.variations]);
+
+    const appliedCount = countActiveFilters(filters);
+    const draftCount = countActiveFilters({
+        search,
+        category_id: categoryId,
+        variations: selectedVariations,
+    });
+
+    const toggleVariationValue = (typeId: number, value: string) => {
+        const key = String(typeId);
+        const current = selectedVariationsRef.current;
+        const currentValues = current[key] ?? [];
+        const nextValues = currentValues.includes(value)
+            ? currentValues.filter((item) => item !== value)
+            : [...currentValues, value];
+        let nextState: Record<string, string[]>;
+
+        if (nextValues.length === 0) {
+            const remaining = { ...current };
+            delete remaining[key];
+
+            nextState = remaining;
+        } else {
+            nextState = {
+                ...current,
+                [key]: nextValues,
+            };
+        }
+
+        selectedVariationsRef.current = nextState;
+        setSelectedVariations(nextState);
+    };
+
+    const applyFilters = (event?: FormEvent<HTMLFormElement>) => {
+        event?.preventDefault();
+
+        const payload: Record<string, string | Record<string, string[]>> = {};
+        const trimmedSearch = search.trim();
+        const variations = normalizeSelectedFilterVariations(
+            selectedVariationsRef.current,
+        );
+
+        if (trimmedSearch) {
+            payload.search = trimmedSearch;
+        }
+
+        if (categoryId) {
+            payload.category_id = categoryId;
+        }
+
+        if (Object.keys(variations).length > 0) {
+            payload.variations = variations;
+        }
+
+        router.get(`/catalog/${catalogToken}`, payload, {
+            preserveState: false,
+            preserveScroll: true,
+            replace: true,
+            onSuccess: () => setOpen(false),
+        });
+    };
+
+    const clearFilters = () => {
+        setSearch('');
+        setCategoryId(null);
+        selectedVariationsRef.current = {};
+        setSelectedVariations({});
+
+        router.get(
+            `/catalog/${catalogToken}`,
+            {},
+            {
+                preserveState: false,
+                preserveScroll: true,
+                replace: true,
+                onSuccess: () => setOpen(false),
+            },
+        );
+    };
+
+    return (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white/55 p-3 shadow-sm ring-1 ring-black/5 backdrop-blur-md">
+            <div className="flex items-center gap-2 text-sm font-medium opacity-80">
+                <Filter className="h-4 w-4" />
+                <span>
+                    {appliedCount > 0
+                        ? `${appliedCount} filtros ativos`
+                        : 'Filtros'}
+                </span>
+            </div>
+            <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:scale-[1.02]"
+                style={{ backgroundColor: 'var(--brand-primary)' }}
+            >
+                <SlidersHorizontal className="h-4 w-4" />
+                Filtros
+                {appliedCount > 0 && (
+                    <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs">
+                        {appliedCount}
+                    </span>
+                )}
+            </button>
+
+            <Sheet open={open} onOpenChange={setOpen}>
+                <SheetContent side="left" className="w-[92vw] sm:max-w-md">
+                    <SheetHeader>
+                        <SheetTitle>Filtros</SheetTitle>
+                        <SheetDescription>
+                            Refine os produtos do catálogo
+                        </SheetDescription>
+                    </SheetHeader>
+
+                    <form
+                        id="catalog-filter-form"
+                        onSubmit={applyFilters}
+                        className="flex min-h-0 flex-1 flex-col"
+                    >
+                        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pb-24">
+                            <div className="space-y-2">
+                                <Label htmlFor="catalog-search">Buscar</Label>
+                                <div className="relative">
+                                    <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 opacity-45" />
+                                    <Input
+                                        id="catalog-search"
+                                        value={search}
+                                        onChange={(event) =>
+                                            setSearch(event.target.value)
+                                        }
+                                        placeholder="Nome ou SKU"
+                                        className="pl-9"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Categoria</Label>
+                                <Select
+                                    value={categoryId ?? 'all'}
+                                    onValueChange={(value) =>
+                                        setCategoryId(
+                                            value === 'all' ? null : value,
+                                        )
+                                    }
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Todas categorias" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">
+                                            Todas categorias
+                                        </SelectItem>
+                                        {filterOptions.categories.map(
+                                            (category) => (
+                                                <SelectItem
+                                                    key={category.id}
+                                                    value={String(category.id)}
+                                                >
+                                                    {category.name}
+                                                </SelectItem>
+                                            ),
+                                        )}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {filterOptions.variation_types.map((type) => {
+                                const selectedValues =
+                                    selectedVariations[String(type.id)] ?? [];
+
+                                return (
+                                    <div key={type.id} className="space-y-3">
+                                        <Label>{type.name}</Label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {type.values.map((value) => {
+                                                const isSelected =
+                                                    selectedValues.includes(
+                                                        value.value,
+                                                    );
+
+                                                if (type.is_color_type) {
+                                                    return (
+                                                        <button
+                                                            type="button"
+                                                            key={value.value}
+                                                            onClick={() =>
+                                                                toggleVariationValue(
+                                                                    type.id,
+                                                                    value.value,
+                                                                )
+                                                            }
+                                                            className={`inline-flex h-9 w-9 items-center justify-center rounded-full border bg-white p-1 transition hover:scale-105 ${
+                                                                isSelected
+                                                                    ? 'border-black shadow-md ring-2 ring-black/20'
+                                                                    : 'border-black/10 ring-1 ring-black/5'
+                                                            }`}
+                                                            aria-label={`${type.name}: ${value.value}`}
+                                                            title={value.value}
+                                                        >
+                                                            <span
+                                                                className="h-full w-full rounded-full border border-black/10"
+                                                                style={{
+                                                                    backgroundColor:
+                                                                        value.hex ??
+                                                                        '#e5e7eb',
+                                                                }}
+                                                            />
+                                                        </button>
+                                                    );
+                                                }
+
+                                                return (
+                                                    <button
+                                                        type="button"
+                                                        key={value.value}
+                                                        onClick={() =>
+                                                            toggleVariationValue(
+                                                                type.id,
+                                                                value.value,
+                                                            )
+                                                        }
+                                                        className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${
+                                                            isSelected
+                                                                ? 'border-black bg-black text-white shadow-sm'
+                                                                : 'border-black/10 bg-white/70 hover:bg-white'
+                                                        }`}
+                                                    >
+                                                        {value.value}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="sticky bottom-0 grid gap-2 border-t bg-white/95 p-4 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur">
+                            <Button
+                                type="submit"
+                                className="w-full bg-[#0F766E] text-white shadow-sm hover:bg-[#115E59]"
+                            >
+                                Aplicar filtros
+                                {draftCount > 0 && (
+                                    <span className="ml-1 rounded-full bg-white/20 px-2 py-0.5 text-xs">
+                                        {draftCount}
+                                    </span>
+                                )}
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full gap-2"
+                                onClick={clearFilters}
+                            >
+                                <RotateCcw className="h-4 w-4" />
+                                Limpar filtros
+                            </Button>
+                        </div>
+                    </form>
+                </SheetContent>
+            </Sheet>
+        </div>
+    );
+}
+
+function AddToCartContent({
+    isAdded,
+    canAdd,
+}: {
+    isAdded: boolean;
+    canAdd: boolean;
+}) {
+    if (isAdded) {
+        return (
+            <>
+                <Check className="h-4 w-4" />
+                Adicionado
+            </>
+        );
+    }
+
+    if (!canAdd) {
+        return <>Selecione opções</>;
+    }
+
+    return (
+        <>
+            <Plus className="h-4 w-4" />
+            Adicionar
+        </>
+    );
 }
 
 function ComboSummary({ product }: { product: Product }) {
@@ -262,6 +902,12 @@ function MinimalLayout({
     products,
     tokens,
     onAddToCart,
+    addedProductId,
+    selectedVariations,
+    catalogToken,
+    filters,
+    filterOptions,
+    onSelectVariation,
 }: LayoutProps) {
     const heroEnabled =
         settings.sections?.find((s) => s.type === 'hero')?.enabled ?? true;
@@ -314,6 +960,14 @@ function MinimalLayout({
                 </header>
             )}
 
+            {productGridEnabled && (
+                <CatalogFiltersDrawer
+                    catalogToken={catalogToken}
+                    filters={filters}
+                    filterOptions={filterOptions}
+                />
+            )}
+
             {/* Grid de produtos minimalista */}
             {productGridEnabled &&
                 (products.data.length === 0 ? (
@@ -331,86 +985,109 @@ function MinimalLayout({
                                     : '2.5rem',
                         }}
                     >
-                        {products.data.map((product) => (
-                            <article
-                                key={product.id}
-                                className="group overflow-hidden bg-white/50 backdrop-blur-sm transition-all hover:bg-white/70"
-                                style={{
-                                    borderRadius: tokens.radius,
-                                    border:
-                                        settings.card_style === 'flat'
-                                            ? '2px solid rgba(0,0,0,0.08)'
-                                            : '1px solid rgba(0,0,0,0.05)',
-                                    boxShadow:
-                                        settings.card_style === 'soft'
-                                            ? '0 2px 8px rgba(0,0,0,0.04)'
-                                            : 'none',
-                                }}
-                            >
-                                <div className="aspect-square overflow-hidden bg-gray-100">
-                                    {product.primary_image ? (
-                                        <img
-                                            src={product.primary_image}
-                                            alt={product.name}
-                                            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                                        />
-                                    ) : (
-                                        <div className="flex h-full items-center justify-center">
-                                            <Box className="h-12 w-12 opacity-20" />
-                                        </div>
-                                    )}
-                                </div>
-                                <div
-                                    style={{ padding: tokens.cardPadding }}
-                                    className="space-y-2"
+                        {products.data.map((product) => {
+                            const isAdded = addedProductId === product.id;
+                            const selectedValues =
+                                selectedVariations[product.id] ?? {};
+                            const canAdd = productHasRequiredSelection(
+                                product,
+                                selectedValues,
+                            );
+
+                            return (
+                                <article
+                                    key={product.id}
+                                    className="group overflow-hidden bg-white/50 backdrop-blur-sm transition-all hover:bg-white/70"
+                                    style={{
+                                        borderRadius: tokens.radius,
+                                        border:
+                                            settings.card_style === 'flat'
+                                                ? '2px solid rgba(0,0,0,0.08)'
+                                                : '1px solid rgba(0,0,0,0.05)',
+                                        boxShadow:
+                                            settings.card_style === 'soft'
+                                                ? '0 2px 8px rgba(0,0,0,0.04)'
+                                                : 'none',
+                                    }}
                                 >
-                                    <h3 className="font-semibold">
-                                        {product.name}
-                                    </h3>
-                                    <p className="text-xs opacity-60">
-                                        SKU {product.sku}
-                                    </p>
-                                    <p
-                                        className={`text-sm font-semibold ${product.price_cents == null ? 'italic opacity-50' : ''}`}
-                                        style={
-                                            product.price_cents != null
-                                                ? {
-                                                      color: 'var(--brand-primary)',
-                                                  }
-                                                : {}
-                                        }
+                                    <ProductImageSlider
+                                        product={product}
+                                        className="aspect-4/5 bg-gray-100"
+                                        imageClassName="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                    />
+                                    <div
+                                        style={{ padding: tokens.cardPadding }}
+                                        className="space-y-2"
                                     >
-                                        {formatPrice(product.price_cents)}
-                                    </p>
-                                    {product.product_type === 'combo' && (
-                                        <Badge variant="outline">Combo</Badge>
-                                    )}
-                                    <ComboSummary product={product} />
-                                    <div className="flex items-center justify-between">
-                                        {product.category && (
-                                            <Badge
-                                                variant="outline"
-                                                className="text-xs"
-                                            >
-                                                {product.category}
+                                        <h3 className="font-semibold">
+                                            {product.name}
+                                        </h3>
+                                        <p className="text-xs opacity-60">
+                                            SKU {product.sku}
+                                        </p>
+                                        <p
+                                            className={`text-sm font-semibold ${product.price_cents == null ? 'italic opacity-50' : ''}`}
+                                            style={
+                                                product.price_cents != null
+                                                    ? {
+                                                          color: 'var(--brand-primary)',
+                                                      }
+                                                    : {}
+                                            }
+                                        >
+                                            {formatPrice(product.price_cents)}
+                                        </p>
+                                        {product.product_type === 'combo' && (
+                                            <Badge variant="outline">
+                                                Combo
                                             </Badge>
                                         )}
-                                        <button
-                                            type="button"
-                                            onClick={() => onAddToCart(product)}
-                                            className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80"
-                                            style={{
-                                                backgroundColor:
-                                                    'var(--brand-primary)',
-                                            }}
-                                        >
-                                            <Plus className="h-3 w-3" />{' '}
-                                            Adicionar
-                                        </button>
+                                        <ComboSummary product={product} />
+                                        <ProductVariations
+                                            product={product}
+                                            selectedValues={selectedValues}
+                                            onSelect={(variationName, value) =>
+                                                onSelectVariation(
+                                                    product.id,
+                                                    variationName,
+                                                    value,
+                                                )
+                                            }
+                                        />
+                                        <div className="flex items-center justify-between">
+                                            {product.category && (
+                                                <Badge
+                                                    variant="outline"
+                                                    className="text-xs"
+                                                >
+                                                    {product.category}
+                                                </Badge>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    canAdd &&
+                                                    onAddToCart(product)
+                                                }
+                                                disabled={!canAdd}
+                                                aria-live="polite"
+                                                className={`inline-flex min-w-28 items-center justify-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${isAdded ? 'scale-[1.02] shadow-md' : ''}`}
+                                                style={{
+                                                    backgroundColor: isAdded
+                                                        ? 'var(--brand-accent)'
+                                                        : 'var(--brand-primary)',
+                                                }}
+                                            >
+                                                <AddToCartContent
+                                                    isAdded={isAdded}
+                                                    canAdd={canAdd}
+                                                />
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
-                            </article>
-                        ))}
+                                </article>
+                            );
+                        })}
                     </div>
                 ))}
 
@@ -428,6 +1105,12 @@ function PlayfulLayout({
     products,
     tokens,
     onAddToCart,
+    addedProductId,
+    selectedVariations,
+    catalogToken,
+    filters,
+    filterOptions,
+    onSelectVariation,
 }: LayoutProps) {
     const heroEnabled =
         settings.sections?.find((s) => s.type === 'hero')?.enabled ?? true;
@@ -518,6 +1201,14 @@ function PlayfulLayout({
                 </header>
             )}
 
+            {productGridEnabled && (
+                <CatalogFiltersDrawer
+                    catalogToken={catalogToken}
+                    filters={filters}
+                    filterOptions={filterOptions}
+                />
+            )}
+
             {/* Grid de produtos colorido */}
             {productGridEnabled &&
                 (products.data.length === 0 ? (
@@ -549,115 +1240,130 @@ function PlayfulLayout({
                                     : '2rem',
                         }}
                     >
-                        {products.data.map((product, index) => (
-                            <article
-                                key={product.id}
-                                className="group overflow-hidden bg-white shadow-lg transition-all duration-300 hover:-translate-y-2"
-                                style={{
-                                    borderRadius: `calc(${tokens.radius} * 2)`,
-                                    border: `3px solid ${index % 3 === 0 ? settings.primary_color : index % 3 === 1 ? settings.accent_color : settings.secondary_color}20`,
-                                    boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-                                }}
-                            >
-                                <div className="relative aspect-square overflow-hidden">
-                                    {product.primary_image ? (
-                                        <img
-                                            src={product.primary_image}
-                                            alt={product.name}
-                                            className="h-full w-full object-cover transition-all duration-500 group-hover:scale-110 group-hover:rotate-2"
-                                        />
-                                    ) : (
-                                        <div
-                                            className="flex h-full items-center justify-center bg-gradient-to-br"
-                                            style={{
-                                                background: `linear-gradient(135deg, ${settings.primary_color}10, ${settings.accent_color}10)`,
-                                            }}
-                                        >
-                                            <Box className="h-16 w-16 opacity-20" />
-                                        </div>
-                                    )}
-                                    <div className="absolute top-3 right-3">
-                                        <div
-                                            className="flex h-10 w-10 items-center justify-center rounded-full text-white shadow-lg"
-                                            style={{
-                                                backgroundColor:
-                                                    settings.accent_color,
-                                            }}
-                                        >
-                                            <Zap className="h-5 w-5" />
-                                        </div>
-                                    </div>
-                                </div>
-                                <div
+                        {products.data.map((product, index) => {
+                            const isAdded = addedProductId === product.id;
+                            const selectedValues =
+                                selectedVariations[product.id] ?? {};
+                            const canAdd = productHasRequiredSelection(
+                                product,
+                                selectedValues,
+                            );
+
+                            return (
+                                <article
+                                    key={product.id}
+                                    className="group overflow-hidden bg-white shadow-lg transition-all duration-300 hover:-translate-y-2"
                                     style={{
-                                        padding: `calc(${tokens.cardPadding} * 1.2)`,
+                                        borderRadius: `calc(${tokens.radius} * 2)`,
+                                        border: `3px solid ${index % 3 === 0 ? settings.primary_color : index % 3 === 1 ? settings.accent_color : settings.secondary_color}20`,
+                                        boxShadow:
+                                            '0 8px 24px rgba(0,0,0,0.12)',
                                     }}
-                                    className="space-y-3"
                                 >
-                                    <h3
-                                        className="text-lg font-bold"
-                                        style={{
-                                            color: settings.primary_color,
+                                    <ProductImageSlider
+                                        product={product}
+                                        className="aspect-4/5"
+                                        imageClassName="h-full w-full object-cover transition-all duration-500 group-hover:scale-110 group-hover:rotate-2"
+                                        placeholderClassName="flex h-full items-center justify-center bg-gradient-to-br"
+                                        placeholderIconClassName="h-16 w-16 opacity-20"
+                                        placeholderStyle={{
+                                            background: `linear-gradient(135deg, ${settings.primary_color}10, ${settings.accent_color}10)`,
                                         }}
                                     >
-                                        {product.name}
-                                    </h3>
-                                    <p className="text-xs font-semibold tracking-wide uppercase opacity-50">
-                                        SKU {product.sku}
-                                    </p>
-                                    <p
-                                        className={`text-base font-bold ${product.price_cents == null ? 'italic opacity-50' : ''}`}
-                                        style={
-                                            product.price_cents != null
-                                                ? {
-                                                      color: settings.accent_color,
-                                                  }
-                                                : {}
-                                        }
-                                    >
-                                        {formatPrice(product.price_cents)}
-                                    </p>
-                                    {product.product_type === 'combo' && (
-                                        <Badge variant="outline">Combo</Badge>
-                                    )}
-                                    <ComboSummary product={product} />
-                                    <div className="flex flex-wrap gap-2">
-                                        {product.category && (
-                                            <Badge
-                                                className="text-white"
+                                        <div className="absolute top-3 right-3">
+                                            <div
+                                                className="flex h-10 w-10 items-center justify-center rounded-full text-white shadow-lg"
                                                 style={{
                                                     backgroundColor:
-                                                        settings.secondary_color,
+                                                        settings.accent_color,
                                                 }}
                                             >
-                                                {product.category}
-                                            </Badge>
-                                        )}
-                                        {product.variations.length > 0 && (
-                                            <Badge variant="outline">
-                                                {product.variations.reduce(
-                                                    (sum, v) =>
-                                                        sum + v.values.length,
-                                                    0,
-                                                )}{' '}
-                                                variações
-                                            </Badge>
-                                        )}
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => onAddToCart(product)}
-                                        className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-full px-4 py-2 text-sm font-bold text-white shadow-md transition-transform hover:scale-105"
+                                                <Zap className="h-5 w-5" />
+                                            </div>
+                                        </div>
+                                    </ProductImageSlider>
+                                    <div
                                         style={{
-                                            backgroundColor:
-                                                settings.accent_color,
+                                            padding: `calc(${tokens.cardPadding} * 1.2)`,
                                         }}
+                                        className="space-y-3"
                                     >
-                                        <Plus className="h-4 w-4" /> Adicionar
-                                    </button>
-                                </div>
-                            </article>
-                        ))}
+                                        <h3
+                                            className="text-lg font-bold"
+                                            style={{
+                                                color: settings.primary_color,
+                                            }}
+                                        >
+                                            {product.name}
+                                        </h3>
+                                        <p className="text-xs font-semibold tracking-wide uppercase opacity-50">
+                                            SKU {product.sku}
+                                        </p>
+                                        <p
+                                            className={`text-base font-bold ${product.price_cents == null ? 'italic opacity-50' : ''}`}
+                                            style={
+                                                product.price_cents != null
+                                                    ? {
+                                                          color: settings.accent_color,
+                                                      }
+                                                    : {}
+                                            }
+                                        >
+                                            {formatPrice(product.price_cents)}
+                                        </p>
+                                        {product.product_type === 'combo' && (
+                                            <Badge variant="outline">
+                                                Combo
+                                            </Badge>
+                                        )}
+                                        <ComboSummary product={product} />
+                                        <ProductVariations
+                                            product={product}
+                                            selectedValues={selectedValues}
+                                            onSelect={(variationName, value) =>
+                                                onSelectVariation(
+                                                    product.id,
+                                                    variationName,
+                                                    value,
+                                                )
+                                            }
+                                        />
+                                        <div className="flex flex-wrap gap-2">
+                                            {product.category && (
+                                                <Badge
+                                                    className="text-white"
+                                                    style={{
+                                                        backgroundColor:
+                                                            settings.secondary_color,
+                                                    }}
+                                                >
+                                                    {product.category}
+                                                </Badge>
+                                            )}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                canAdd && onAddToCart(product)
+                                            }
+                                            disabled={!canAdd}
+                                            aria-live="polite"
+                                            className={`mt-2 inline-flex w-full items-center justify-center gap-1 rounded-full px-4 py-2 text-sm font-bold text-white shadow-md transition-all hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50 ${isAdded ? 'scale-[1.02] ring-2 ring-black/10' : ''}`}
+                                            style={{
+                                                backgroundColor: isAdded
+                                                    ? settings.primary_color
+                                                    : settings.accent_color,
+                                            }}
+                                        >
+                                            <AddToCartContent
+                                                isAdded={isAdded}
+                                                canAdd={canAdd}
+                                            />
+                                        </button>
+                                    </div>
+                                </article>
+                            );
+                        })}
                     </div>
                 ))}
 
@@ -675,6 +1381,12 @@ function BoutiqueLayout({
     products,
     tokens,
     onAddToCart,
+    addedProductId,
+    selectedVariations,
+    catalogToken,
+    filters,
+    filterOptions,
+    onSelectVariation,
 }: LayoutProps) {
     const heroEnabled =
         settings.sections?.find((s) => s.type === 'hero')?.enabled ?? true;
@@ -754,6 +1466,14 @@ function BoutiqueLayout({
                 </header>
             )}
 
+            {productGridEnabled && (
+                <CatalogFiltersDrawer
+                    catalogToken={catalogToken}
+                    filters={filters}
+                    filterOptions={filterOptions}
+                />
+            )}
+
             {/* Grid de produtos elegante */}
             {productGridEnabled &&
                 (products.data.length === 0 ? (
@@ -776,122 +1496,107 @@ function BoutiqueLayout({
                                     : '3rem',
                         }}
                     >
-                        {products.data.map((product) => (
-                            <article
-                                key={product.id}
-                                className="group space-y-4"
-                            >
-                                <div
-                                    className="relative aspect-[3/4] overflow-hidden bg-gray-50 shadow-md transition-all duration-700 group-hover:shadow-2xl"
-                                    style={{
-                                        borderRadius: tokens.radius,
-                                    }}
+                        {products.data.map((product) => {
+                            const isAdded = addedProductId === product.id;
+                            const selectedValues =
+                                selectedVariations[product.id] ?? {};
+                            const canAdd = productHasRequiredSelection(
+                                product,
+                                selectedValues,
+                            );
+
+                            return (
+                                <article
+                                    key={product.id}
+                                    className="group space-y-4"
                                 >
-                                    {product.primary_image ? (
-                                        <img
-                                            src={product.primary_image}
-                                            alt={product.name}
-                                            className="h-full w-full object-cover transition-all duration-700 group-hover:scale-105"
-                                        />
-                                    ) : (
-                                        <div className="flex h-full items-center justify-center">
-                                            <Box className="h-16 w-16 opacity-10" />
-                                        </div>
-                                    )}
-                                    {product.total_stock === 0 && (
-                                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-                                            <span className="font-serif text-sm tracking-widest text-white uppercase">
-                                                Esgotado
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="space-y-3">
-                                    <div>
-                                        {product.category && (
-                                            <p className="mb-1 text-xs font-semibold tracking-wider uppercase opacity-50">
-                                                {product.category}
-                                            </p>
-                                        )}
-                                        <h3 className="font-serif text-xl font-light tracking-wide">
-                                            {product.name}
-                                        </h3>
-                                        <p
-                                            className={`mt-1 text-base font-semibold ${product.price_cents == null ? 'font-light italic opacity-50' : ''}`}
-                                            style={
-                                                product.price_cents != null
-                                                    ? {
-                                                          color: 'var(--brand-primary)',
-                                                      }
-                                                    : {}
-                                            }
-                                        >
-                                            {formatPrice(product.price_cents)}
-                                        </p>
-                                    </div>
-                                    {product.product_type === 'combo' && (
-                                        <Badge variant="outline">Combo</Badge>
-                                    )}
-                                    <ComboSummary product={product} />
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-xs opacity-40">
-                                            SKU {product.sku}
-                                        </span>
-                                        {product.variations
-                                            .filter((v) => !v.is_color_type)
-                                            .map((v) => (
-                                                <span key={v.type_name}>
-                                                    <span className="opacity-20">
-                                                        •
-                                                    </span>{' '}
-                                                    <span className="text-xs opacity-60">
-                                                        {v.values
-                                                            .map(
-                                                                (val) =>
-                                                                    val.value,
-                                                            )
-                                                            .join(', ')}
-                                                    </span>
-                                                </span>
-                                            ))}
-                                    </div>
-                                    {product.variations
-                                        .filter((v) => v.is_color_type)
-                                        .map((v) => (
-                                            <div
-                                                key={v.type_name}
-                                                className="flex gap-2"
-                                            >
-                                                {v.values
-                                                    .slice(0, 5)
-                                                    .map((val, i) => (
-                                                        <div
-                                                            key={i}
-                                                            className="h-6 w-6 rounded-full border-2 border-white shadow-sm"
-                                                            style={{
-                                                                backgroundColor:
-                                                                    val.hex ??
-                                                                    '#ccc',
-                                                            }}
-                                                            title={val.value}
-                                                        />
-                                                    ))}
-                                            </div>
-                                        ))}
-                                    <button
-                                        type="button"
-                                        onClick={() => onAddToCart(product)}
-                                        className="mt-1 inline-flex items-center gap-1 text-xs font-semibold tracking-wider uppercase opacity-60 transition-opacity hover:opacity-100"
+                                    <ProductImageSlider
+                                        product={product}
+                                        className="aspect-4/5 bg-gray-50 shadow-md transition-all duration-700 group-hover:shadow-2xl"
+                                        imageClassName="h-full w-full object-cover transition-all duration-700 group-hover:scale-105"
+                                        placeholderIconClassName="h-16 w-16 opacity-10"
                                         style={{
-                                            color: 'var(--brand-primary)',
+                                            borderRadius: tokens.radius,
                                         }}
                                     >
-                                        <Plus className="h-3 w-3" /> Adicionar
-                                        ao pedido
-                                    </button>
-                                </div>
-                            </article>
-                        ))}
+                                        {product.total_stock === 0 && (
+                                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                                                <span className="font-serif text-sm tracking-widest text-white uppercase">
+                                                    Esgotado
+                                                </span>
+                                            </div>
+                                        )}
+                                    </ProductImageSlider>
+                                    <div className="space-y-3">
+                                        <div>
+                                            {product.category && (
+                                                <p className="mb-1 text-xs font-semibold tracking-wider uppercase opacity-50">
+                                                    {product.category}
+                                                </p>
+                                            )}
+                                            <h3 className="font-serif text-xl font-light tracking-wide">
+                                                {product.name}
+                                            </h3>
+                                            <p
+                                                className={`mt-1 text-base font-semibold ${product.price_cents == null ? 'font-light italic opacity-50' : ''}`}
+                                                style={
+                                                    product.price_cents != null
+                                                        ? {
+                                                              color: 'var(--brand-primary)',
+                                                          }
+                                                        : {}
+                                                }
+                                            >
+                                                {formatPrice(
+                                                    product.price_cents,
+                                                )}
+                                            </p>
+                                        </div>
+                                        {product.product_type === 'combo' && (
+                                            <Badge variant="outline">
+                                                Combo
+                                            </Badge>
+                                        )}
+                                        <ComboSummary product={product} />
+                                        <ProductVariations
+                                            product={product}
+                                            selectedValues={selectedValues}
+                                            onSelect={(variationName, value) =>
+                                                onSelectVariation(
+                                                    product.id,
+                                                    variationName,
+                                                    value,
+                                                )
+                                            }
+                                        />
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs opacity-40">
+                                                SKU {product.sku}
+                                            </span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                canAdd && onAddToCart(product)
+                                            }
+                                            disabled={!canAdd}
+                                            aria-live="polite"
+                                            className={`mt-1 inline-flex w-fit items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold tracking-wider uppercase transition-all hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40 ${isAdded ? 'opacity-100 shadow-sm ring-1 ring-current/20' : 'opacity-60'}`}
+                                            style={{
+                                                color: isAdded
+                                                    ? 'var(--brand-accent)'
+                                                    : 'var(--brand-primary)',
+                                            }}
+                                        >
+                                            <AddToCartContent
+                                                isAdded={isAdded}
+                                                canAdd={canAdd}
+                                            />
+                                        </button>
+                                    </div>
+                                </article>
+                            );
+                        })}
                     </div>
                 ))}
 
@@ -907,6 +1612,8 @@ export default function PublicCatalog({
     catalog_settings,
     products,
     catalog_token,
+    filters,
+    filter_options,
 }: Props) {
     const brandFont =
         fontMap[catalog_settings.font_family] ?? fontMap['space-grotesk'];
@@ -918,6 +1625,9 @@ export default function PublicCatalog({
     // Cart state
     const [cart, setCart] = useState<CartItem[]>([]);
     const [cartOpen, setCartOpen] = useState(false);
+    const [addedProductId, setAddedProductId] = useState<number | null>(null);
+    const [selectedVariations, setSelectedVariations] =
+        useState<SelectedVariations>({});
     const [checkoutOpen, setCheckoutOpen] = useState(false);
     const [orderSuccess, setOrderSuccess] = useState<{
         token: string;
@@ -957,38 +1667,83 @@ export default function PublicCatalog({
 
     const hasAnyPriced = cart.some((item) => item.product.price_cents != null);
 
-    const addToCart = useCallback((product: Product) => {
-        setCart((prev) => {
-            const existing = prev.find(
-                (item) => item.product.id === product.id,
-            );
-            if (existing) {
-                return prev.map((item) =>
-                    item.product.id === product.id
-                        ? { ...item, quantity: item.quantity + 1 }
-                        : item,
-                );
-            }
-            return [...prev, { product, quantity: 1 }];
-        });
-    }, []);
+    useEffect(() => {
+        if (addedProductId === null) {
+            return;
+        }
 
-    const updateQuantity = (productId: number, quantity: number) => {
+        const timeout = window.setTimeout(() => {
+            setAddedProductId(null);
+        }, 2200);
+
+        return () => window.clearTimeout(timeout);
+    }, [addedProductId]);
+
+    const selectVariation = useCallback(
+        (productId: number, variationName: string, value: string) => {
+            setSelectedVariations((current) => ({
+                ...current,
+                [productId]: {
+                    ...(current[productId] ?? {}),
+                    [variationName]: value,
+                },
+            }));
+        },
+        [],
+    );
+
+    const addToCart = useCallback(
+        (product: Product) => {
+            const selectedValues = selectedVariations[product.id] ?? {};
+
+            if (!productHasRequiredSelection(product, selectedValues)) {
+                return;
+            }
+
+            const options = cartOptionsFromSelection(product, selectedValues);
+            const key = cartItemKey(product.id, options.selected_variations);
+
+            setAddedProductId(product.id);
+
+            setCart((prev) => {
+                const existing = prev.find((item) => item.key === key);
+
+                if (existing) {
+                    return prev.map((item) =>
+                        item.key === key
+                            ? { ...item, quantity: item.quantity + 1 }
+                            : item,
+                    );
+                }
+
+                return [
+                    ...prev,
+                    {
+                        key,
+                        product,
+                        quantity: 1,
+                        ...options,
+                    },
+                ];
+            });
+        },
+        [selectedVariations],
+    );
+
+    const updateQuantity = (itemKey: string, quantity: number) => {
         if (quantity <= 0) {
-            setCart((prev) =>
-                prev.filter((item) => item.product.id !== productId),
-            );
+            setCart((prev) => prev.filter((item) => item.key !== itemKey));
             return;
         }
         setCart((prev) =>
             prev.map((item) =>
-                item.product.id === productId ? { ...item, quantity } : item,
+                item.key === itemKey ? { ...item, quantity } : item,
             ),
         );
     };
 
-    const removeFromCart = (productId: number) => {
-        setCart((prev) => prev.filter((item) => item.product.id !== productId));
+    const removeFromCart = (itemKey: string) => {
+        setCart((prev) => prev.filter((item) => item.key !== itemKey));
     };
 
     const handleCheckout = () => {
@@ -1053,7 +1808,7 @@ export default function PublicCatalog({
         }
     };
 
-    const backgroundStyle: React.CSSProperties = {};
+    const backgroundStyle: CSSProperties = {};
 
     if (
         catalog_settings.background_mode === 'gradient' &&
@@ -1138,6 +1893,12 @@ export default function PublicCatalog({
                         products={products}
                         tokens={tokens}
                         onAddToCart={addToCart}
+                        addedProductId={addedProductId}
+                        selectedVariations={selectedVariations}
+                        catalogToken={catalog_token}
+                        filters={filters}
+                        filterOptions={filter_options}
+                        onSelectVariation={selectVariation}
                     />
                 )}
                 {preset === 'boutique' && (
@@ -1147,6 +1908,12 @@ export default function PublicCatalog({
                         products={products}
                         tokens={tokens}
                         onAddToCart={addToCart}
+                        addedProductId={addedProductId}
+                        selectedVariations={selectedVariations}
+                        catalogToken={catalog_token}
+                        filters={filters}
+                        filterOptions={filter_options}
+                        onSelectVariation={selectVariation}
                     />
                 )}
                 {preset === 'minimal' && (
@@ -1156,6 +1923,12 @@ export default function PublicCatalog({
                         products={products}
                         tokens={tokens}
                         onAddToCart={addToCart}
+                        addedProductId={addedProductId}
+                        selectedVariations={selectedVariations}
+                        catalogToken={catalog_token}
+                        filters={filters}
+                        filterOptions={filter_options}
+                        onSelectVariation={selectVariation}
                     />
                 )}
             </div>
@@ -1165,11 +1938,14 @@ export default function PublicCatalog({
                 <button
                     type="button"
                     onClick={() => setCartOpen(true)}
-                    className="fixed right-6 bottom-6 z-40 flex items-center gap-2 rounded-full px-5 py-3 text-white shadow-xl transition-transform hover:scale-105"
+                    className="fixed right-6 bottom-6 z-40 flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-xl transition-transform hover:scale-105"
                     style={{ backgroundColor: catalog_settings.primary_color }}
                 >
                     <ShoppingCart className="h-5 w-5" />
-                    <span className="font-bold">{cartTotal}</span>
+                    <span>Ver pedido</span>
+                    <span className="rounded-full bg-white/20 px-2 py-0.5 font-bold">
+                        {cartTotal}
+                    </span>
                 </button>
             )}
 
@@ -1178,6 +1954,10 @@ export default function PublicCatalog({
                 <SheetContent side="right" className="flex flex-col">
                     <SheetHeader>
                         <SheetTitle>Seu pedido ({cartTotal} itens)</SheetTitle>
+                        <SheetDescription>
+                            Revise os itens selecionados antes de finalizar o
+                            pedido.
+                        </SheetDescription>
                     </SheetHeader>
 
                     <div className="flex-1 overflow-y-auto">
@@ -1189,7 +1969,7 @@ export default function PublicCatalog({
                             <div className="space-y-3 px-4">
                                 {cart.map((item) => (
                                     <div
-                                        key={item.product.id}
+                                        key={item.key}
                                         className="flex items-center gap-3 rounded-lg border p-3"
                                     >
                                         <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-md bg-gray-100">
@@ -1215,6 +1995,13 @@ export default function PublicCatalog({
                                             <p className="text-xs text-muted-foreground">
                                                 SKU {item.product.sku}
                                             </p>
+                                            {item.selected_variations && (
+                                                <p className="text-xs text-muted-foreground">
+                                                    {variationSummary(
+                                                        item.selected_variations,
+                                                    )}
+                                                </p>
+                                            )}
                                             <p className="text-xs font-medium">
                                                 {formatPrice(
                                                     item.product.price_cents,
@@ -1231,7 +2018,7 @@ export default function PublicCatalog({
                                                 className="h-7 w-7"
                                                 onClick={() =>
                                                     updateQuantity(
-                                                        item.product.id,
+                                                        item.key,
                                                         item.quantity - 1,
                                                     )
                                                 }
@@ -1247,7 +2034,7 @@ export default function PublicCatalog({
                                                 className="h-7 w-7"
                                                 onClick={() =>
                                                     updateQuantity(
-                                                        item.product.id,
+                                                        item.key,
                                                         item.quantity + 1,
                                                     )
                                                 }
@@ -1260,7 +2047,7 @@ export default function PublicCatalog({
                                             size="icon"
                                             className="h-7 w-7 text-destructive"
                                             onClick={() =>
-                                                removeFromCart(item.product.id)
+                                                removeFromCart(item.key)
                                             }
                                         >
                                             <Trash2 className="h-3 w-3" />

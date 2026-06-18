@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+
+<html class="light" lang="pt-br"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>KidsCatalog - Wholesales Portal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary-container": "#d4e6e5",
+                        "on-secondary-container": "#576867",
+                        "on-surface": "#071e27",
+                        "on-secondary": "#ffffff",
+                        "on-primary": "#ffffff",
+                        "tertiary-fixed-dim": "#c6c6c7",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-fixed-dim": "#7ad7c6",
+                        "outline": "#6e7a76",
+                        "error-container": "#ffdad6",
+                        "on-surface-variant": "#3e4946",
+                        "surface-variant": "#cfe6f2",
+                        "on-primary-fixed-variant": "#005047",
+                        "on-tertiary-fixed-variant": "#454747",
+                        "on-background": "#071e27",
+                        "secondary": "#516161",
+                        "surface-container": "#dbf1fe",
+                        "secondary-fixed-dim": "#b8cac9",
+                        "surface-container-highest": "#cfe6f2",
+                        "inverse-on-surface": "#dff4ff",
+                        "outline-variant": "#bdc9c5",
+                        "on-tertiary-container": "#ededed",
+                        "secondary-fixed": "#d4e6e5",
+                        "primary": "#005e53",
+                        "surface-dim": "#c7dde9",
+                        "surface-bright": "#f3faff",
+                        "inverse-surface": "#1e333c",
+                        "surface-tint": "#006b5e",
+                        "on-error-container": "#93000a",
+                        "primary-fixed": "#97f3e2",
+                        "on-primary-container": "#a1feec",
+                        "surface-container-low": "#e6f6ff",
+                        "surface-container-high": "#d5ecf8",
+                        "error": "#ba1a1a",
+                        "surface": "#f3faff",
+                        "on-secondary-fixed": "#0e1e1e",
+                        "tertiary-container": "#6a6b6b",
+                        "on-secondary-fixed-variant": "#3a4a49",
+                        "on-tertiary-fixed": "#1a1c1c",
+                        "on-tertiary": "#ffffff",
+                        "inverse-primary": "#7ad7c6",
+                        "on-primary-fixed": "#00201b",
+                        "tertiary": "#515353",
+                        "primary-container": "#00796b",
+                        "on-error": "#ffffff",
+                        "tertiary-fixed": "#e2e2e2",
+                        "background": "#f3faff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "container-max": "1280px",
+                        "stack-lg": "24px",
+                        "margin-mobile": "16px",
+                        "stack-md": "16px",
+                        "gutter": "24px",
+                        "stack-sm": "8px"
+                    },
+                    "fontFamily": {
+                        "price-tag": ["Plus Jakarta Sans"],
+                        "sku-text": ["Plus Jakarta Sans"],
+                        "headline-md": ["Plus Jakarta Sans"],
+                        "headline-lg": ["Plus Jakarta Sans"],
+                        "body-md": ["Plus Jakarta Sans"],
+                        "body-sm": ["Plus Jakarta Sans"],
+                        "label-bold": ["Plus Jakarta Sans"],
+                        "title-md": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "price-tag": ["16px", {"lineHeight": "24px", "letterSpacing": "0.5px", "fontWeight": "700"}],
+                        "sku-text": ["11px", {"lineHeight": "16px", "letterSpacing": "0.2px", "fontWeight": "500"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "700"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "fontWeight": "700"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "body-sm": ["12px", {"lineHeight": "18px", "fontWeight": "400"}],
+                        "label-bold": ["14px", {"lineHeight": "20px", "fontWeight": "700"}],
+                        "title-md": ["18px", {"lineHeight": "24px", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #f3faff;
+            background-image: radial-gradient(#005e531a 1px, transparent 0);
+            background-size: 40px 40px;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .product-card-shadow {
+            box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.05);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #bdc9c5;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="text-on-surface">
+<!-- TopAppBar -->
+<header class="fixed top-0 left-0 right-0 z-50 bg-surface-bright shadow-sm h-16 flex items-center">
+<div class="flex justify-between items-center w-full px-margin-mobile md:px-gutter max-w-container-max mx-auto h-16">
+<div class="flex items-center gap-stack-md">
+<span class="text-headline-md font-headline-md font-extrabold text-on-surface">KidsCatalog</span>
+<nav class="hidden lg:flex items-center gap-gutter ml-stack-lg">
+<a class="text-primary border-b-2 border-primary font-label-bold transition-colors duration-200" href="#">Novidades</a>
+<a class="text-on-surface-variant font-body-md hover:text-primary transition-colors duration-200" href="#">Verão 2026</a>
+<a class="text-on-surface-variant font-body-md hover:text-primary transition-colors duration-200" href="#">Conjuntos</a>
+<a class="text-on-surface-variant font-body-md hover:text-primary transition-colors duration-200" href="#">Acessórios</a>
+</nav>
+</div>
+<div class="flex items-center gap-stack-md">
+<div class="relative hidden md:block">
+<input class="bg-surface-container-low border-none rounded-full py-2 pl-10 pr-4 w-64 text-body-md focus:ring-2 focus:ring-primary outline-none transition-all" placeholder="Buscar produtos..." type="text"/>
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+</div>
+<button class="flex items-center gap-2 bg-primary text-on-primary px-4 py-2 rounded-full font-label-bold active:scale-95 transition-all">
+<span class="material-symbols-outlined">shopping_cart</span>
+<span class="hidden sm:inline">Ver Pedido</span>
+<span class="bg-primary-fixed text-on-primary-fixed rounded-full w-5 h-5 flex items-center justify-center text-[10px]">1</span>
+</button>
+</div>
+</div>
+</header>
+<div class="flex pt-16">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-16 h-[calc(100vh-64px)] w-64 hidden md:flex flex-col bg-surface-container-low border-r border-outline-variant p-stack-md overflow-y-auto custom-scrollbar">
+<div class="mb-stack-lg">
+<h2 class="font-title-md text-title-md text-on-surface mb-1">Filtros</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Refine sua busca</p>
+</div>
+<div class="space-y-stack-md">
+<nav class="space-y-1">
+<span class="block px-3 py-1 font-label-bold text-on-surface-variant text-xs uppercase tracking-wider">Categorias</span>
+<a class="flex items-center gap-3 px-3 py-2 bg-secondary-container text-on-secondary-container rounded-lg font-label-bold transition-all" href="#">
+<span class="material-symbols-outlined">category</span>
+<span>Todas Categorias</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant font-body-md hover:bg-surface-container-high rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined">straighten</span>
+<span>Tamanho P</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant font-body-md hover:bg-surface-container-high rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined">straighten</span>
+<span>Tamanho M</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant font-body-md hover:bg-surface-container-high rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined">straighten</span>
+<span>Tamanho G</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant font-body-md hover:bg-surface-container-high rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined">sell</span>
+<span>Outlet</span>
+</a>
+</nav>
+<div class="pt-4 border-t border-outline-variant">
+<span class="block px-3 py-1 font-label-bold text-on-surface-variant text-xs uppercase tracking-wider mb-2">Cores</span>
+<div class="flex flex-wrap gap-2 px-3">
+<button class="w-6 h-6 rounded-full border border-outline-variant bg-blue-500 ring-2 ring-offset-2 ring-transparent active:ring-primary transition-all"></button>
+<button class="w-6 h-6 rounded-full border border-outline-variant bg-green-500 ring-transparent transition-all"></button>
+<button class="w-6 h-6 rounded-full border border-outline-variant bg-red-400 ring-transparent transition-all"></button>
+<button class="w-6 h-6 rounded-full border border-outline-variant bg-yellow-400 ring-transparent transition-all"></button>
+</div>
+</div>
+</div>
+<div class="mt-auto pt-stack-lg">
+<button class="w-full py-2 border border-primary text-primary font-label-bold rounded-lg hover:bg-primary-fixed transition-colors">
+                    Limpar Filtros
+                </button>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 ml-0 md:ml-64 p-margin-mobile md:p-gutter">
+<div class="max-w-container-max mx-auto">
+<!-- Page Header Info -->
+<div class="flex justify-between items-end mb-stack-lg">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface">Catálogo de Verão</h1>
+<p class="text-on-surface-variant font-body-md">Descubra as novidades exclusivas para atacado.</p>
+</div>
+<span class="bg-primary-container text-on-primary-container px-3 py-1 rounded-full text-label-bold">
+                        4 produtos encontrados
+                    </span>
+</div>
+<!-- Product Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-stack-lg">
+<!-- Product Card 1 -->
+<div class="group bg-white rounded-xl product-card-shadow overflow-hidden flex flex-col transition-all hover:-translate-y-1">
+<div class="relative aspect-[4/5] overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A bright and airy lifestyle photograph of a smiling young girl wearing a light blue ruffled blouse and dark teal shorts. She stands on a lush green lawn under soft daylight, embodying a cheerful, modern children's clothing brand style. The lighting is high-key and professional, focusing on the vibrant fabric colors." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBDYIPPuJc8CQz73-IpiLVo1x9V2fwagxtIsqss7DdWMBxhdMkZ24u_PMAB-D0KK-2phtboWs0Kvfd_zI6zHbOjtKlIHY-2XNFwgb-Cg7GPjzAvCDzJLIjOs88F2RLERxkJOnOWYj-duxHXJR41ay7KAmnG6SMKiSaKHTLe0KwVUXQdp7VN7SJ-JrtO6hdtGpBD4lH86Svt73N1-qwbJONjuyPyRa_-Ep_35-l-Y2oewOb3BkIsp_HZdShJGYZS4DzbqfI3D4CTAZM"/>
+<div class="absolute top-3 left-3">
+<span class="bg-secondary-container text-on-secondary-container px-2 py-1 rounded text-body-sm font-label-bold">Verão 2026</span>
+</div>
+</div>
+<div class="p-stack-md flex flex-col flex-1">
+<div class="mb-stack-sm">
+<p class="font-sku-text text-sku-text text-secondary mb-1">SKU 987654</p>
+<h3 class="font-title-md text-title-md text-on-surface leading-tight">Bacacao H</h3>
+</div>
+<!-- Variant Selection -->
+<div class="mt-auto">
+<div class="flex items-center justify-between mb-stack-md">
+<div class="flex gap-2">
+<div class="w-4 h-4 rounded-full bg-blue-500 ring-2 ring-primary ring-offset-2"></div>
+<div class="w-4 h-4 rounded-full bg-green-500"></div>
+</div>
+<div class="flex gap-1">
+<span class="w-7 h-7 flex items-center justify-center text-xs font-label-bold border border-outline-variant rounded hover:border-primary cursor-pointer transition-colors">P</span>
+<span class="w-7 h-7 flex items-center justify-center text-xs font-label-bold bg-primary text-white border border-primary rounded cursor-pointer">M</span>
+<span class="w-7 h-7 flex items-center justify-center text-xs font-label-bold border border-outline-variant rounded hover:border-primary cursor-pointer transition-colors">G</span>
+</div>
+</div>
+<div class="flex items-center justify-between gap-4">
+<span class="font-price-tag text-price-tag text-primary">R$ 129,00</span>
+<button class="bg-primary text-on-primary h-10 px-4 rounded-lg flex items-center gap-2 font-label-bold active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>Adicionar</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Product Card 2 -->
+<div class="group bg-white rounded-xl product-card-shadow overflow-hidden flex flex-col transition-all hover:-translate-y-1">
+<div class="relative aspect-[4/5] overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A clean studio portrait of a young boy dressed in a formal but playful outfit consisting of a white shirt, blue suspenders, and matching trousers with a small bowtie. The aesthetic is gentle and professional, against a neutral white background that highlights the clothing details and high-quality tailoring." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAqRlpSTdRBE-0ZmvaFAwPdeupzAWASMIwdnFTREnY_vjwqnFuV8bbdAbhcwNgOzi821jcIWKe0RzLDRRs5Hl1rBEemQv3IzkHeJ69IsSChlrw16MEYfq45LZvk_b-J59UGmchjS2nYutjyCnPh8-9H4KtpE4ZtAlS2LpdU3gfeKlGnLRflFgQmU5aNirUknmmKHkJPWQN_JNKUcDjmxOJxtYhfXW0HzoOV7U4pTzuenj2C_0yO2zG8HFsnT1CWntOBfoNtZfawB5w"/>
+<div class="absolute top-3 left-3">
+<span class="bg-secondary-container text-on-secondary-container px-2 py-1 rounded text-body-sm font-label-bold">Verão 2026</span>
+</div>
+</div>
+<div class="p-stack-md flex flex-col flex-1">
+<div class="mb-stack-sm">
+<p class="font-sku-text text-sku-text text-secondary mb-1">SKU 12312312</p>
+<h3 class="font-title-md text-title-md text-on-surface leading-tight">Macacão Sunshine</h3>
+</div>
+<div class="mt-auto">
+<div class="flex items-center justify-between mb-stack-md">
+<div class="flex gap-2">
+<div class="w-4 h-4 rounded-full bg-blue-700"></div>
+<div class="w-4 h-4 rounded-full bg-slate-400"></div>
+</div>
+<div class="flex gap-1">
+<span class="w-7 h-7 flex items-center justify-center text-xs font-label-bold border border-outline-variant rounded hover:border-primary cursor-pointer">P</span>
+<span class="w-7 h-7 flex items-center justify-center text-xs font-label-bold border border-outline-variant rounded hover:border-primary cursor-pointer">M</span>
+<span class="w-7 h-7 flex items-center justify-center text-xs font-label-bold border border-outline-variant rounded hover:border-primary cursor-pointer">G</span>
+</div>
+</div>
+<div class="flex items-center justify-between gap-4">
+<span class="font-price-tag text-price-tag text-primary">R$ 129,00</span>
+<button class="bg-primary text-on-primary h-10 px-4 rounded-lg flex items-center gap-2 font-label-bold active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>Adicionar</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Product Card 3 -->
+<div class="group bg-white rounded-xl product-card-shadow overflow-hidden flex flex-col transition-all hover:-translate-y-1">
+<div class="relative aspect-[4/5] overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Outdoor lifestyle shot of a young girl wearing a pink cotton t-shirt and a light plaid skirt. The scene is bright and airy with soft focus green foliage in the background, conveying a sense of casual, high-end children's summer fashion. The colors are muted pinks and earthy plaid tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAhhwwHeokYQBQQ98cUpkgx5DndECRvO9pe0ooaeXEgAPePwvx8xp8BW_NKbdV4Hi9rvY5s3kaSrksG1FgJElsttUo33Xb2Hs-8InIwRUD4DAzZ5MM2VEoX5GN29h4p8UmNBNjgQq0nUItAaQEzAQ2rGMpPi7-J7025dB9int_-v9lAj10v9yc1GBzjnw9uH-VYl6TZGDP-mJX3bfydIkh6CU1TZacuMkSdkDlULOLhCyyGZBmP32NDC62OEvSbFXTKNaXBCnw32v8"/>
+<div class="absolute top-3 left-3">
+<span class="bg-secondary-container text-on-secondary-container px-2 py-1 rounded text-body-sm font-label-bold">Verão 2026</span>
+</div>
+</div>
+<div class="p-stack-md flex flex-col flex-1">
+<div class="mb-stack-sm">
+<p class="font-sku-text text-sku-text text-secondary mb-1">SKU 123123</p>
+<h3 class="font-title-md text-title-md text-on-surface leading-tight">Produto T</h3>
+</div>
+<div class="mt-auto">
+<div class="flex items-center justify-between mb-stack-md">
+<div class="flex gap-2">
+<div class="w-4 h-4 rounded-full bg-pink-300"></div>
+<div class="w-4 h-4 rounded-full bg-amber-200"></div>
+</div>
+<div class="flex gap-1">
+<span class="w-7 h-7 flex items-center justify-center text-xs font-label-bold border border-outline-variant rounded hover:border-primary cursor-pointer">P</span>
+<span class="w-7 h-7 flex items-center justify-center text-xs font-label-bold border border-outline-variant rounded hover:border-primary cursor-pointer">M</span>
+<span class="w-7 h-7 flex items-center justify-center text-xs font-label-bold border border-outline-variant rounded hover:border-primary cursor-pointer">G</span>
+</div>
+</div>
+<div class="flex items-center justify-between gap-4">
+<span class="font-price-tag text-price-tag text-primary">R$ 129,00</span>
+<button class="bg-primary text-on-primary h-10 px-4 rounded-lg flex items-center gap-2 font-label-bold active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>Adicionar</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Product Card 4 -->
+<div class="group bg-white rounded-xl product-card-shadow overflow-hidden flex flex-col transition-all hover:-translate-y-1">
+<div class="relative aspect-[4/5] overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A portrait of a happy baby boy sitting on a floor, wearing a stylish corduroy brown jacket with a soft fur collar and dark trousers. The lighting is warm and domestic, emphasizing the soft texture of the corduroy fabric. The mood is cozy and reliable, typical of a premium baby clothing collection." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC34jot6FOh2PXSOmppLRR7Dy5t8yLPJjho2N0NaEbzRO6JUmar3GEnnFU55rZYR8D017NlOfGDuqKbOynGXBnlHXsPrW-PnNUl5maXmyZmLJL-GAJrCOCneoblfHPLpNtvsKlN8DhhYj3LRi4CRg_ZSPABZ5-ag57eCVKURu1MoKVQSHrRcQhAq9deRHfNhRh3djg1k3iM-Jfe-f9cgTB98_JlmBZNaHE0vRgiOXGB7egmSN2HRoBuTU_LW3H5ct2WXbkVgYYVIyM"/>
+<div class="absolute top-3 left-3">
+<span class="bg-secondary-container text-on-secondary-container px-2 py-1 rounded text-body-sm font-label-bold">Verão 2026</span>
+</div>
+</div>
+<div class="p-stack-md flex flex-col flex-1">
+<div class="mb-stack-sm">
+<p class="font-sku-text text-sku-text text-secondary mb-1">SKU 123123123</p>
+<h3 class="font-title-md text-title-md text-on-surface leading-tight">Roupa K</h3>
+</div>
+<div class="mt-auto">
+<div class="flex items-center justify-between mb-stack-md">
+<div class="flex gap-2">
+<div class="w-4 h-4 rounded-full bg-amber-900"></div>
+<div class="w-4 h-4 rounded-full bg-blue-900"></div>
+</div>
+<div class="flex gap-1">
+<span class="w-7 h-7 flex items-center justify-center text-xs font-label-bold border border-outline-variant rounded hover:border-primary cursor-pointer">P</span>
+<span class="w-7 h-7 flex items-center justify-center text-xs font-label-bold border border-outline-variant rounded hover:border-primary cursor-pointer">M</span>
+<span class="w-7 h-7 flex items-center justify-center text-xs font-label-bold border border-outline-variant rounded hover:border-primary cursor-pointer">G</span>
+</div>
+</div>
+<div class="flex items-center justify-between gap-4">
+<span class="font-price-tag text-price-tag text-primary">R$ 129,00</span>
+<button class="bg-primary text-on-primary h-10 px-4 rounded-lg flex items-center gap-2 font-label-bold active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>Adicionar</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Pagination -->
+<div class="mt-stack-lg flex justify-center items-center gap-2 py-8">
+<button class="w-10 h-10 flex items-center justify-center rounded-full border border-outline-variant text-on-surface-variant hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined">chevron_left</span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center rounded-full bg-primary text-on-primary font-label-bold">1</button>
+<button class="w-10 h-10 flex items-center justify-center rounded-full border border-outline-variant text-on-surface-variant hover:bg-surface-container transition-colors">2</button>
+<button class="w-10 h-10 flex items-center justify-center rounded-full border border-outline-variant text-on-surface-variant hover:bg-surface-container transition-colors">3</button>
+<button class="w-10 h-10 flex items-center justify-center rounded-full border border-outline-variant text-on-surface-variant hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined">chevron_right</span>
+</button>
+</div>
+</div>
+</main>
+</div>
+<!-- Footer -->
+<footer class="w-full py-stack-lg px-margin-mobile md:px-gutter max-w-container-max mx-auto flex flex-col md:flex-row justify-between items-center gap-stack-md border-t border-outline-variant mt-auto">
+<div class="flex flex-col items-center md:items-start">
+<span class="text-title-md font-bold text-on-surface">KidsCatalog</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">© 2024 KidsCatalog Wholesales. Todos os direitos reservados.</p>
+</div>
+<div class="flex gap-stack-lg">
+<a class="text-on-surface-variant font-label-bold hover:text-on-surface transition-colors" href="#">Termos de Uso</a>
+<a class="text-on-surface-variant font-label-bold hover:text-on-surface transition-colors" href="#">Privacidade</a>
+<a class="text-on-surface-variant font-label-bold hover:text-on-surface transition-colors" href="#">SAC</a>
+<a class="text-on-surface-variant font-label-bold hover:text-on-surface transition-colors" href="#">Contato</a>
+</div>
+</footer>
+<!-- FAB Order Status (Mobile focus) -->
+<button class="fixed bottom-6 right-6 lg:hidden bg-primary text-white p-4 rounded-full shadow-lg active:scale-95 transition-all z-40">
+<div class="relative">
+<span class="material-symbols-outlined text-[28px]">shopping_cart</span>
+<span class="absolute -top-2 -right-2 bg-error text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full border-2 border-primary">1</span>
+</div>
+</button>
+<script>
+        // Simple interactivity for demonstration
+        document.querySelectorAll('button').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const rect = button.getBoundingClientRect();
+                const ripple = document.createElement('div');
+                ripple.className = 'ripple absolute bg-white/30 rounded-full pointer-events-none transform -translate-x-1/2 -translate-y-1/2';
+                ripple.style.left = `${e.clientX - rect.left}px`;
+                ripple.style.top = `${e.clientY - rect.top}px`;
+                ripple.style.width = '0px';
+                ripple.style.height = '0px';
+                button.classList.add('relative', 'overflow-hidden');
+                button.appendChild(ripple);
+                
+                requestAnimationFrame(() => {
+                    ripple.style.width = '200px';
+                    ripple.style.height = '200px';
+                    ripple.style.transition = 'width 0.5s, height 0.5s, opacity 0.5s';
+                    ripple.style.opacity = '0';
+                });
+                
+                setTimeout(() => ripple.remove(), 500);
+            });
+        });
+    </script>
+</body></html>
