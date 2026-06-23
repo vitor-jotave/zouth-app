@@ -80,8 +80,14 @@ interface Paginated<T> {
 interface Props {
     products: Paginated<Product>;
     categories: Category[];
+    product_counts: {
+        total: number;
+        products: number;
+        combos: number;
+    };
     filters: {
         search?: string;
+        product_type?: 'product' | 'combo' | string | null;
         category_id?: string | number | null;
         is_active?: string | boolean | null;
     };
@@ -95,6 +101,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 export default function ProductsIndex({
     products,
     categories,
+    product_counts,
     filters,
 }: Props) {
     const [search, setSearch] = useState(filters.search ?? '');
@@ -107,6 +114,7 @@ export default function ProductsIndex({
                 '/manufacturer/products',
                 {
                     search,
+                    product_type: filters.product_type ?? '',
                     category_id: filters.category_id ?? '',
                     is_active: filters.is_active ?? '',
                     ...payload,
@@ -118,7 +126,7 @@ export default function ProductsIndex({
                 },
             );
         },
-        [search, filters.category_id, filters.is_active],
+        [search, filters.category_id, filters.is_active, filters.product_type],
     );
 
     const handleSearchChange = (value: string) => {
@@ -153,6 +161,17 @@ export default function ProductsIndex({
                         <p className="text-sm text-muted-foreground">
                             Gerencie seu catalogo de produtos
                         </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            <Badge variant="secondary">
+                                {product_counts.total} itens
+                            </Badge>
+                            <Badge variant="outline">
+                                {product_counts.products} produtos
+                            </Badge>
+                            <Badge variant="outline">
+                                {product_counts.combos} combos
+                            </Badge>
+                        </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <Link href="/manufacturer/products/combos/create">
@@ -183,6 +202,31 @@ export default function ProductsIndex({
                         />
                     </div>
                     <div className="flex flex-wrap gap-2">
+                        <Select
+                            value={
+                                filters.product_type === 'product' ||
+                                filters.product_type === 'combo'
+                                    ? filters.product_type
+                                    : 'all'
+                            }
+                            onValueChange={(value) =>
+                                updateFilters({
+                                    product_type: value === 'all' ? '' : value,
+                                })
+                            }
+                        >
+                            <SelectTrigger className="w-[180px]">
+                                <SelectValue placeholder="Tipo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Todos</SelectItem>
+                                <SelectItem value="product">
+                                    Produtos
+                                </SelectItem>
+                                <SelectItem value="combo">Combos</SelectItem>
+                            </SelectContent>
+                        </Select>
+
                         <Select
                             value={
                                 filters.category_id

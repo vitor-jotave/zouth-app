@@ -262,16 +262,32 @@ it('lists combos in the product index and public catalog', function () {
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('manufacturer/products/index')
+            ->where('product_counts.total', 2)
+            ->where('product_counts.products', 1)
+            ->where('product_counts.combos', 1)
             ->where('products.data.1.product_type', 'combo')
+        );
+
+    $this->get('/manufacturer/products?product_type=combo')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('manufacturer/products/index')
+            ->where('filters.product_type', 'combo')
+            ->has('products.data', 1)
+            ->where('products.data.0.product_type', 'combo')
+            ->where('products.data.0.sku', 'COMBO-CAT')
         );
 
     $this->get("/catalog/{$catalogSetting->public_token}")
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('public/catalog')
-            ->where('products.data.1.product_type', 'combo')
-            ->where('products.data.1.combo_items.0.product_name', 'Body Avulso')
-            ->where('products.data.1.total_stock', 3)
+            ->has('products.data', 1)
+            ->where('products.data.0.product_type', 'product')
+            ->has('combos', 1)
+            ->where('combos.0.product_type', 'combo')
+            ->where('combos.0.combo_items.0.product_name', 'Body Avulso')
+            ->where('combos.0.total_stock', 3)
         );
 });
 

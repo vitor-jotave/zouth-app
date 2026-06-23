@@ -148,6 +148,7 @@ interface Props {
     manufacturer: Manufacturer;
     catalog_settings: CatalogSettings;
     products: Paginated<Product>;
+    combos: Product[];
     catalog_token: string;
     filters: CatalogFilters;
     filter_options: CatalogFilterOptions;
@@ -222,6 +223,7 @@ interface LayoutProps {
     manufacturer: Manufacturer;
     settings: CatalogSettings;
     products: Paginated<Product>;
+    combos: Product[];
     tokens: typeof LAYOUT_TOKENS.minimal;
     onAddToCart: (product: Product) => void;
     onOpenQuickView: (product: Product) => void;
@@ -527,6 +529,77 @@ function ProductImageSlider({
                 </>
             )}
         </div>
+    );
+}
+
+function ComboImageMosaic({
+    product,
+    className,
+    onOpen,
+}: {
+    product: Product;
+    className: string;
+    onOpen: () => void;
+}) {
+    const productImages = product.images ?? [];
+    const images = (
+        productImages.length > 0
+            ? productImages
+            : product.primary_image
+              ? [product.primary_image]
+              : []
+    ).slice(0, 4);
+
+    if (images.length === 0) {
+        return (
+            <button
+                type="button"
+                onClick={onOpen}
+                className={`flex items-center justify-center bg-white/40 ${className}`}
+                aria-label={`Ver detalhes de ${product.name}`}
+            >
+                <Box className="h-12 w-12 opacity-20" />
+            </button>
+        );
+    }
+
+    if (images.length === 1) {
+        return (
+            <button
+                type="button"
+                onClick={onOpen}
+                className={`block overflow-hidden ${className}`}
+                aria-label={`Ver detalhes de ${product.name}`}
+            >
+                <img
+                    src={images[0]}
+                    alt={product.name}
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+            </button>
+        );
+    }
+
+    return (
+        <button
+            type="button"
+            onClick={onOpen}
+            className={`grid overflow-hidden bg-white/40 ${className} ${
+                images.length === 2 ? 'grid-cols-2' : 'grid-cols-2 grid-rows-2'
+            }`}
+            aria-label={`Ver detalhes de ${product.name}`}
+        >
+            {images.map((image, index) => (
+                <img
+                    key={`${image}-${index}`}
+                    src={image}
+                    alt={`${product.name} ${index + 1}`}
+                    className={`h-full w-full object-cover transition-transform duration-500 group-hover:scale-105 ${
+                        images.length === 3 && index === 0 ? 'row-span-2' : ''
+                    }`}
+                />
+            ))}
+        </button>
     );
 }
 
@@ -1154,6 +1227,185 @@ function ComboSummary({ product }: { product: Product }) {
     );
 }
 
+function ComboGridSection({
+    combos,
+    settings,
+    variant,
+    onAddToCart,
+    onOpenQuickView,
+    addedProductId,
+}: {
+    combos: Product[];
+    settings: CatalogSettings;
+    variant: 'minimal' | 'playful' | 'boutique';
+    onAddToCart: (product: Product) => void;
+    onOpenQuickView: (product: Product) => void;
+    addedProductId: number | null;
+}) {
+    if (combos.length === 0) {
+        return null;
+    }
+
+    const sectionClasses = {
+        minimal:
+            'bg-white/55 shadow-sm ring-1 ring-[var(--brand-primary)]/20 backdrop-blur-sm',
+        playful:
+            'border-4 bg-white/85 shadow-xl ring-4 ring-[var(--brand-accent)]/10',
+        boutique:
+            'bg-white/35 shadow-sm ring-1 ring-[var(--brand-primary)]/25 backdrop-blur-md',
+    };
+
+    const cardClasses = {
+        minimal:
+            'bg-white/70 shadow-sm ring-1 ring-black/5 transition hover:bg-white/85',
+        playful:
+            'bg-white shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-xl',
+        boutique:
+            'bg-white/45 shadow-sm ring-1 ring-black/10 transition hover:bg-white/60',
+    };
+
+    return (
+        <section
+            className={`relative mb-8 overflow-hidden ${sectionClasses[variant]}`}
+            style={{
+                borderRadius:
+                    variant === 'playful'
+                        ? `calc(var(--radius) * 3)`
+                        : 'var(--radius)',
+                borderColor:
+                    variant === 'playful'
+                        ? settings.accent_color
+                        : 'transparent',
+            }}
+        >
+            {variant === 'playful' && (
+                <>
+                    <div className="absolute -top-8 right-8 opacity-10">
+                        <Sparkles
+                            className="h-24 w-24"
+                            style={{ color: settings.primary_color }}
+                        />
+                    </div>
+                    <div className="absolute -bottom-8 left-8 opacity-10">
+                        <Heart
+                            className="h-24 w-24"
+                            style={{ color: settings.accent_color }}
+                        />
+                    </div>
+                </>
+            )}
+
+            <div className="relative space-y-5 p-5 md:p-6">
+                <div
+                    className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
+                    style={{
+                        gap:
+                            settings.layout_density === 'compact'
+                                ? '1rem'
+                                : '1.5rem',
+                    }}
+                >
+                    {combos.map((combo) => {
+                        const isAdded = addedProductId === combo.id;
+
+                        return (
+                            <article
+                                key={combo.id}
+                                className={`group overflow-hidden ${cardClasses[variant]}`}
+                                style={{
+                                    borderRadius:
+                                        variant === 'playful'
+                                            ? `calc(var(--radius) * 2)`
+                                            : 'var(--radius)',
+                                    border:
+                                        variant === 'playful'
+                                            ? `2px solid ${settings.accent_color}35`
+                                            : '1px solid rgba(0,0,0,0.06)',
+                                }}
+                            >
+                                <ComboImageMosaic
+                                    product={combo}
+                                    className="aspect-4/5 bg-gray-100"
+                                    onOpen={() => onOpenQuickView(combo)}
+                                />
+
+                                <div className="space-y-3 p-4">
+                                    <div className="space-y-1">
+                                        <h3
+                                            className={
+                                                variant === 'boutique'
+                                                    ? 'font-serif text-lg font-light tracking-wide'
+                                                    : 'text-base font-semibold'
+                                            }
+                                        >
+                                            {combo.name}
+                                        </h3>
+                                        <p className="text-xs opacity-55">
+                                            SKU {combo.sku}
+                                        </p>
+                                    </div>
+
+                                    <p
+                                        className={`text-sm font-semibold ${combo.price_cents == null ? 'italic opacity-50' : ''}`}
+                                        style={
+                                            combo.price_cents != null
+                                                ? {
+                                                      color: settings.primary_color,
+                                                  }
+                                                : {}
+                                        }
+                                    >
+                                        {formatPrice(combo.price_cents)}
+                                    </p>
+
+                                    <div className="flex flex-wrap items-center gap-2 text-xs opacity-65">
+                                        {combo.category && (
+                                            <Badge variant="outline">
+                                                {combo.category}
+                                            </Badge>
+                                        )}
+                                        <span>
+                                            {combo.total_stock} disponível(is)
+                                        </span>
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => onAddToCart(combo)}
+                                            aria-live="polite"
+                                            className="inline-flex min-w-28 items-center justify-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90"
+                                            style={{
+                                                backgroundColor: isAdded
+                                                    ? settings.accent_color
+                                                    : settings.primary_color,
+                                            }}
+                                        >
+                                            <AddToCartContent
+                                                isAdded={isAdded}
+                                                canAdd
+                                            />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                onOpenQuickView(combo)
+                                            }
+                                            className="inline-flex min-w-24 items-center justify-center rounded-md bg-white/70 px-3 py-1.5 text-xs font-semibold shadow-sm ring-1 ring-black/10 transition hover:bg-white"
+                                        >
+                                            Ver combo
+                                        </button>
+                                    </div>
+                                </div>
+                            </article>
+                        );
+                    })}
+                </div>
+            </div>
+        </section>
+    );
+}
+
 function onlyDigits(value: string): string {
     return value.replace(/\D/g, '');
 }
@@ -1194,6 +1446,7 @@ function MinimalLayout({
     manufacturer,
     settings,
     products,
+    combos,
     tokens,
     onAddToCart,
     onOpenQuickView,
@@ -1291,6 +1544,15 @@ function MinimalLayout({
                     filterOptions={filterOptions}
                 />
             )}
+
+            <ComboGridSection
+                combos={combos}
+                settings={settings}
+                variant="minimal"
+                onAddToCart={onAddToCart}
+                onOpenQuickView={onOpenQuickView}
+                addedProductId={addedProductId}
+            />
 
             {/* Grid de produtos minimalista */}
             {productGridEnabled &&
@@ -1428,6 +1690,7 @@ function PlayfulLayout({
     manufacturer,
     settings,
     products,
+    combos,
     tokens,
     onAddToCart,
     onOpenQuickView,
@@ -1550,6 +1813,15 @@ function PlayfulLayout({
                     filterOptions={filterOptions}
                 />
             )}
+
+            <ComboGridSection
+                combos={combos}
+                settings={settings}
+                variant="playful"
+                onAddToCart={onAddToCart}
+                onOpenQuickView={onOpenQuickView}
+                addedProductId={addedProductId}
+            />
 
             {/* Grid de produtos colorido */}
             {productGridEnabled &&
@@ -1722,6 +1994,7 @@ function BoutiqueLayout({
     manufacturer,
     settings,
     products,
+    combos,
     tokens,
     onAddToCart,
     onOpenQuickView,
@@ -1847,6 +2120,15 @@ function BoutiqueLayout({
                     filterOptions={filterOptions}
                 />
             )}
+
+            <ComboGridSection
+                combos={combos}
+                settings={settings}
+                variant="boutique"
+                onAddToCart={onAddToCart}
+                onOpenQuickView={onOpenQuickView}
+                addedProductId={addedProductId}
+            />
 
             {/* Grid de produtos elegante */}
             {productGridEnabled &&
@@ -1986,6 +2268,7 @@ export default function PublicCatalog({
     manufacturer,
     catalog_settings,
     products,
+    combos,
     catalog_token,
     filters,
     filter_options,
@@ -2269,6 +2552,7 @@ export default function PublicCatalog({
                         manufacturer={manufacturer}
                         settings={catalog_settings}
                         products={products}
+                        combos={combos}
                         tokens={tokens}
                         onAddToCart={addToCart}
                         onOpenQuickView={setQuickViewProduct}
@@ -2285,6 +2569,7 @@ export default function PublicCatalog({
                         manufacturer={manufacturer}
                         settings={catalog_settings}
                         products={products}
+                        combos={combos}
                         tokens={tokens}
                         onAddToCart={addToCart}
                         onOpenQuickView={setQuickViewProduct}
@@ -2301,6 +2586,7 @@ export default function PublicCatalog({
                         manufacturer={manufacturer}
                         settings={catalog_settings}
                         products={products}
+                        combos={combos}
                         tokens={tokens}
                         onAddToCart={addToCart}
                         onOpenQuickView={setQuickViewProduct}

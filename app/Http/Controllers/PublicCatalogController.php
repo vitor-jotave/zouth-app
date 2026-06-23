@@ -54,29 +54,36 @@ class PublicCatalogController extends Controller
             ->whereIn('id', array_keys($variationFilters))
             ->pluck('name', 'id');
 
-        $products = Product::query()
-            ->where('manufacturer_id', $setting->manufacturer_id)
-            ->where('is_active', true)
-            ->when($search !== '', function ($query) use ($search) {
-                $normalizedSearch = $this->normalizeSearchTerm($search);
-                $normalizedName = $this->normalizedSearchExpression('products.name');
-                $normalizedSku = $this->normalizedSearchExpression('products.sku');
+        $applySearchAndCategory = function ($query) use ($search, $categoryId) {
+            return $query
+                ->when($search !== '', function ($query) use ($search) {
+                    $normalizedSearch = $this->normalizeSearchTerm($search);
+                    $normalizedName = $this->normalizedSearchExpression('products.name');
+                    $normalizedSku = $this->normalizedSearchExpression('products.sku');
 
-                $query->where(function ($searchQuery) use ($search, $normalizedSearch, $normalizedName, $normalizedSku) {
-                    $searchQuery
-                        ->where(function ($q) use ($search) {
-                            $q->where('name', 'like', "%{$search}%")
-                                ->orWhere('sku', 'like', "%{$search}%");
-                        })
-                        ->orWhere(function ($q) use ($normalizedSearch, $normalizedName, $normalizedSku) {
-                            $q->whereRaw("{$normalizedName} like ?", ["%{$normalizedSearch}%"])
-                                ->orWhereRaw("{$normalizedSku} like ?", ["%{$normalizedSearch}%"]);
-                        });
+                    $query->where(function ($searchQuery) use ($search, $normalizedSearch, $normalizedName, $normalizedSku) {
+                        $searchQuery
+                            ->where(function ($q) use ($search) {
+                                $q->where('name', 'like', "%{$search}%")
+                                    ->orWhere('sku', 'like', "%{$search}%");
+                            })
+                            ->orWhere(function ($q) use ($normalizedSearch, $normalizedName, $normalizedSku) {
+                                $q->whereRaw("{$normalizedName} like ?", ["%{$normalizedSearch}%"])
+                                    ->orWhereRaw("{$normalizedSku} like ?", ["%{$normalizedSearch}%"]);
+                            });
+                    });
+                })
+                ->when($categoryId, function ($query, string $categoryId) {
+                    $query->where('product_category_id', $categoryId);
                 });
-            })
-            ->when($categoryId, function ($query, string $categoryId) {
-                $query->where('product_category_id', $categoryId);
-            })
+        };
+
+        $products = $applySearchAndCategory(
+            Product::query()
+                ->where('manufacturer_id', $setting->manufacturer_id)
+                ->where('is_active', true)
+                ->where('product_type', 'product')
+        )
             ->when($variationTypeNames->isNotEmpty(), function ($query) use ($variationFilters, $variationTypeNames) {
                 foreach ($variationFilters as $typeId => $values) {
                     $typeName = $variationTypeNames->get($typeId);
@@ -106,6 +113,17 @@ class PublicCatalogController extends Controller
             ->paginate(24)
             ->withQueryString();
 
+        $combos = $applySearchAndCategory(
+            Product::query()
+                ->where('manufacturer_id', $setting->manufacturer_id)
+                ->where('is_active', true)
+                ->where('product_type', 'combo')
+        )
+            ->with(['category', 'media', 'comboItems.componentProduct', 'comboItems.componentVariantStock'])
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
         return Inertia::render('public/catalog', [
             'manufacturer' => [
                 'id' => $setting->manufacturer->id,
@@ -114,6 +132,7 @@ class PublicCatalogController extends Controller
             ],
             'catalog_settings' => (new CatalogSettingResource($setting))->resolve(request()),
             'products' => ProductCatalogResource::collection($products),
+            'combos' => ProductCatalogResource::collection($combos)->resolve($request),
             'catalog_token' => $setting->public_token,
             'filters' => [
                 'search' => $search,

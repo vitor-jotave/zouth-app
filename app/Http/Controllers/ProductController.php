@@ -38,6 +38,16 @@ class ProductController extends Controller
             abort(403);
         }
 
+        $productCounts = [
+            'total' => Product::where('manufacturer_id', $manufacturer->id)->count(),
+            'products' => Product::where('manufacturer_id', $manufacturer->id)
+                ->where('product_type', 'product')
+                ->count(),
+            'combos' => Product::where('manufacturer_id', $manufacturer->id)
+                ->where('product_type', 'combo')
+                ->count(),
+        ];
+
         $products = Product::where('manufacturer_id', $manufacturer->id)
             ->with(['category', 'media', 'comboItems.componentProduct', 'comboItems.componentVariantStock'])
             ->when($request->search, function ($query, $search) {
@@ -45,6 +55,9 @@ class ProductController extends Controller
                     $q->where('name', 'like', '%'.$search.'%')
                         ->orWhere('sku', 'like', '%'.$search.'%');
                 });
+            })
+            ->when(in_array($request->product_type, ['product', 'combo'], true), function ($query) use ($request) {
+                $query->where('product_type', $request->product_type);
             })
             ->when($request->category_id, function ($query, $categoryId) {
                 $query->where('product_category_id', $categoryId);
@@ -64,8 +77,10 @@ class ProductController extends Controller
         return Inertia::render('manufacturer/products/index', [
             'products' => ProductResource::collection($products),
             'categories' => $categories,
+            'product_counts' => $productCounts,
             'filters' => [
                 'search' => $request->search,
+                'product_type' => $request->product_type,
                 'category_id' => $request->category_id,
                 'is_active' => $request->is_active,
             ],
