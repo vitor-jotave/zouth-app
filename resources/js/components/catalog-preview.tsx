@@ -5,6 +5,8 @@ import { LAYOUT_TOKENS, PATTERNS, GRADIENTS } from '@/lib/catalog-theming';
 
 interface CatalogSettings {
     brand_name: string;
+    show_brand_name?: boolean;
+    show_logo?: boolean;
     tagline?: string | null;
     description?: string | null;
     logo_url?: string | null;
@@ -26,6 +28,11 @@ interface CatalogSettings {
     pattern_color?: string | null;
     pattern_opacity?: number;
     gradient_id?: string | null;
+    sections?: Array<{
+        type: string;
+        enabled: boolean;
+        props?: Record<string, unknown>;
+    }>;
 }
 
 interface Product {
@@ -73,7 +80,13 @@ function ProductImage({ product }: { product: Product }) {
     );
 }
 
-function EmptyState({ icon: Icon, message }: { icon: typeof Package; message: string }) {
+function EmptyState({
+    icon: Icon,
+    message,
+}: {
+    icon: typeof Package;
+    message: string;
+}) {
     return (
         <div className="flex flex-col items-center justify-center gap-2 py-10 text-center opacity-50">
             <Icon className="h-8 w-8" />
@@ -82,265 +95,563 @@ function EmptyState({ icon: Icon, message }: { icon: typeof Package; message: st
     );
 }
 
-// --- Minimal Layout Preview ---
-function MinimalContent({ settings, products, manufacturerName, tokens }: LayoutContentProps) {
-    const density = settings.layout_density ?? 'comfortable';
-    const cardStyle = settings.card_style ?? 'soft';
+function sectionEnabled(settings: CatalogSettings, type: string): boolean {
+    return (
+        settings.sections?.find((section) => section.type === type)?.enabled ??
+        true
+    );
+}
+
+function previewCategories(products: Product[]): string[] {
+    return Array.from(
+        new Set(
+            products
+                .map((product) => product.category)
+                .filter((category): category is string => Boolean(category)),
+        ),
+    );
+}
+
+function PreviewCollections({
+    settings,
+    products,
+    variant,
+}: {
+    settings: CatalogSettings;
+    products: Product[];
+    variant: 'minimal' | 'playful' | 'boutique';
+}) {
+    const categories = previewCategories(products);
+
+    if (categories.length === 0) {
+        return null;
+    }
+
+    if (variant === 'boutique') {
+        return (
+            <div className="flex flex-wrap items-center justify-center gap-2 border-y border-black/10 py-2">
+                {categories.slice(0, 4).map((category) => (
+                    <span
+                        key={category}
+                        className="border-b border-[var(--brand-primary)] px-1 py-0.5 font-serif text-[9px] tracking-wide opacity-75"
+                    >
+                        {category}
+                    </span>
+                ))}
+            </div>
+        );
+    }
+
+    if (variant === 'playful') {
+        return (
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+                {categories.slice(0, 4).map((category) => (
+                    <span
+                        key={category}
+                        className="rounded-full border px-2 py-1 text-[8px] font-bold"
+                        style={{
+                            borderColor: settings.accent_color,
+                            backgroundColor: '#ffffffcc',
+                        }}
+                    >
+                        {category}
+                    </span>
+                ))}
+            </div>
+        );
+    }
 
     return (
-        <div className="flex flex-col px-4 py-5" style={{ gap: density === 'compact' ? '0.75rem' : '1.25rem' }}>
-            {/* Header: logo + title side by side, compact */}
-            <header className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                    {settings.logo_url && (
-                        <div className="h-10 w-10 shrink-0 overflow-hidden" style={{ borderRadius: tokens.radius }}>
-                            <img src={settings.logo_url} alt="" className="h-full w-full object-cover" />
-                        </div>
-                    )}
-                    <div>
-                        <h1 className="text-sm font-bold tracking-tight">
-                            {settings.brand_name || manufacturerName}
-                        </h1>
-                        {settings.tagline && (
-                            <p className="text-[10px] opacity-60">{settings.tagline}</p>
-                        )}
-                    </div>
-                </div>
-                <Badge className="text-[8px] text-white" style={{ backgroundColor: settings.primary_color }}>
-                    {products.length} produtos
-                </Badge>
-            </header>
-
-            {settings.description && (
-                <p className="text-[10px] leading-snug opacity-70">{settings.description}</p>
-            )}
-
-            {/* Products grid — square cards */}
-            {products.length === 0 ? (
-                <EmptyState icon={Package} message="Nenhum produto disponível" />
-            ) : (
-                <div
-                    className="grid grid-cols-2"
-                    style={{ gap: density === 'compact' ? '0.5rem' : '0.75rem' }}
+        <div className="flex flex-wrap items-center gap-1.5">
+            {categories.slice(0, 4).map((category) => (
+                <span
+                    key={category}
+                    className="rounded-full bg-white/65 px-2 py-1 text-[8px] font-medium shadow-sm ring-1 ring-black/10"
                 >
-                    {products.slice(0, 4).map((product) => (
-                        <article
-                            key={product.id}
-                            className="overflow-hidden bg-white/50 backdrop-blur-sm"
-                            style={{
-                                borderRadius: tokens.radius,
-                                border: cardStyle === 'flat' ? '2px solid rgba(0,0,0,0.08)' : '1px solid rgba(0,0,0,0.05)',
-                                boxShadow: cardStyle === 'soft' ? '0 2px 8px rgba(0,0,0,0.04)' : 'none',
-                            }}
+                    {category}
+                </span>
+            ))}
+        </div>
+    );
+}
+
+// --- Minimal Layout Preview ---
+function MinimalContent({
+    settings,
+    products,
+    manufacturerName,
+    tokens,
+}: LayoutContentProps) {
+    const density = settings.layout_density ?? 'comfortable';
+    const cardStyle = settings.card_style ?? 'soft';
+    const showBrandName = settings.show_brand_name ?? true;
+    const showLogo = (settings.show_logo ?? true) && Boolean(settings.logo_url);
+    const heroEnabled = sectionEnabled(settings, 'hero');
+    const collectionsEnabled = sectionEnabled(settings, 'collections');
+    const productGridEnabled = sectionEnabled(settings, 'product_grid');
+
+    return (
+        <div
+            className="flex flex-col px-4 py-5"
+            style={{ gap: density === 'compact' ? '0.75rem' : '1.25rem' }}
+        >
+            {heroEnabled && (
+                <>
+                    {/* Header: logo + title side by side, compact */}
+                    <header
+                        className={`flex items-center ${
+                            showBrandName ? 'justify-between' : 'justify-center'
+                        }`}
+                    >
+                        <div
+                            className={`flex items-center gap-2.5 ${
+                                showBrandName ? '' : 'justify-center'
+                            }`}
                         >
-                            <div className="aspect-square overflow-hidden">
-                                <ProductImage product={product} />
-                            </div>
-                            <div className="space-y-0.5 p-2">
-                                <h3 className="truncate text-[11px] font-semibold">{product.name}</h3>
-                                <p className="text-[9px] opacity-50">SKU {product.sku}</p>
-                                {product.category && (
-                                    <Badge variant="outline" className="mt-0.5 px-1 py-0 text-[8px]">
-                                        {product.category}
-                                    </Badge>
+                            {showLogo && (
+                                <div
+                                    className="inline-flex max-w-full shrink-0 items-center justify-center"
+                                    style={{ borderRadius: tokens.radius }}
+                                >
+                                    <img
+                                        src={settings.logo_url}
+                                        alt=""
+                                        className="h-auto max-h-14 w-auto max-w-28 object-contain"
+                                    />
+                                </div>
+                            )}
+                            <div>
+                                {showBrandName && (
+                                    <h1 className="text-sm font-bold tracking-tight">
+                                        {settings.brand_name ||
+                                            manufacturerName}
+                                    </h1>
+                                )}
+                                {settings.tagline && (
+                                    <p className="text-[10px] opacity-60">
+                                        {settings.tagline}
+                                    </p>
                                 )}
                             </div>
-                        </article>
-                    ))}
-                </div>
+                        </div>
+                        {showBrandName && (
+                            <Badge
+                                className="text-[8px] text-white"
+                                style={{
+                                    backgroundColor: settings.primary_color,
+                                }}
+                            >
+                                {products.length} produtos
+                            </Badge>
+                        )}
+                    </header>
+
+                    {settings.description && (
+                        <p className="text-[10px] leading-snug opacity-70">
+                            {settings.description}
+                        </p>
+                    )}
+                </>
+            )}
+
+            {collectionsEnabled && (
+                <PreviewCollections
+                    settings={settings}
+                    products={products}
+                    variant="minimal"
+                />
+            )}
+
+            {productGridEnabled && (
+                <>
+                    {/* Products grid — square cards */}
+                    {products.length === 0 ? (
+                        <EmptyState
+                            icon={Package}
+                            message="Nenhum produto disponível"
+                        />
+                    ) : (
+                        <div
+                            className="grid grid-cols-2"
+                            style={{
+                                gap:
+                                    density === 'compact'
+                                        ? '0.5rem'
+                                        : '0.75rem',
+                            }}
+                        >
+                            {products.slice(0, 4).map((product) => (
+                                <article
+                                    key={product.id}
+                                    className="overflow-hidden bg-white/50 backdrop-blur-sm"
+                                    style={{
+                                        borderRadius: tokens.radius,
+                                        border:
+                                            cardStyle === 'flat'
+                                                ? '2px solid rgba(0,0,0,0.08)'
+                                                : '1px solid rgba(0,0,0,0.05)',
+                                        boxShadow:
+                                            cardStyle === 'soft'
+                                                ? '0 2px 8px rgba(0,0,0,0.04)'
+                                                : 'none',
+                                    }}
+                                >
+                                    <div className="aspect-square overflow-hidden">
+                                        <ProductImage product={product} />
+                                    </div>
+                                    <div className="space-y-0.5 p-2">
+                                        <h3 className="truncate text-[11px] font-semibold">
+                                            {product.name}
+                                        </h3>
+                                        <p className="text-[9px] opacity-50">
+                                            SKU {product.sku}
+                                        </p>
+                                        {product.category && (
+                                            <Badge
+                                                variant="outline"
+                                                className="mt-0.5 px-1 py-0 text-[8px]"
+                                            >
+                                                {product.category}
+                                            </Badge>
+                                        )}
+                                    </div>
+                                </article>
+                            ))}
+                        </div>
+                    )}
+                </>
             )}
         </div>
     );
 }
 
 // --- Playful Layout Preview ---
-function PlayfulContent({ settings, products, manufacturerName, tokens }: LayoutContentProps) {
+function PlayfulContent({
+    settings,
+    products,
+    manufacturerName,
+    tokens,
+}: LayoutContentProps) {
     const density = settings.layout_density ?? 'comfortable';
+    const showBrandName = settings.show_brand_name ?? true;
+    const showLogo = (settings.show_logo ?? true) && Boolean(settings.logo_url);
+    const heroEnabled = sectionEnabled(settings, 'hero');
+    const collectionsEnabled = sectionEnabled(settings, 'collections');
+    const productGridEnabled = sectionEnabled(settings, 'product_grid');
 
     return (
-        <div className="flex flex-col px-4 py-5" style={{ gap: density === 'compact' ? '0.75rem' : '1.25rem' }}>
-            {/* Header: centered, colorful, decorative icons */}
-            <header
-                className="relative overflow-hidden border-[3px] bg-white/80 p-5 text-center backdrop-blur"
-                style={{
-                    borderRadius: `calc(${tokens.radius} * 3)`,
-                    borderColor: settings.primary_color,
-                    background: `linear-gradient(135deg, ${settings.accent_color}15 0%, ${settings.primary_color}10 100%)`,
-                }}
-            >
-                <div className="absolute -right-3 -top-3 opacity-10">
-                    <Star className="h-14 w-14" style={{ color: settings.accent_color }} />
-                </div>
-                <div className="absolute -bottom-3 -left-3 opacity-10">
-                    <Heart className="h-14 w-14" style={{ color: settings.primary_color }} />
-                </div>
-
-                <div className="relative space-y-2">
-                    {settings.logo_url && (
-                        <div className="mx-auto h-14 w-14 overflow-hidden rounded-full shadow-lg">
-                            <img src={settings.logo_url} alt="" className="h-full w-full object-cover" />
-                        </div>
-                    )}
-                    <div className="mx-auto inline-flex items-center gap-1 rounded-full px-3 py-1" style={{ backgroundColor: settings.accent_color }}>
-                        <Sparkles className="h-2.5 w-2.5 text-white" />
-                        <span className="text-[8px] font-bold uppercase tracking-wider text-white">Catálogo Oficial</span>
+        <div
+            className="flex flex-col px-4 py-5"
+            style={{ gap: density === 'compact' ? '0.75rem' : '1.25rem' }}
+        >
+            {heroEnabled && (
+                <header
+                    className="relative overflow-hidden border-[3px] bg-white/80 p-5 text-center backdrop-blur"
+                    style={{
+                        borderRadius: `calc(${tokens.radius} * 3)`,
+                        borderColor: settings.primary_color,
+                        background: `linear-gradient(135deg, ${settings.accent_color}15 0%, ${settings.primary_color}10 100%)`,
+                    }}
+                >
+                    <div className="absolute -top-3 -right-3 opacity-10">
+                        <Star
+                            className="h-14 w-14"
+                            style={{ color: settings.accent_color }}
+                        />
                     </div>
-                    <h1 className="text-base font-black tracking-tight" style={{ color: settings.primary_color }}>
-                        {settings.brand_name || manufacturerName}
-                    </h1>
-                    {settings.tagline && (
-                        <p className="text-[11px] font-semibold opacity-70">{settings.tagline}</p>
-                    )}
-                    <Badge className="text-[8px] text-white shadow" style={{ backgroundColor: settings.primary_color }}>
-                        ⭐ {products.length} produtos incríveis
-                    </Badge>
-                </div>
-            </header>
+                    <div className="absolute -bottom-3 -left-3 opacity-10">
+                        <Heart
+                            className="h-14 w-14"
+                            style={{ color: settings.primary_color }}
+                        />
+                    </div>
 
-            {/* Products — colorful bordered cards with Zap icons */}
-            {products.length === 0 ? (
-                <div
-                    className="flex flex-col items-center justify-center gap-2 border-[3px] border-dashed py-10"
-                    style={{ borderRadius: `calc(${tokens.radius} * 2)`, borderColor: settings.accent_color + '40' }}
-                >
-                    <Package className="h-10 w-10 opacity-30" style={{ color: settings.primary_color }} />
-                    <p className="text-xs font-bold" style={{ color: settings.primary_color }}>Em breve!</p>
-                </div>
-            ) : (
-                <div
-                    className="grid grid-cols-2"
-                    style={{ gap: density === 'compact' ? '0.5rem' : '0.75rem' }}
-                >
-                    {products.slice(0, 4).map((product, index) => (
-                        <article
-                            key={product.id}
-                            className="overflow-hidden bg-white shadow-md"
-                            style={{
-                                borderRadius: `calc(${tokens.radius} * 2)`,
-                                border: `2px solid ${index % 3 === 0 ? settings.primary_color : index % 3 === 1 ? settings.accent_color : settings.secondary_color}25`,
-                            }}
+                    <div className="relative space-y-2">
+                        {showLogo && (
+                            <div className="mx-auto inline-flex max-w-full items-center justify-center">
+                                <img
+                                    src={settings.logo_url}
+                                    alt=""
+                                    className="h-auto max-h-16 w-auto max-w-36 object-contain"
+                                />
+                            </div>
+                        )}
+                        <div
+                            className="mx-auto inline-flex items-center gap-1 rounded-full px-3 py-1"
+                            style={{ backgroundColor: settings.accent_color }}
                         >
-                            <div className="relative aspect-square overflow-hidden">
-                                <ProductImage product={product} />
-                                <div className="absolute right-1.5 top-1.5">
-                                    <div
-                                        className="flex h-6 w-6 items-center justify-center rounded-full text-white shadow"
-                                        style={{ backgroundColor: settings.accent_color }}
-                                    >
-                                        <Zap className="h-3 w-3" />
+                            <Sparkles className="h-2.5 w-2.5 text-white" />
+                            <span className="text-[8px] font-bold tracking-wider text-white uppercase">
+                                Catálogo Oficial
+                            </span>
+                        </div>
+                        {showBrandName && (
+                            <h1
+                                className="text-base font-black tracking-tight"
+                                style={{ color: settings.primary_color }}
+                            >
+                                {settings.brand_name || manufacturerName}
+                            </h1>
+                        )}
+                        {settings.tagline && (
+                            <p className="text-[11px] font-semibold opacity-70">
+                                {settings.tagline}
+                            </p>
+                        )}
+                        {showBrandName && (
+                            <Badge
+                                className="text-[8px] text-white shadow"
+                                style={{
+                                    backgroundColor: settings.primary_color,
+                                }}
+                            >
+                                ⭐ {products.length} produtos incríveis
+                            </Badge>
+                        )}
+                    </div>
+                </header>
+            )}
+
+            {collectionsEnabled && (
+                <PreviewCollections
+                    settings={settings}
+                    products={products}
+                    variant="playful"
+                />
+            )}
+
+            {productGridEnabled &&
+                (products.length === 0 ? (
+                    <div
+                        className="flex flex-col items-center justify-center gap-2 border-[3px] border-dashed py-10"
+                        style={{
+                            borderRadius: `calc(${tokens.radius} * 2)`,
+                            borderColor: settings.accent_color + '40',
+                        }}
+                    >
+                        <Package
+                            className="h-10 w-10 opacity-30"
+                            style={{ color: settings.primary_color }}
+                        />
+                        <p
+                            className="text-xs font-bold"
+                            style={{ color: settings.primary_color }}
+                        >
+                            Em breve!
+                        </p>
+                    </div>
+                ) : (
+                    <div
+                        className="grid grid-cols-2"
+                        style={{
+                            gap: density === 'compact' ? '0.5rem' : '0.75rem',
+                        }}
+                    >
+                        {products.slice(0, 4).map((product, index) => (
+                            <article
+                                key={product.id}
+                                className="overflow-hidden bg-white shadow-md"
+                                style={{
+                                    borderRadius: `calc(${tokens.radius} * 2)`,
+                                    border: `2px solid ${index % 3 === 0 ? settings.primary_color : index % 3 === 1 ? settings.accent_color : settings.secondary_color}25`,
+                                }}
+                            >
+                                <div className="relative aspect-square overflow-hidden">
+                                    <ProductImage product={product} />
+                                    <div className="absolute top-1.5 right-1.5">
+                                        <div
+                                            className="flex h-6 w-6 items-center justify-center rounded-full text-white shadow"
+                                            style={{
+                                                backgroundColor:
+                                                    settings.accent_color,
+                                            }}
+                                        >
+                                            <Zap className="h-3 w-3" />
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                            <div className="space-y-0.5 p-2">
-                                <h3 className="truncate text-[11px] font-bold" style={{ color: settings.primary_color }}>
-                                    {product.name}
-                                </h3>
-                                <p className="text-[8px] font-semibold uppercase tracking-wide opacity-40">
-                                    SKU {product.sku}
-                                </p>
-                                {product.category && (
-                                    <Badge className="mt-0.5 px-1 py-0 text-[8px] text-white" style={{ backgroundColor: settings.secondary_color }}>
-                                        {product.category}
-                                    </Badge>
-                                )}
-                            </div>
-                        </article>
-                    ))}
-                </div>
-            )}
+                                <div className="space-y-0.5 p-2">
+                                    <h3
+                                        className="truncate text-[11px] font-bold"
+                                        style={{
+                                            color: settings.primary_color,
+                                        }}
+                                    >
+                                        {product.name}
+                                    </h3>
+                                    <p className="text-[8px] font-semibold tracking-wide uppercase opacity-40">
+                                        SKU {product.sku}
+                                    </p>
+                                    {product.category && (
+                                        <Badge
+                                            className="mt-0.5 px-1 py-0 text-[8px] text-white"
+                                            style={{
+                                                backgroundColor:
+                                                    settings.secondary_color,
+                                            }}
+                                        >
+                                            {product.category}
+                                        </Badge>
+                                    )}
+                                </div>
+                            </article>
+                        ))}
+                    </div>
+                ))}
         </div>
     );
 }
 
 // --- Boutique Layout Preview ---
-function BoutiqueContent({ settings, products, manufacturerName, tokens }: LayoutContentProps) {
+function BoutiqueContent({
+    settings,
+    products,
+    manufacturerName,
+    tokens,
+}: LayoutContentProps) {
     const density = settings.layout_density ?? 'comfortable';
+    const showBrandName = settings.show_brand_name ?? true;
+    const showLogo = (settings.show_logo ?? true) && Boolean(settings.logo_url);
+    const heroEnabled = sectionEnabled(settings, 'hero');
+    const collectionsEnabled = sectionEnabled(settings, 'collections');
+    const productGridEnabled = sectionEnabled(settings, 'product_grid');
 
     return (
-        <div className="flex flex-col px-4 py-5" style={{ gap: density === 'compact' ? '0.75rem' : '1.5rem' }}>
-            {/* Header: magazine-style, serif, elegant */}
-            <header className="overflow-hidden bg-white/40 backdrop-blur-md" style={{ borderRadius: tokens.radius }}>
-                <div className="space-y-3 p-5">
+        <div
+            className="flex flex-col px-4 py-5"
+            style={{ gap: density === 'compact' ? '0.75rem' : '1.5rem' }}
+        >
+            {heroEnabled && (
+                <header
+                    className="overflow-hidden bg-white/40 backdrop-blur-md"
+                    style={{ borderRadius: tokens.radius }}
+                >
                     <div
-                        className="inline-flex items-center gap-1.5 border-b-2 pb-1 text-[8px] font-semibold uppercase tracking-[0.15em]"
-                        style={{ borderColor: settings.primary_color }}
+                        className={`space-y-3 p-5 ${
+                            showBrandName ? '' : 'text-center'
+                        }`}
                     >
-                        <Sparkles className="h-2.5 w-2.5" />
-                        <span>Coleção Exclusiva</span>
-                    </div>
-                    <h1
-                        className="font-serif text-2xl font-light leading-tight tracking-tight"
-                        style={{ color: settings.secondary_color }}
-                    >
-                        {settings.brand_name || manufacturerName}
-                    </h1>
-                    {settings.tagline && (
-                        <p className="font-serif text-xs font-light italic opacity-70">{settings.tagline}</p>
-                    )}
-                    {settings.description && (
-                        <p className="text-[10px] leading-snug opacity-60">{settings.description}</p>
-                    )}
-                    <div className="flex items-center gap-2 pt-1">
-                        <div className="h-px flex-1" style={{ backgroundColor: settings.primary_color, opacity: 0.3 }} />
-                        <Badge
-                            variant="outline"
-                            className="border-2 px-2 py-0.5 text-[8px] font-semibold"
+                        <div
+                            className="inline-flex items-center gap-1.5 border-b-2 pb-1 text-[8px] font-semibold tracking-[0.15em] uppercase"
                             style={{ borderColor: settings.primary_color }}
                         >
-                            {products.length} Peças
-                        </Badge>
-                    </div>
-                </div>
-                {settings.logo_url && (
-                    <div className="px-5 pb-4">
-                        <div className="h-28 w-full overflow-hidden shadow-lg" style={{ borderRadius: tokens.radius }}>
-                            <img src={settings.logo_url} alt="" className="h-full w-full object-cover" />
+                            <Sparkles className="h-2.5 w-2.5" />
+                            <span>Coleção Exclusiva</span>
                         </div>
+                        {showBrandName && (
+                            <h1
+                                className="font-serif text-2xl leading-tight font-light tracking-tight"
+                                style={{ color: settings.secondary_color }}
+                            >
+                                {settings.brand_name || manufacturerName}
+                            </h1>
+                        )}
+                        {settings.tagline && (
+                            <p className="font-serif text-xs font-light italic opacity-70">
+                                {settings.tagline}
+                            </p>
+                        )}
+                        {settings.description && (
+                            <p className="text-[10px] leading-snug opacity-60">
+                                {settings.description}
+                            </p>
+                        )}
+                        {showBrandName && (
+                            <div className="flex items-center gap-2 pt-1">
+                                <div
+                                    className="h-px flex-1"
+                                    style={{
+                                        backgroundColor: settings.primary_color,
+                                        opacity: 0.3,
+                                    }}
+                                />
+                                <Badge
+                                    variant="outline"
+                                    className="border-2 px-2 py-0.5 text-[8px] font-semibold"
+                                    style={{
+                                        borderColor: settings.primary_color,
+                                    }}
+                                >
+                                    {products.length} Peças
+                                </Badge>
+                            </div>
+                        )}
                     </div>
-                )}
-            </header>
-
-            {/* Products — portrait cards, serif type */}
-            {products.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-2 border bg-white/20 py-10" style={{ borderRadius: tokens.radius }}>
-                    <Package className="h-10 w-10 opacity-20" />
-                    <p className="font-serif text-sm font-light opacity-50">Novidades em preparação</p>
-                </div>
-            ) : (
-                <div
-                    className="grid grid-cols-2"
-                    style={{ gap: density === 'compact' ? '0.75rem' : '1rem' }}
-                >
-                    {products.slice(0, 4).map((product) => (
-                        <article key={product.id} className="space-y-2">
+                    {showLogo && (
+                        <div className="px-5 pb-4">
                             <div
-                                className="relative aspect-[3/4] overflow-hidden bg-gray-50 shadow-md"
+                                className="flex w-full items-center justify-center"
                                 style={{ borderRadius: tokens.radius }}
                             >
-                                <ProductImage product={product} />
-                                {product.total_stock === 0 && (
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-                                        <span className="font-serif text-[9px] uppercase tracking-widest text-white">
-                                            Esgotado
-                                        </span>
-                                    </div>
-                                )}
+                                <img
+                                    src={settings.logo_url}
+                                    alt=""
+                                    className="h-auto max-h-24 w-auto max-w-full object-contain"
+                                />
                             </div>
-                            <div className="space-y-0.5">
-                                {product.category && (
-                                    <p className="text-[8px] font-semibold uppercase tracking-wider opacity-40">
-                                        {product.category}
-                                    </p>
-                                )}
-                                <h3 className="truncate font-serif text-[11px] font-light tracking-wide">
-                                    {product.name}
-                                </h3>
-                                <p className="text-[8px] opacity-30">SKU {product.sku}</p>
-                            </div>
-                        </article>
-                    ))}
-                </div>
+                        </div>
+                    )}
+                </header>
             )}
+
+            {collectionsEnabled && (
+                <PreviewCollections
+                    settings={settings}
+                    products={products}
+                    variant="boutique"
+                />
+            )}
+
+            {productGridEnabled &&
+                (products.length === 0 ? (
+                    <div
+                        className="flex flex-col items-center justify-center gap-2 border bg-white/20 py-10"
+                        style={{ borderRadius: tokens.radius }}
+                    >
+                        <Package className="h-10 w-10 opacity-20" />
+                        <p className="font-serif text-sm font-light opacity-50">
+                            Novidades em preparação
+                        </p>
+                    </div>
+                ) : (
+                    <div
+                        className="grid grid-cols-2"
+                        style={{
+                            gap: density === 'compact' ? '0.75rem' : '1rem',
+                        }}
+                    >
+                        {products.slice(0, 4).map((product) => (
+                            <article key={product.id} className="space-y-2">
+                                <div
+                                    className="relative aspect-[3/4] overflow-hidden bg-gray-50 shadow-md"
+                                    style={{ borderRadius: tokens.radius }}
+                                >
+                                    <ProductImage product={product} />
+                                    {product.total_stock === 0 && (
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                                            <span className="font-serif text-[9px] tracking-widest text-white uppercase">
+                                                Esgotado
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="space-y-0.5">
+                                    {product.category && (
+                                        <p className="text-[8px] font-semibold tracking-wider uppercase opacity-40">
+                                            {product.category}
+                                        </p>
+                                    )}
+                                    <h3 className="truncate font-serif text-[11px] font-light tracking-wide">
+                                        {product.name}
+                                    </h3>
+                                    <p className="text-[8px] opacity-30">
+                                        SKU {product.sku}
+                                    </p>
+                                </div>
+                            </article>
+                        ))}
+                    </div>
+                ))}
         </div>
     );
 }
@@ -358,25 +669,39 @@ const CatalogPreview = memo(function CatalogPreview({
     // Background logic
     let backgroundStyle: React.CSSProperties = {};
     if (settings.background_mode === 'gradient' && settings.gradient_id) {
-        backgroundStyle.background = GRADIENTS[settings.gradient_id as keyof typeof GRADIENTS] ?? settings.background_color;
+        backgroundStyle.background =
+            GRADIENTS[settings.gradient_id as keyof typeof GRADIENTS] ??
+            settings.background_color;
     } else if (settings.background_mode === 'pattern' && settings.pattern_id) {
         const patternColor = settings.pattern_color ?? settings.primary_color;
         const patternOpacity = settings.pattern_opacity ?? 12;
         backgroundStyle.backgroundColor = settings.background_color;
-        const patternFn = PATTERNS[settings.pattern_id as keyof typeof PATTERNS];
-        backgroundStyle.backgroundImage = patternFn?.(patternColor, patternOpacity);
+        const patternFn =
+            PATTERNS[settings.pattern_id as keyof typeof PATTERNS];
+        backgroundStyle.backgroundImage = patternFn?.(
+            patternColor,
+            patternOpacity,
+        );
     } else {
         backgroundStyle.backgroundColor = settings.background_color;
     }
 
-    const layoutProps: LayoutContentProps = { settings, products, manufacturerName, tokens };
+    const layoutProps: LayoutContentProps = {
+        settings,
+        products,
+        manufacturerName,
+        tokens,
+    };
 
     return (
         <div
             className="relative min-h-full text-[var(--brand-secondary)]"
             style={{
                 ...backgroundStyle,
-                fontFamily: preset === 'boutique' ? '"Fraunces", "Times New Roman", serif' : brandFont,
+                fontFamily:
+                    preset === 'boutique'
+                        ? '"Fraunces", "Times New Roman", serif'
+                        : brandFont,
                 ['--brand-primary' as string]: settings.primary_color,
                 ['--brand-secondary' as string]: settings.secondary_color,
                 ['--brand-accent' as string]: settings.accent_color,
@@ -388,27 +713,34 @@ const CatalogPreview = memo(function CatalogPreview({
             }}
         >
             {/* Background image layer */}
-            {settings.background_mode === 'image' && settings.background_image_url && (
-                <>
-                    <div
-                        className="absolute inset-0"
-                        style={{
-                            backgroundImage: `url(${settings.background_image_url})`,
-                            backgroundSize: 'cover',
-                            backgroundPosition: 'center',
-                            opacity: (settings.background_image_opacity ?? 20) / 100,
-                            filter: `blur(${settings.background_blur ?? 0}px)`,
-                        }}
-                    />
-                    <div
-                        className="absolute inset-0"
-                        style={{
-                            backgroundColor: settings.background_overlay_color ?? '#000000',
-                            opacity: (settings.background_overlay_opacity ?? 10) / 100,
-                        }}
-                    />
-                </>
-            )}
+            {settings.background_mode === 'image' &&
+                settings.background_image_url && (
+                    <>
+                        <div
+                            className="absolute inset-0"
+                            style={{
+                                backgroundImage: `url(${settings.background_image_url})`,
+                                backgroundSize: 'cover',
+                                backgroundPosition: 'center',
+                                opacity:
+                                    (settings.background_image_opacity ?? 20) /
+                                    100,
+                                filter: `blur(${settings.background_blur ?? 0}px)`,
+                            }}
+                        />
+                        <div
+                            className="absolute inset-0"
+                            style={{
+                                backgroundColor:
+                                    settings.background_overlay_color ??
+                                    '#000000',
+                                opacity:
+                                    (settings.background_overlay_opacity ??
+                                        10) / 100,
+                            }}
+                        />
+                    </>
+                )}
 
             <div className="relative">
                 {preset === 'playful' && <PlayfulContent {...layoutProps} />}

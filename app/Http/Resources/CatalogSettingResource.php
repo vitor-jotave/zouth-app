@@ -22,6 +22,8 @@ class CatalogSettingResource extends JsonResource
             'id' => $this->id,
             'manufacturer_id' => $this->manufacturer_id,
             'brand_name' => $this->brand_name,
+            'show_brand_name' => $this->show_brand_name ?? true,
+            'show_logo' => $this->show_logo ?? true,
             'tagline' => $this->tagline,
             'description' => $this->description,
             'logo_path' => $this->logo_path,

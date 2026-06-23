@@ -21,7 +21,9 @@ import { Slider } from '@/components/ui/slider';
 import { cropAndCompress } from '@/lib/image-utils';
 import { cn } from '@/lib/utils';
 
-const ASPECT_RATIO = 4 / 5;
+const DEFAULT_ASPECT_RATIO = 4 / 5;
+const DEFAULT_DESCRIPTION =
+    'Enquadre a imagem no formato 4:5. Use o zoom para ampliar e escolha a cor de fundo para áreas transparentes.';
 
 const BG_PRESETS = [
     { label: 'Branco', value: '#ffffff' },
@@ -36,11 +38,22 @@ interface ImageCropDialogProps {
     imageFile: File | null;
     onCropped: (croppedFile: File) => void;
     onSkip?: () => void;
+    aspectRatio?: number | null;
+    title?: string;
+    description?: string;
 }
 
-function createInitialCrop(width: number, height: number): Crop {
+function createInitialCrop(
+    width: number,
+    height: number,
+    aspectRatio: number | null,
+): Crop {
+    if (aspectRatio === null) {
+        return centerCrop({ unit: '%', width: 90, height: 90 }, width, height);
+    }
+
     return centerCrop(
-        makeAspectCrop({ unit: '%', width: 90 }, ASPECT_RATIO, width, height),
+        makeAspectCrop({ unit: '%', width: 90 }, aspectRatio, width, height),
         width,
         height,
     );
@@ -52,6 +65,9 @@ export function ImageCropDialog({
     imageFile,
     onCropped,
     onSkip,
+    aspectRatio = DEFAULT_ASPECT_RATIO,
+    title = 'Ajustar imagem',
+    description = DEFAULT_DESCRIPTION,
 }: ImageCropDialogProps) {
     const [crop, setCrop] = useState<Crop>();
     const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
@@ -141,7 +157,7 @@ export function ImageCropDialog({
     const onImageLoad = useCallback(
         (e: React.SyntheticEvent<HTMLImageElement>) => {
             const { width, height } = e.currentTarget;
-            const initial = createInitialCrop(width, height);
+            const initial = createInitialCrop(width, height, aspectRatio);
             setCrop(initial);
 
             // Set initial completedCrop so "Confirmar" is enabled immediately
@@ -155,7 +171,7 @@ export function ImageCropDialog({
                 });
             }
         },
-        [],
+        [aspectRatio],
     );
 
     const handleConfirm = useCallback(async () => {
@@ -177,7 +193,7 @@ export function ImageCropDialog({
         } finally {
             setProcessing(false);
         }
-    }, [completedCrop, imageFile, bgColor, onCropped]);
+    }, [completedCrop, imageFile, bgColor, scale, onCropped]);
 
     const handleCancel = useCallback(() => {
         setCrop(undefined);
@@ -195,12 +211,8 @@ export function ImageCropDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-h-[95vh] overflow-y-auto sm:max-w-2xl">
                 <DialogHeader>
-                    <DialogTitle>Ajustar imagem</DialogTitle>
-                    <DialogDescription>
-                        Enquadre a imagem no formato 4:5. Use o zoom para
-                        ampliar e escolha a cor de fundo para áreas
-                        transparentes.
-                    </DialogDescription>
+                    <DialogTitle>{title}</DialogTitle>
+                    <DialogDescription>{description}</DialogDescription>
                 </DialogHeader>
 
                 {/* Crop area — overflow-hidden para conter a imagem com zoom */}
@@ -213,7 +225,7 @@ export function ImageCropDialog({
                             crop={crop}
                             onChange={(_, percentCrop) => setCrop(percentCrop)}
                             onComplete={(c) => setCompletedCrop(c)}
-                            aspect={ASPECT_RATIO}
+                            aspect={aspectRatio ?? undefined}
                             scale={scale}
                         >
                             <img

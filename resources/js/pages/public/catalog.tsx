@@ -69,6 +69,8 @@ interface Manufacturer {
 
 interface CatalogSettings {
     brand_name: string;
+    show_brand_name: boolean;
+    show_logo: boolean;
     tagline?: string | null;
     description?: string | null;
     logo_url?: string | null;
@@ -532,6 +534,8 @@ function ProductQuickViewModal({
     product,
     selectedValues,
     isAdded,
+    primaryColor,
+    accentColor,
     onClose,
     onSelectVariation,
     onAddToCart,
@@ -539,6 +543,8 @@ function ProductQuickViewModal({
     product: Product | null;
     selectedValues: Record<string, string>;
     isAdded: boolean;
+    primaryColor: string;
+    accentColor: string;
     onClose: () => void;
     onSelectVariation: (variationName: string, value: string) => void;
     onAddToCart: (product: Product) => void;
@@ -586,7 +592,7 @@ function ProductQuickViewModal({
                             className={`text-lg font-semibold ${product.price_cents == null ? 'italic opacity-55' : ''}`}
                             style={
                                 product.price_cents != null
-                                    ? { color: 'var(--brand-primary)' }
+                                    ? { color: primaryColor }
                                     : {}
                             }
                         >
@@ -619,7 +625,7 @@ function ProductQuickViewModal({
                             </div>
                         )}
 
-                        <div className="mt-auto flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="mt-auto grid gap-3 border-t pt-5">
                             <p className="text-xs text-gray-500">
                                 {product.total_stock > 0
                                     ? `${product.total_stock} unidade(s) disponíveis`
@@ -629,11 +635,11 @@ function ProductQuickViewModal({
                                 type="button"
                                 disabled={!canAdd}
                                 onClick={() => onAddToCart(product)}
-                                className="gap-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                className="h-11 w-full gap-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                                 style={{
                                     backgroundColor: isAdded
-                                        ? 'var(--brand-accent)'
-                                        : 'var(--brand-primary)',
+                                        ? accentColor
+                                        : primaryColor,
                                 }}
                             >
                                 <AddToCartContent
@@ -980,6 +986,121 @@ function CatalogFiltersDrawer({
     );
 }
 
+function CatalogCollections({
+    catalogToken,
+    filters,
+    categories,
+    variant,
+}: {
+    catalogToken: string;
+    filters: CatalogFilters;
+    categories: CatalogFilterOptions['categories'];
+    variant: 'minimal' | 'playful' | 'boutique';
+}) {
+    if (categories.length === 0) {
+        return null;
+    }
+
+    const selectCategory = (categoryId: number) => {
+        const nextCategoryId =
+            filters.category_id === String(categoryId)
+                ? null
+                : String(categoryId);
+        const payload: Record<string, string | Record<string, string[]>> = {};
+
+        if (filters.search) {
+            payload.search = filters.search;
+        }
+
+        if (nextCategoryId) {
+            payload.category_id = nextCategoryId;
+        }
+
+        if (Object.keys(filters.variations ?? {}).length > 0) {
+            payload.variations = filters.variations;
+        }
+
+        router.get(`/catalog/${catalogToken}`, payload, {
+            preserveState: false,
+            preserveScroll: true,
+            replace: true,
+        });
+    };
+
+    if (variant === 'boutique') {
+        return (
+            <section className="mb-8 flex flex-wrap items-center justify-center gap-3 border-y border-black/10 py-5">
+                {categories.map((category) => {
+                    const active = filters.category_id === String(category.id);
+
+                    return (
+                        <button
+                            key={category.id}
+                            type="button"
+                            onClick={() => selectCategory(category.id)}
+                            className={`rounded-none border-b-2 px-1 py-1 font-serif text-sm tracking-wide transition ${
+                                active
+                                    ? 'border-[var(--brand-primary)] opacity-100'
+                                    : 'border-transparent opacity-55 hover:opacity-90'
+                            }`}
+                        >
+                            {category.name}
+                        </button>
+                    );
+                })}
+            </section>
+        );
+    }
+
+    if (variant === 'playful') {
+        return (
+            <section className="mb-6 flex flex-wrap items-center justify-center gap-2">
+                {categories.map((category) => {
+                    const active = filters.category_id === String(category.id);
+
+                    return (
+                        <button
+                            key={category.id}
+                            type="button"
+                            onClick={() => selectCategory(category.id)}
+                            className={`rounded-full border-2 px-4 py-2 text-sm font-bold shadow-sm transition hover:-translate-y-0.5 ${
+                                active
+                                    ? 'border-[var(--brand-primary)] bg-[var(--brand-primary)] text-white'
+                                    : 'border-[var(--brand-accent)] bg-white/75'
+                            }`}
+                        >
+                            {category.name}
+                        </button>
+                    );
+                })}
+            </section>
+        );
+    }
+
+    return (
+        <section className="mb-6 flex flex-wrap items-center gap-2">
+            {categories.map((category) => {
+                const active = filters.category_id === String(category.id);
+
+                return (
+                    <button
+                        key={category.id}
+                        type="button"
+                        onClick={() => selectCategory(category.id)}
+                        className={`rounded-full px-4 py-2 text-sm font-medium shadow-sm ring-1 transition ${
+                            active
+                                ? 'bg-[var(--brand-primary)] text-white ring-[var(--brand-primary)]'
+                                : 'bg-white/65 ring-black/10 hover:bg-white'
+                        }`}
+                    >
+                        {category.name}
+                    </button>
+                );
+            })}
+        </section>
+    );
+}
+
 function AddToCartContent({
     isAdded,
     canAdd,
@@ -1088,17 +1209,32 @@ function MinimalLayout({
     const productGridEnabled =
         settings.sections?.find((s) => s.type === 'product_grid')?.enabled ??
         true;
+    const collectionsEnabled =
+        settings.sections?.find((s) => s.type === 'collections')?.enabled ??
+        true;
+    const showBrandName = settings.show_brand_name;
+    const showLogo = settings.show_logo && Boolean(settings.logo_url);
 
     return (
         <>
             {/* Header compacto e minimalista */}
             {heroEnabled && (
                 <header className="relative">
-                    <div className="flex items-center justify-between pb-8">
-                        <div className="flex items-center gap-4">
-                            {settings.logo_url && (
+                    <div
+                        className={`flex flex-col gap-4 pb-8 sm:flex-row sm:items-center ${
+                            showBrandName
+                                ? 'sm:justify-between'
+                                : 'justify-center'
+                        }`}
+                    >
+                        <div
+                            className={`flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6 ${
+                                showBrandName ? '' : 'items-center sm:mx-auto'
+                            }`}
+                        >
+                            {showLogo && (
                                 <div
-                                    className="h-16 w-16 overflow-hidden"
+                                    className="inline-flex max-w-full shrink-0 items-center justify-center"
                                     style={{ borderRadius: tokens.radius }}
                                 >
                                     <img
@@ -1107,14 +1243,17 @@ function MinimalLayout({
                                             settings.brand_name ??
                                             manufacturer.name
                                         }
-                                        className="h-full w-full object-cover"
+                                        className="h-auto max-h-24 w-auto max-w-72 object-contain sm:max-h-28 sm:max-w-80"
                                     />
                                 </div>
                             )}
                             <div>
-                                <h1 className="text-3xl font-bold tracking-tight">
-                                    {settings.brand_name ?? manufacturer.name}
-                                </h1>
+                                {showBrandName && (
+                                    <h1 className="text-3xl font-bold tracking-tight">
+                                        {settings.brand_name ??
+                                            manufacturer.name}
+                                    </h1>
+                                )}
                                 {settings.tagline && (
                                     <p className="mt-1 text-sm opacity-70">
                                         {settings.tagline}
@@ -1122,9 +1261,11 @@ function MinimalLayout({
                                 )}
                             </div>
                         </div>
-                        <Badge className="bg-[var(--brand-primary)] text-white">
-                            {products.data.length} produtos
-                        </Badge>
+                        {showBrandName && (
+                            <Badge className="bg-[var(--brand-primary)] text-white">
+                                {products.data.length} produtos
+                            </Badge>
+                        )}
                     </div>
                     {settings.description && (
                         <p className="max-w-3xl text-base opacity-80">
@@ -1132,6 +1273,15 @@ function MinimalLayout({
                         </p>
                     )}
                 </header>
+            )}
+
+            {collectionsEnabled && (
+                <CatalogCollections
+                    catalogToken={catalogToken}
+                    filters={filters}
+                    categories={filterOptions.categories}
+                    variant="minimal"
+                />
             )}
 
             {productGridEnabled && (
@@ -1293,6 +1443,9 @@ function PlayfulLayout({
     const productGridEnabled =
         settings.sections?.find((s) => s.type === 'product_grid')?.enabled ??
         true;
+    const collectionsEnabled =
+        settings.sections?.find((s) => s.type === 'collections')?.enabled ??
+        true;
 
     return (
         <>
@@ -1320,17 +1473,17 @@ function PlayfulLayout({
                     </div>
 
                     <div className="relative space-y-4">
-                        {settings.logo_url && (
+                        {settings.show_logo && settings.logo_url && (
                             <div
-                                className="mx-auto h-24 w-24 overflow-hidden shadow-xl"
-                                style={{ borderRadius: '50%' }}
+                                className="mx-auto inline-flex max-w-full items-center justify-center"
+                                style={{ borderRadius: tokens.radius }}
                             >
                                 <img
                                     src={settings.logo_url}
                                     alt={
                                         settings.brand_name ?? manufacturer.name
                                     }
-                                    className="h-full w-full object-cover"
+                                    className="h-auto max-h-28 w-auto max-w-72 object-contain sm:max-h-32 sm:max-w-80"
                                 />
                             </div>
                         )}
@@ -1346,12 +1499,14 @@ function PlayfulLayout({
                                     Catálogo Oficial
                                 </span>
                             </div>
-                            <h1
-                                className="text-5xl font-black tracking-tight"
-                                style={{ color: settings.primary_color }}
-                            >
-                                {settings.brand_name ?? manufacturer.name}
-                            </h1>
+                            {settings.show_brand_name && (
+                                <h1
+                                    className="text-5xl font-black tracking-tight"
+                                    style={{ color: settings.primary_color }}
+                                >
+                                    {settings.brand_name ?? manufacturer.name}
+                                </h1>
+                            )}
                             {settings.tagline && (
                                 <p className="mt-3 text-xl font-semibold opacity-80">
                                     {settings.tagline}
@@ -1363,18 +1518,29 @@ function PlayfulLayout({
                                 </p>
                             )}
                         </div>
-                        <div className="flex items-center justify-center gap-3">
-                            <Badge
-                                className="text-white shadow-lg"
-                                style={{
-                                    backgroundColor: settings.primary_color,
-                                }}
-                            >
-                                ⭐ {products.data.length} produtos incríveis
-                            </Badge>
-                        </div>
+                        {settings.show_brand_name && (
+                            <div className="flex items-center justify-center gap-3">
+                                <Badge
+                                    className="text-white shadow-lg"
+                                    style={{
+                                        backgroundColor: settings.primary_color,
+                                    }}
+                                >
+                                    ⭐ {products.data.length} produtos incríveis
+                                </Badge>
+                            </div>
+                        )}
                     </div>
                 </header>
+            )}
+
+            {collectionsEnabled && (
+                <CatalogCollections
+                    catalogToken={catalogToken}
+                    filters={filters}
+                    categories={filterOptions.categories}
+                    variant="playful"
+                />
             )}
 
             {productGridEnabled && (
@@ -1571,6 +1737,9 @@ function BoutiqueLayout({
     const productGridEnabled =
         settings.sections?.find((s) => s.type === 'product_grid')?.enabled ??
         true;
+    const collectionsEnabled =
+        settings.sections?.find((s) => s.type === 'collections')?.enabled ??
+        true;
     return (
         <>
             {/* Hero elegante tipo magazine */}
@@ -1579,8 +1748,20 @@ function BoutiqueLayout({
                     className="relative mb-16 overflow-hidden bg-white/40 backdrop-blur-md"
                     style={{ borderRadius: tokens.radius }}
                 >
-                    <div className="grid items-center gap-12 p-16 lg:grid-cols-2">
-                        <div className="space-y-6">
+                    <div
+                        className={`grid items-center gap-12 p-16 ${
+                            settings.show_brand_name
+                                ? 'lg:grid-cols-2'
+                                : 'justify-items-center text-center'
+                        }`}
+                    >
+                        <div
+                            className={`space-y-6 ${
+                                settings.show_brand_name
+                                    ? ''
+                                    : 'flex max-w-2xl flex-col items-center'
+                            }`}
+                        >
                             <div
                                 className="inline-flex items-center gap-2 border-b-2 pb-2 text-xs font-semibold tracking-[0.2em] uppercase"
                                 style={{ borderColor: settings.primary_color }}
@@ -1588,12 +1769,14 @@ function BoutiqueLayout({
                                 <Sparkles className="h-3 w-3" />
                                 <span>Coleção Exclusiva</span>
                             </div>
-                            <h1
-                                className="font-serif text-6xl leading-tight font-light tracking-tight"
-                                style={{ color: settings.secondary_color }}
-                            >
-                                {settings.brand_name ?? manufacturer.name}
-                            </h1>
+                            {settings.show_brand_name && (
+                                <h1
+                                    className="font-serif text-6xl leading-tight font-light tracking-tight"
+                                    style={{ color: settings.secondary_color }}
+                                >
+                                    {settings.brand_name ?? manufacturer.name}
+                                </h1>
+                            )}
                             {settings.tagline && (
                                 <p className="text-2xl font-light italic opacity-80">
                                     {settings.tagline}
@@ -1604,29 +1787,33 @@ function BoutiqueLayout({
                                     {settings.description}
                                 </p>
                             )}
-                            <div className="flex items-center gap-4 pt-4">
-                                <div
-                                    className="h-px flex-1"
-                                    style={{
-                                        backgroundColor: settings.primary_color,
-                                        opacity: 0.3,
-                                    }}
-                                />
-                                <Badge
-                                    variant="outline"
-                                    className="border-2 px-6 py-2 text-sm font-semibold"
-                                    style={{
-                                        borderColor: settings.primary_color,
-                                    }}
-                                >
-                                    {products.data.length} Peças Selecionadas
-                                </Badge>
-                            </div>
+                            {settings.show_brand_name && (
+                                <div className="flex items-center gap-4 pt-4">
+                                    <div
+                                        className="h-px flex-1"
+                                        style={{
+                                            backgroundColor:
+                                                settings.primary_color,
+                                            opacity: 0.3,
+                                        }}
+                                    />
+                                    <Badge
+                                        variant="outline"
+                                        className="border-2 px-6 py-2 text-sm font-semibold"
+                                        style={{
+                                            borderColor: settings.primary_color,
+                                        }}
+                                    >
+                                        {products.data.length} Peças
+                                        Selecionadas
+                                    </Badge>
+                                </div>
+                            )}
                         </div>
-                        {settings.logo_url && (
+                        {settings.show_logo && settings.logo_url && (
                             <div className="flex justify-center">
                                 <div
-                                    className="h-64 w-64 overflow-hidden shadow-2xl"
+                                    className="inline-flex max-w-full items-center justify-center"
                                     style={{ borderRadius: tokens.radius }}
                                 >
                                     <img
@@ -1635,13 +1822,22 @@ function BoutiqueLayout({
                                             settings.brand_name ??
                                             manufacturer.name
                                         }
-                                        className="h-full w-full object-cover"
+                                        className="h-auto max-h-36 w-auto max-w-[28rem] object-contain sm:max-h-40"
                                     />
                                 </div>
                             </div>
                         )}
                     </div>
                 </header>
+            )}
+
+            {collectionsEnabled && (
+                <CatalogCollections
+                    catalogToken={catalogToken}
+                    filters={filters}
+                    categories={filterOptions.categories}
+                    variant="boutique"
+                />
             )}
 
             {productGridEnabled && (
@@ -2041,7 +2237,7 @@ export default function PublicCatalog({
                                 opacity:
                                     (catalog_settings.background_image_opacity ??
                                         100) / 100,
-                                filter: `blur(${(catalog_settings.background_blur ?? 0) * 0.5}px)`,
+                                filter: `blur(${catalog_settings.background_blur ?? 0}px)`,
                             }}
                         />
                         <div
@@ -2130,6 +2326,8 @@ export default function PublicCatalog({
                         ? addedProductId === quickViewProduct.id
                         : false
                 }
+                primaryColor={catalog_settings.primary_color}
+                accentColor={catalog_settings.accent_color}
                 onClose={() => setQuickViewProduct(null)}
                 onSelectVariation={(variationName, value) => {
                     if (!quickViewProduct) {

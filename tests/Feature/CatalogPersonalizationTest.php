@@ -60,6 +60,8 @@ it('returns saved settings in page props without data wrapping', function () {
     CatalogSetting::create([
         'manufacturer_id' => $this->manufacturer->id,
         'brand_name' => 'Zouth Atelier',
+        'show_brand_name' => true,
+        'show_logo' => false,
         'primary_color' => '#AABBCC',
         'secondary_color' => '#112233',
         'accent_color' => '#445566',
@@ -76,6 +78,8 @@ it('returns saved settings in page props without data wrapping', function () {
             ->component('manufacturer/catalog-settings/index')
             ->has('catalog_settings.brand_name')
             ->where('catalog_settings.brand_name', 'Zouth Atelier')
+            ->where('catalog_settings.show_brand_name', true)
+            ->where('catalog_settings.show_logo', false)
             ->where('catalog_settings.primary_color', '#AABBCC')
             ->where('catalog_settings.font_family', 'fraunces')
             ->missing('catalog_settings.data')
@@ -85,6 +89,8 @@ it('returns saved settings in page props without data wrapping', function () {
 it('updates catalog branding settings', function () {
     $payload = [
         'brand_name' => 'Zouth Atelier',
+        'show_brand_name' => true,
+        'show_logo' => false,
         'tagline' => 'Colecao exclusiva',
         'description' => 'Detalhes que transformam vitrines.',
         'primary_color' => '#111111',
@@ -103,6 +109,8 @@ it('updates catalog branding settings', function () {
     $this->assertDatabaseHas('catalog_settings', [
         'manufacturer_id' => $this->manufacturer->id,
         'brand_name' => 'Zouth Atelier',
+        'show_brand_name' => true,
+        'show_logo' => false,
         'primary_color' => '#111111',
         'font_family' => 'fraunces',
     ]);

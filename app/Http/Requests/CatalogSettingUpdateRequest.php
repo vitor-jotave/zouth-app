@@ -8,9 +8,23 @@ class CatalogSettingUpdateRequest extends FormRequest
 {
     protected function prepareForValidation(): void
     {
-        $this->merge([
-            'public_link_active' => $this->boolean('public_link_active'),
-        ]);
+        if ($this->has('public_link_active')) {
+            $this->merge([
+                'public_link_active' => $this->boolean('public_link_active'),
+            ]);
+        }
+
+        if ($this->has('show_brand_name')) {
+            $this->merge([
+                'show_brand_name' => $this->boolean('show_brand_name'),
+            ]);
+        }
+
+        if ($this->has('show_logo')) {
+            $this->merge([
+                'show_logo' => $this->boolean('show_logo'),
+            ]);
+        }
     }
 
     /**
@@ -30,6 +44,8 @@ class CatalogSettingUpdateRequest extends FormRequest
     {
         return [
             'brand_name' => ['required', 'string', 'max:80'],
+            'show_brand_name' => ['sometimes', 'boolean'],
+            'show_logo' => ['sometimes', 'boolean'],
             'tagline' => ['nullable', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:600'],
             'primary_color' => ['required', 'regex:/^#[0-9A-Fa-f]{6}$/'],

@@ -186,6 +186,11 @@ it('allows saving sections configuration', function () {
             'enabled' => true,
             'props' => ['columns_desktop' => 4],
         ],
+        [
+            'type' => 'collections',
+            'enabled' => false,
+            'props' => ['style' => 'chips'],
+        ],
     ];
 
     $response = $this->actingAs($this->user)->put(route('manufacturer.catalog-settings.update'), [
@@ -203,5 +208,6 @@ it('allows saving sections configuration', function () {
 
     $setting = CatalogSetting::where('manufacturer_id', $this->manufacturer->id)->first();
     expect($setting->sections)->toBeArray();
-    expect($setting->sections)->toHaveCount(2);
+    expect($setting->sections)->toHaveCount(3);
+    expect(collect($setting->sections)->firstWhere('type', 'collections')['enabled'])->toBeFalse();
 });

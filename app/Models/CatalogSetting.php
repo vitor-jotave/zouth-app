@@ -21,6 +21,8 @@ class CatalogSetting extends Model
     protected $fillable = [
         'manufacturer_id',
         'brand_name',
+        'show_brand_name',
+        'show_logo',
         'tagline',
         'description',
         'logo_path',
@@ -58,6 +60,8 @@ class CatalogSetting extends Model
     {
         return [
             'public_link_active' => 'boolean',
+            'show_brand_name' => 'boolean',
+            'show_logo' => 'boolean',
             'public_token_rotated_at' => 'datetime',
             'sections' => 'array',
             'background_image_opacity' => 'integer',
@@ -104,6 +108,8 @@ class CatalogSetting extends Model
     {
         return [
             'brand_name' => $brandName ?? 'Minha Marca',
+            'show_brand_name' => true,
+            'show_logo' => true,
             'tagline' => null,
             'description' => null,
             'primary_color' => '#0F766E',
