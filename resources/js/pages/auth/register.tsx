@@ -2,18 +2,20 @@ import { Form, Head } from '@inertiajs/react';
 import InputError from '@/components/input-error';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import AuthLayout from '@/layouts/auth-layout';
 import { login } from '@/routes';
+import { privacy, terms } from '@/routes/legal';
 import { store } from '@/routes/register';
 
 export default function Register() {
     return (
         <AuthLayout
-            title="Crie uma conta de representante e comece a vender hoje!"
-            description="Insira seus dados abaixo para criar sua conta"
+            title="Cadastro de representante"
+            description="Crie seu acesso para se afiliar aos fabricantes disponíveis no Zouth App."
         >
             <Head title="Cadastrar" />
             <Form
@@ -44,7 +46,9 @@ export default function Register() {
                             </div>
 
                             <div className="grid gap-2">
-                                <Label htmlFor="email">Endereço de e-mail</Label>
+                                <Label htmlFor="email">
+                                    Endereço de e-mail
+                                </Label>
                                 <Input
                                     id="email"
                                     type="email"
@@ -89,10 +93,45 @@ export default function Register() {
                                 />
                             </div>
 
+                            <div className="grid gap-2">
+                                <div className="flex items-start gap-3">
+                                    <Checkbox
+                                        id="terms"
+                                        name="terms"
+                                        value="1"
+                                        required
+                                        tabIndex={5}
+                                        aria-describedby="terms-description"
+                                    />
+                                    <Label
+                                        htmlFor="terms"
+                                        id="terms-description"
+                                        className="text-sm leading-5 font-normal"
+                                    >
+                                        Li e aceito os{' '}
+                                        <TextLink
+                                            href={terms()}
+                                            target="_blank"
+                                        >
+                                            Termos de Uso
+                                        </TextLink>{' '}
+                                        e a{' '}
+                                        <TextLink
+                                            href={privacy()}
+                                            target="_blank"
+                                        >
+                                            Política de Privacidade
+                                        </TextLink>
+                                        .
+                                    </Label>
+                                </div>
+                                <InputError message={errors.terms} />
+                            </div>
+
                             <Button
                                 type="submit"
                                 className="mt-2 w-full"
-                                tabIndex={5}
+                                tabIndex={6}
                                 data-test="register-user-button"
                             >
                                 {processing && <Spinner />}
@@ -102,7 +141,7 @@ export default function Register() {
 
                         <div className="text-center text-sm text-muted-foreground">
                             Já tem uma conta?{' '}
-                            <TextLink href={login()} tabIndex={6}>
+                            <TextLink href={login()} tabIndex={7}>
                                 Entrar
                             </TextLink>
                         </div>
