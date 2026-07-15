@@ -8,10 +8,8 @@ import {
     ShoppingCart,
 } from 'lucide-react';
 import { useState } from 'react';
-import {
-    CustomerFormData,
-    CustomerFormDialog,
-} from '@/components/customer-form-dialog';
+import type { CustomerFormData } from '@/components/customer-form-dialog';
+import { CustomerFormDialog } from '@/components/customer-form-dialog';
 import { Pagination } from '@/components/pagination';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

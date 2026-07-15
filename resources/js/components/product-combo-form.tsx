@@ -144,6 +144,10 @@ export function ProductComboForm({
         images: [],
         video: null,
     });
+    const indexedErrors = errors as unknown as Record<
+        string,
+        string | undefined
+    >;
 
     const productsById = useMemo(
         () =>
@@ -453,7 +457,7 @@ export function ProductComboForm({
                                     </Select>
                                     <InputError
                                         message={
-                                            errors[
+                                            indexedErrors[
                                                 `${itemPrefix}.component_product_id`
                                             ]
                                         }
@@ -536,7 +540,7 @@ export function ProductComboForm({
                                     </Select>
                                     <InputError
                                         message={
-                                            errors[
+                                            indexedErrors[
                                                 `${itemPrefix}.component_variant_stock_id`
                                             ]
                                         }
@@ -559,7 +563,9 @@ export function ProductComboForm({
                                     />
                                     <InputError
                                         message={
-                                            errors[`${itemPrefix}.quantity`]
+                                            indexedErrors[
+                                                `${itemPrefix}.quantity`
+                                            ]
                                         }
                                     />
                                 </div>

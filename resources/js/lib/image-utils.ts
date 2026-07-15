@@ -54,7 +54,10 @@ export function cropToCanvas(
     });
 
     if (canvas.width === 0 || canvas.height === 0) {
-        console.error('[cropToCanvas] Canvas tem dimensão zero — crop inválido!', crop);
+        console.error(
+            '[cropToCanvas] Canvas tem dimensão zero — crop inválido!',
+            crop,
+        );
     }
 
     ctx.imageSmoothingQuality = 'high';
@@ -109,7 +112,6 @@ export async function compressCanvas(
     let canvas = source;
     let quality = INITIAL_QUALITY;
 
-    // eslint-disable-next-line no-constant-condition
     while (true) {
         const blob = await canvasToBlob(canvas, 'image/jpeg', quality);
 
@@ -136,7 +138,11 @@ export async function cropAndCompress(
     image: HTMLImageElement,
     crop: PixelCrop,
     fileName: string,
-    options: { maxSizeBytes?: number; backgroundColor?: string; scale?: number } = {},
+    options: {
+        maxSizeBytes?: number;
+        backgroundColor?: string;
+        scale?: number;
+    } = {},
 ): Promise<File> {
     const {
         maxSizeBytes = MAX_FILE_SIZE,

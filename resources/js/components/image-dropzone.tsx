@@ -117,7 +117,10 @@ export function ImageDropzone({
                 <p className="mt-1 text-xs text-muted-foreground">
                     PNG, JPG ou WebP &bull; Máx. {maxFiles} fotos
                     {currentCount > 0 && (
-                        <> &bull; {remaining} restante{remaining !== 1 && 's'}</>
+                        <>
+                            {' '}
+                            &bull; {remaining} restante{remaining !== 1 && 's'}
+                        </>
                     )}
                 </p>
             </div>

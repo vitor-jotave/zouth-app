@@ -3,7 +3,14 @@ import { Check, X } from 'lucide-react';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardFooter,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 
 type Plan = {
     id: number;
@@ -44,7 +51,11 @@ function FeatureRow({ label, value }: { label: string; value: string }) {
     );
 }
 
-export default function PlanSelectionIndex({ manufacturer, plans, checkoutUrls }: Props) {
+export default function PlanSelectionIndex({
+    manufacturer,
+    plans,
+    checkoutUrls,
+}: Props) {
     return (
         <div className="min-h-svh bg-background">
             <Head title={`Selecionar Plano — ${manufacturer.name}`} />
@@ -56,8 +67,12 @@ export default function PlanSelectionIndex({ manufacturer, plans, checkoutUrls }
                         <AppLogoIcon className="size-9 fill-current text-[var(--foreground)]" />
                     </div>
                     <div>
-                        <p className="text-xs text-muted-foreground">Configuração de conta</p>
-                        <p className="text-sm font-medium">{manufacturer.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                            Configuração de conta
+                        </p>
+                        <p className="text-sm font-medium">
+                            {manufacturer.name}
+                        </p>
                     </div>
                 </div>
             </header>
@@ -70,7 +85,8 @@ export default function PlanSelectionIndex({ manufacturer, plans, checkoutUrls }
                         Bem-vindo, {manufacturer.name}!
                     </h1>
                     <p className="mt-2 text-muted-foreground">
-                        Escolha o plano ideal para a sua operação. Sem compromisso — você pode trocar a qualquer momento.
+                        Escolha o plano ideal para a sua operação. Sem
+                        compromisso — você pode trocar a qualquer momento.
                     </p>
                 </div>
 
@@ -87,28 +103,54 @@ export default function PlanSelectionIndex({ manufacturer, plans, checkoutUrls }
                                         </Badge>
                                     )}
                                 </div>
-                                <CardDescription>{plan.description}</CardDescription>
+                                <CardDescription>
+                                    {plan.description}
+                                </CardDescription>
                                 <div className="pt-2">
                                     <span className="text-3xl font-bold">
                                         {plan.formatted_price}
                                     </span>
-                                    <span className="text-muted-foreground">/mês</span>
+                                    <span className="text-muted-foreground">
+                                        /mês
+                                    </span>
                                 </div>
                             </CardHeader>
 
                             <CardContent className="flex-1">
                                 <ul className="space-y-2 text-sm">
-                                    <FeatureRow label="Representantes" value={formatLimit(plan.max_reps)} />
-                                    <FeatureRow label="Produtos" value={formatLimit(plan.max_products)} />
-                                    <FeatureRow label="Pedidos/mês" value={formatLimit(plan.max_orders_per_month)} />
-                                    <FeatureRow label="Usuários" value={formatLimit(plan.max_users)} />
+                                    <FeatureRow
+                                        label="Representantes"
+                                        value={formatLimit(plan.max_reps)}
+                                    />
+                                    <FeatureRow
+                                        label="Produtos"
+                                        value={formatLimit(plan.max_products)}
+                                    />
+                                    <FeatureRow
+                                        label="Pedidos/mês"
+                                        value={formatLimit(
+                                            plan.max_orders_per_month,
+                                        )}
+                                    />
+                                    <FeatureRow
+                                        label="Usuários"
+                                        value={formatLimit(plan.max_users)}
+                                    />
                                     <FeatureRow
                                         label="Armazenamento"
-                                        value={plan.max_data_mb ? `${plan.max_data_mb} MB` : 'Ilimitado'}
+                                        value={
+                                            plan.max_data_mb
+                                                ? `${plan.max_data_mb} MB`
+                                                : 'Ilimitado'
+                                        }
                                     />
                                     <FeatureRow
                                         label="Arquivos"
-                                        value={plan.max_files_gb ? `${plan.max_files_gb} GB` : 'Ilimitado'}
+                                        value={
+                                            plan.max_files_gb
+                                                ? `${plan.max_files_gb} GB`
+                                                : 'Ilimitado'
+                                        }
                                     />
                                     <li className="flex items-center gap-2">
                                         {plan.allow_csv_import ? (
@@ -116,7 +158,13 @@ export default function PlanSelectionIndex({ manufacturer, plans, checkoutUrls }
                                         ) : (
                                             <X className="h-4 w-4 text-muted-foreground" />
                                         )}
-                                        <span className={!plan.allow_csv_import ? 'text-muted-foreground' : ''}>
+                                        <span
+                                            className={
+                                                !plan.allow_csv_import
+                                                    ? 'text-muted-foreground'
+                                                    : ''
+                                            }
+                                        >
                                             Importação CSV
                                         </span>
                                     </li>
@@ -141,7 +189,8 @@ export default function PlanSelectionIndex({ manufacturer, plans, checkoutUrls }
                 </div>
 
                 <p className="mt-10 text-center text-xs text-muted-foreground">
-                    Este link é válido por 3 dias. Para obter um novo link, entre em contato com o suporte.
+                    Este link é válido por 3 dias. Para obter um novo link,
+                    entre em contato com o suporte.
                 </p>
             </main>
         </div>

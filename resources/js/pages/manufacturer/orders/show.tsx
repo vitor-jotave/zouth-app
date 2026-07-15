@@ -3,7 +3,6 @@ import { ArrowLeft, Check, Clock, Package, Truck, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import {
     Table,
     TableBody,

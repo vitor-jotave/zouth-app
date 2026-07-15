@@ -1,10 +1,24 @@
 import { Head, router, usePage } from '@inertiajs/react';
-import { AlertTriangle, Check, Crown, ExternalLink, Infinity, X } from 'lucide-react';
+import {
+    AlertTriangle,
+    Check,
+    Crown,
+    ExternalLink,
+    Infinity as InfinityIcon,
+    X,
+} from 'lucide-react';
 import { checkout } from '@/actions/App/Http/Controllers/Manufacturer/BillingController';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardFooter,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem, DowngradeViolation, SharedData } from '@/types';
 
@@ -66,7 +80,15 @@ function formatLimit(value: number | null): string {
     return value === null ? 'Ilimitado' : String(value);
 }
 
-function UsageBar({ label, item, formatter }: { label: string; item: UsageItem; formatter?: (v: number) => string }) {
+function UsageBar({
+    label,
+    item,
+    formatter,
+}: {
+    label: string;
+    item: UsageItem;
+    formatter?: (v: number) => string;
+}) {
     const percentage = item.percentage ?? 0;
     const isWarning = percentage >= 80;
     const isDanger = percentage >= 95;
@@ -77,14 +99,23 @@ function UsageBar({ label, item, formatter }: { label: string; item: UsageItem; 
             <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">{label}</span>
                 <span className="font-medium">
-                    {fmt(item.current)} / {item.limit !== null ? fmt(item.limit) : <Infinity className="inline h-4 w-4" />}
+                    {fmt(item.current)} /{' '}
+                    {item.limit !== null ? (
+                        fmt(item.limit)
+                    ) : (
+                        <InfinityIcon className="inline h-4 w-4" />
+                    )}
                 </span>
             </div>
             {item.limit !== null && (
-                <div className="bg-secondary h-2 w-full rounded-full">
+                <div className="h-2 w-full rounded-full bg-secondary">
                     <div
                         className={`h-2 rounded-full transition-all ${
-                            isDanger ? 'bg-red-500' : isWarning ? 'bg-yellow-500' : 'bg-primary'
+                            isDanger
+                                ? 'bg-red-500'
+                                : isWarning
+                                  ? 'bg-yellow-500'
+                                  : 'bg-primary'
                         }`}
                         style={{ width: `${Math.min(percentage, 100)}%` }}
                     />
@@ -103,22 +134,39 @@ const limitLabels: Record<string, string> = {
     data_mb: 'Dados (MB)',
 };
 
-export default function BillingIndex({ plans, currentPlanId, subscription, usage }: Props) {
+export default function BillingIndex({
+    plans,
+    currentPlanId,
+    subscription,
+    usage,
+}: Props) {
     const { flash } = usePage<SharedData>().props;
     const downgradeViolations = flash?.downgrade_violations;
 
     function handleSwap(planId: number) {
-        router.post('/manufacturer/billing/swap', { plan_id: planId }, { preserveScroll: true });
+        router.post(
+            '/manufacturer/billing/swap',
+            { plan_id: planId },
+            { preserveScroll: true },
+        );
     }
 
     function handleCancel() {
         if (confirm('Tem certeza que deseja cancelar sua assinatura?')) {
-            router.post('/manufacturer/billing/cancel', {}, { preserveScroll: true });
+            router.post(
+                '/manufacturer/billing/cancel',
+                {},
+                { preserveScroll: true },
+            );
         }
     }
 
     function handleResume() {
-        router.post('/manufacturer/billing/resume', {}, { preserveScroll: true });
+        router.post(
+            '/manufacturer/billing/resume',
+            {},
+            { preserveScroll: true },
+        );
     }
 
     const hasUsage = Object.keys(usage).length > 0;
@@ -130,7 +178,9 @@ export default function BillingIndex({ plans, currentPlanId, subscription, usage
             <div className="space-y-8 p-6">
                 {/* Header */}
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight">Assinatura</h2>
+                    <h2 className="text-2xl font-bold tracking-tight">
+                        Assinatura
+                    </h2>
                     <p className="text-muted-foreground">
                         Gerencie seu plano e assinatura.
                     </p>
@@ -147,44 +197,63 @@ export default function BillingIndex({ plans, currentPlanId, subscription, usage
                         </CardHeader>
                         <CardContent className="space-y-3">
                             <div className="flex items-center gap-2">
-                                <span className="text-muted-foreground text-sm">Status:</span>
-                                <Badge variant={subscription.active ? 'default' : 'secondary'}>
+                                <span className="text-sm text-muted-foreground">
+                                    Status:
+                                </span>
+                                <Badge
+                                    variant={
+                                        subscription.active
+                                            ? 'default'
+                                            : 'secondary'
+                                    }
+                                >
                                     {subscription.on_trial
                                         ? 'Em Trial'
                                         : subscription.cancelled
-                                            ? 'Cancelada'
-                                            : subscription.active
-                                                ? 'Ativa'
-                                                : subscription.stripe_status}
+                                          ? 'Cancelada'
+                                          : subscription.active
+                                            ? 'Ativa'
+                                            : subscription.stripe_status}
                                 </Badge>
                             </div>
 
-                            {subscription.on_trial && subscription.trial_ends_at && (
-                                <p className="text-sm text-muted-foreground">
-                                    Trial expira em:{' '}
-                                    <span className="font-medium text-foreground">
-                                        {new Date(subscription.trial_ends_at).toLocaleDateString('pt-BR')}
-                                    </span>
-                                </p>
-                            )}
+                            {subscription.on_trial &&
+                                subscription.trial_ends_at && (
+                                    <p className="text-sm text-muted-foreground">
+                                        Trial expira em:{' '}
+                                        <span className="font-medium text-foreground">
+                                            {new Date(
+                                                subscription.trial_ends_at,
+                                            ).toLocaleDateString('pt-BR')}
+                                        </span>
+                                    </p>
+                                )}
 
-                            {subscription.cancelled && subscription.on_grace_period && subscription.ends_at && (
-                                <p className="text-sm text-muted-foreground">
-                                    Acesso até:{' '}
-                                    <span className="font-medium text-foreground">
-                                        {new Date(subscription.ends_at).toLocaleDateString('pt-BR')}
-                                    </span>
-                                </p>
-                            )}
+                            {subscription.cancelled &&
+                                subscription.on_grace_period &&
+                                subscription.ends_at && (
+                                    <p className="text-sm text-muted-foreground">
+                                        Acesso até:{' '}
+                                        <span className="font-medium text-foreground">
+                                            {new Date(
+                                                subscription.ends_at,
+                                            ).toLocaleDateString('pt-BR')}
+                                        </span>
+                                    </p>
+                                )}
                         </CardContent>
                         <CardFooter className="gap-2">
-                            {subscription.cancelled && subscription.on_grace_period && (
-                                <Button onClick={handleResume}>
-                                    Retomar Assinatura
-                                </Button>
-                            )}
+                            {subscription.cancelled &&
+                                subscription.on_grace_period && (
+                                    <Button onClick={handleResume}>
+                                        Retomar Assinatura
+                                    </Button>
+                                )}
                             {subscription.active && !subscription.cancelled && (
-                                <Button variant="destructive" onClick={handleCancel}>
+                                <Button
+                                    variant="destructive"
+                                    onClick={handleCancel}
+                                >
                                     Cancelar Assinatura
                                 </Button>
                             )}
@@ -203,15 +272,35 @@ export default function BillingIndex({ plans, currentPlanId, subscription, usage
                     <Card>
                         <CardHeader>
                             <CardTitle>Uso Atual</CardTitle>
-                            <CardDescription>Consumo do seu plano neste mês.</CardDescription>
+                            <CardDescription>
+                                Consumo do seu plano neste mês.
+                            </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <UsageBar label="Produtos" item={usage.products} />
                             <UsageBar label="Usuários" item={usage.users} />
-                            <UsageBar label="Representantes" item={usage.reps} />
-                            <UsageBar label="Pedidos (mês)" item={usage.orders_this_month} />
-                            {usage.files_gb && <UsageBar label="Arquivos (GB)" item={usage.files_gb} formatter={(v) => `${v} GB`} />}
-                            {usage.data_mb && <UsageBar label="Dados (MB)" item={usage.data_mb} formatter={(v) => `${v} MB`} />}
+                            <UsageBar
+                                label="Representantes"
+                                item={usage.reps}
+                            />
+                            <UsageBar
+                                label="Pedidos (mês)"
+                                item={usage.orders_this_month}
+                            />
+                            {usage.files_gb && (
+                                <UsageBar
+                                    label="Arquivos (GB)"
+                                    item={usage.files_gb}
+                                    formatter={(v) => `${v} GB`}
+                                />
+                            )}
+                            {usage.data_mb && (
+                                <UsageBar
+                                    label="Dados (MB)"
+                                    item={usage.data_mb}
+                                    formatter={(v) => `${v} MB`}
+                                />
+                            )}
                         </CardContent>
                     </Card>
                 )}
@@ -223,14 +312,23 @@ export default function BillingIndex({ plans, currentPlanId, subscription, usage
                         <AlertTitle>Downgrade bloqueado</AlertTitle>
                         <AlertDescription>
                             <p className="mb-2">
-                                Seu uso atual excede os limites do plano selecionado. Exclua itens suficientes e tente novamente:
+                                Seu uso atual excede os limites do plano
+                                selecionado. Exclua itens suficientes e tente
+                                novamente:
                             </p>
-                            <ul className="list-disc pl-4 space-y-1">
-                                {downgradeViolations.map((v: DowngradeViolation) => (
-                                    <li key={v.limit_type}>
-                                        <strong>{limitLabels[v.limit_type] ?? v.limit_type}</strong>: {v.current} cadastrados, limite do plano é {v.limit}
-                                    </li>
-                                ))}
+                            <ul className="list-disc space-y-1 pl-4">
+                                {downgradeViolations.map(
+                                    (v: DowngradeViolation) => (
+                                        <li key={v.limit_type}>
+                                            <strong>
+                                                {limitLabels[v.limit_type] ??
+                                                    v.limit_type}
+                                            </strong>
+                                            : {v.current} cadastrados, limite do
+                                            plano é {v.limit}
+                                        </li>
+                                    ),
+                                )}
                             </ul>
                         </AlertDescription>
                     </Alert>
@@ -238,7 +336,9 @@ export default function BillingIndex({ plans, currentPlanId, subscription, usage
 
                 {/* Plans Grid */}
                 <div>
-                    <h3 className="mb-4 text-lg font-medium">Planos Disponíveis</h3>
+                    <h3 className="mb-4 text-lg font-medium">
+                        Planos Disponíveis
+                    </h3>
                     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                         {plans.map((plan) => {
                             const isCurrent = plan.id === currentPlanId;
@@ -246,43 +346,92 @@ export default function BillingIndex({ plans, currentPlanId, subscription, usage
                             return (
                                 <Card
                                     key={plan.id}
-                                    className={isCurrent ? 'ring-primary ring-2' : ''}
+                                    className={
+                                        isCurrent ? 'ring-2 ring-primary' : ''
+                                    }
                                 >
                                     <CardHeader>
                                         <div className="flex items-center justify-between">
                                             <CardTitle>{plan.name}</CardTitle>
                                             {isCurrent && (
-                                                <Badge variant="default">Atual</Badge>
+                                                <Badge variant="default">
+                                                    Atual
+                                                </Badge>
                                             )}
                                         </div>
-                                        <CardDescription>{plan.description}</CardDescription>
+                                        <CardDescription>
+                                            {plan.description}
+                                        </CardDescription>
                                         <div className="pt-2">
                                             <span className="text-3xl font-bold">
                                                 {plan.formatted_price}
                                             </span>
-                                            <span className="text-muted-foreground">/mês</span>
+                                            <span className="text-muted-foreground">
+                                                /mês
+                                            </span>
                                         </div>
                                         {plan.trial_days > 0 && (
                                             <p className="text-sm text-green-600">
-                                                {plan.trial_days} dias grátis para testar
+                                                {plan.trial_days} dias grátis
+                                                para testar
                                             </p>
                                         )}
                                     </CardHeader>
                                     <CardContent>
                                         <ul className="space-y-2 text-sm">
-                                            <FeatureRow label="Representantes" value={formatLimit(plan.max_reps)} />
-                                            <FeatureRow label="Produtos" value={formatLimit(plan.max_products)} />
-                                            <FeatureRow label="Pedidos/mês" value={formatLimit(plan.max_orders_per_month)} />
-                                            <FeatureRow label="Usuários" value={formatLimit(plan.max_users)} />
-                                            <FeatureRow label="Armazenamento" value={plan.max_data_mb ? `${plan.max_data_mb} MB` : 'Ilimitado'} />
-                                            <FeatureRow label="Arquivos" value={plan.max_files_gb ? `${plan.max_files_gb} GB` : 'Ilimitado'} />
+                                            <FeatureRow
+                                                label="Representantes"
+                                                value={formatLimit(
+                                                    plan.max_reps,
+                                                )}
+                                            />
+                                            <FeatureRow
+                                                label="Produtos"
+                                                value={formatLimit(
+                                                    plan.max_products,
+                                                )}
+                                            />
+                                            <FeatureRow
+                                                label="Pedidos/mês"
+                                                value={formatLimit(
+                                                    plan.max_orders_per_month,
+                                                )}
+                                            />
+                                            <FeatureRow
+                                                label="Usuários"
+                                                value={formatLimit(
+                                                    plan.max_users,
+                                                )}
+                                            />
+                                            <FeatureRow
+                                                label="Armazenamento"
+                                                value={
+                                                    plan.max_data_mb
+                                                        ? `${plan.max_data_mb} MB`
+                                                        : 'Ilimitado'
+                                                }
+                                            />
+                                            <FeatureRow
+                                                label="Arquivos"
+                                                value={
+                                                    plan.max_files_gb
+                                                        ? `${plan.max_files_gb} GB`
+                                                        : 'Ilimitado'
+                                                }
+                                            />
                                             <li className="flex items-center gap-2">
                                                 {plan.allow_csv_import ? (
                                                     <Check className="h-4 w-4 text-green-600" />
                                                 ) : (
                                                     <X className="h-4 w-4 text-muted-foreground" />
                                                 )}
-                                                <span className={!plan.allow_csv_import ? 'text-muted-foreground' : ''}>
+                                                <span
+                                                    className={
+                                                        !plan.allow_csv_import
+                                                            ? 'text-muted-foreground'
+                                                            : ''
+                                                    }
+                                                >
                                                     Importação CSV
                                                 </span>
                                             </li>
@@ -297,22 +446,22 @@ export default function BillingIndex({ plans, currentPlanId, subscription, usage
                                             <Button
                                                 className="w-full"
                                                 variant="outline"
-                                                onClick={() => handleSwap(plan.id)}
+                                                onClick={() =>
+                                                    handleSwap(plan.id)
+                                                }
                                             >
                                                 Trocar para {plan.name}
                                             </Button>
+                                        ) : plan.has_stripe ? (
+                                            <Button className="w-full" asChild>
+                                                <a href={checkout.url(plan.id)}>
+                                                    Selecionar
+                                                </a>
+                                            </Button>
                                         ) : (
-                                            plan.has_stripe ? (
-                                                <Button className="w-full" asChild>
-                                                    <a href={checkout.url(plan.id)}>
-                                                        Selecionar
-                                                    </a>
-                                                </Button>
-                                            ) : (
-                                                <Button className="w-full" disabled>
-                                                    Em breve
-                                                </Button>
-                                            )
+                                            <Button className="w-full" disabled>
+                                                Em breve
+                                            </Button>
                                         )}
                                     </CardFooter>
                                 </Card>

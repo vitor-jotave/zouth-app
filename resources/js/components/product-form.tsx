@@ -633,35 +633,6 @@ export function ProductForm({
         [product],
     );
 
-    const moveMedia = (index: number, direction: 'up' | 'down') => {
-        const next = [...mediaItems];
-        const newIndex = direction === 'up' ? index - 1 : index + 1;
-
-        if (newIndex < 0 || newIndex >= mediaItems.length) {
-            return;
-        }
-
-        [next[index], next[newIndex]] = [next[newIndex], next[index]];
-        setMediaItems(next);
-    };
-
-    const persistMediaOrder = () => {
-        if (!product) {
-            return;
-        }
-
-        router.put(
-            `/manufacturer/products/${product.id}/media/order`,
-            {
-                media_order: mediaItems.map((item) => item.id),
-            },
-            {
-                preserveScroll: true,
-                preserveState: true,
-            },
-        );
-    };
-
     const deleteMedia = (mediaId: number) => {
         if (!product) {
             return;

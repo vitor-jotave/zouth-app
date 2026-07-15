@@ -30,7 +30,8 @@ export default function DeleteUser() {
                 <div className="relative space-y-0.5 text-red-600">
                     <p className="font-bold">Atenção</p>
                     <p className="text-sm">
-                        Tenha certeza antes de tomar essa ação, nosso suporte não recupera contas excluídas.
+                        Tenha certeza antes de tomar essa ação, nosso suporte
+                        não recupera contas excluídas.
                     </p>
                 </div>
 
@@ -48,9 +49,14 @@ export default function DeleteUser() {
                             Tem certeza que deseja excluir sua Conta Zouth?
                         </DialogTitle>
                         <DialogDescription>
-                            Assim que sua conta for excluída, todos os seus recursos
-                            e dados também serão excluídos permanentemente.<br /><br />
-                            <p className="font-bold">Digite sua senha para confirmar a exclusão.</p>
+                            Assim que sua conta for excluída, todos os seus
+                            recursos e dados também serão excluídos
+                            permanentemente.
+                            <br />
+                            <br />
+                            <p className="font-bold">
+                                Digite sua senha para confirmar a exclusão.
+                            </p>
                         </DialogDescription>
 
                         <Form
@@ -105,7 +111,7 @@ export default function DeleteUser() {
                                                 type="submit"
                                                 data-test="confirm-delete-user-button"
                                             >
-                                                Excluir Conta      
+                                                Excluir Conta
                                             </button>
                                         </Button>
                                     </DialogFooter>

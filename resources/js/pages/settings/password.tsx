@@ -82,9 +82,7 @@ export default function Password() {
                                 </div>
 
                                 <div className="grid gap-2">
-                                    <Label htmlFor="password">
-                                        Nova senha
-                                    </Label>
+                                    <Label htmlFor="password">Nova senha</Label>
 
                                     <Input
                                         id="password"
