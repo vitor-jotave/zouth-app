@@ -1,8 +1,8 @@
 import { Head, Link } from '@inertiajs/react';
 import { ArrowLeft, Box, Package } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import AppLayout from '@/layouts/app-layout';
 
 interface Manufacturer {
@@ -82,7 +82,8 @@ export default function Catalog({ manufacturer, products }: Props) {
                                         Nenhum produto disponivel
                                     </h3>
                                     <p className="text-sm text-muted-foreground">
-                                        Este fabricante ainda nao possui produtos ativos.
+                                        Este fabricante ainda nao possui
+                                        produtos ativos.
                                     </p>
                                 </div>
                             ) : (
@@ -111,8 +112,12 @@ export default function Catalog({ manufacturer, products }: Props) {
                                                     <div className="text-xs text-muted-foreground">
                                                         SKU {product.sku}
                                                     </div>
-                                                    <div className={`text-sm font-semibold ${product.price_cents == null ? 'italic text-muted-foreground' : ''}`}>
-                                                        {formatPrice(product.price_cents)}
+                                                    <div
+                                                        className={`text-sm font-semibold ${product.price_cents == null ? 'text-muted-foreground italic' : ''}`}
+                                                    >
+                                                        {formatPrice(
+                                                            product.price_cents,
+                                                        )}
                                                     </div>
                                                 </div>
                                                 <div className="flex flex-wrap gap-2">
@@ -121,20 +126,47 @@ export default function Catalog({ manufacturer, products }: Props) {
                                                             {product.category}
                                                         </Badge>
                                                     )}
-                                                    <Badge variant={product.total_stock > 0 ? 'default' : 'secondary'}>
+                                                    <Badge
+                                                        variant={
+                                                            product.total_stock >
+                                                            0
+                                                                ? 'default'
+                                                                : 'secondary'
+                                                        }
+                                                    >
                                                         {product.total_stock > 0
                                                             ? 'Disponivel'
                                                             : 'Sem estoque'}
                                                     </Badge>
                                                 </div>
-                                                {product.variations.length > 0 && (
+                                                {product.variations.length >
+                                                    0 && (
                                                     <div className="space-y-2 text-xs text-muted-foreground">
-                                                        {product.variations.map((variation) => (
-                                                            <div key={variation.type_name}>
-                                                                {variation.type_name}:{' '}
-                                                                {variation.values.map((v) => v.value).join(', ') || '---'}
-                                                            </div>
-                                                        ))}
+                                                        {product.variations.map(
+                                                            (variation) => (
+                                                                <div
+                                                                    key={
+                                                                        variation.type_name
+                                                                    }
+                                                                >
+                                                                    {
+                                                                        variation.type_name
+                                                                    }
+                                                                    :{' '}
+                                                                    {variation.values
+                                                                        .map(
+                                                                            (
+                                                                                v,
+                                                                            ) =>
+                                                                                v.value,
+                                                                        )
+                                                                        .join(
+                                                                            ', ',
+                                                                        ) ||
+                                                                        '---'}
+                                                                </div>
+                                                            ),
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>

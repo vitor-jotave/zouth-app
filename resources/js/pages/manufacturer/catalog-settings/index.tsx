@@ -15,12 +15,6 @@ import CatalogPreview from '@/components/catalog-preview';
 import { ImageCropDialog } from '@/components/image-crop-dialog';
 import InputError from '@/components/input-error';
 import IphoneFrame from '@/components/iphone-frame';
-import {
-    GRADIENT_LABELS,
-    PATTERN_LABELS,
-    PRESET_LABELS,
-} from '@/lib/catalog-theming';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -36,6 +30,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
     Select,
     SelectContent,
@@ -43,10 +38,14 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AppLayout from '@/layouts/app-layout';
+import {
+    GRADIENT_LABELS,
+    PATTERN_LABELS,
+    PRESET_LABELS,
+} from '@/lib/catalog-theming';
 import manufacturer from '@/routes/manufacturer';
 import type { BreadcrumbItem } from '@/types';
 
@@ -82,7 +81,7 @@ interface CatalogSettings {
     sections: Array<{
         type: string;
         enabled: boolean;
-        props: Record<string, any>;
+        props: Record<string, string | number | boolean | null>;
     }>;
 }
 
@@ -174,20 +173,6 @@ export default function CatalogSettings({
     const backgroundForm = useForm<{ background_image: File | null }>({
         background_image: null,
     });
-
-    const previewColors = useMemo(() => {
-        return {
-            primary: settingsForm.data.primary_color,
-            secondary: settingsForm.data.secondary_color,
-            accent: settingsForm.data.accent_color,
-            background: settingsForm.data.background_color,
-        };
-    }, [
-        settingsForm.data.primary_color,
-        settingsForm.data.secondary_color,
-        settingsForm.data.accent_color,
-        settingsForm.data.background_color,
-    ]);
 
     const draftSettings = useMemo(() => {
         return {

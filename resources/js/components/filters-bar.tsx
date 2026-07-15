@@ -92,7 +92,7 @@ export function FiltersBar({ filters }: FiltersBarProps) {
     return (
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                     placeholder="Buscar por nome ou slug..."
                     value={search}
@@ -102,7 +102,10 @@ export function FiltersBar({ filters }: FiltersBarProps) {
             </div>
 
             <div className="flex gap-2">
-                <Select value={filters.status} onValueChange={handleStatusChange}>
+                <Select
+                    value={filters.status}
+                    onValueChange={handleStatusChange}
+                >
                     <SelectTrigger className="w-[160px]">
                         <SelectValue placeholder="Status" />
                     </SelectTrigger>

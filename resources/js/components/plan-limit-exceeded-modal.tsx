@@ -94,10 +94,15 @@ export function PlanLimitExceededModal() {
                             <div className="mb-2 flex justify-center">
                                 <CheckCircle2 className="size-12 text-green-500" />
                             </div>
-                            <DialogTitle className="text-center">Upgrade realizado!</DialogTitle>
+                            <DialogTitle className="text-center">
+                                Upgrade realizado!
+                            </DialogTitle>
                             <DialogDescription className="text-center">
-                                Agora você está no plano <strong>{flash?.upgrade_success?.plan_name}</strong>.
-                                Pode continuar com a ação.
+                                Agora você está no plano{' '}
+                                <strong>
+                                    {flash?.upgrade_success?.plan_name}
+                                </strong>
+                                . Pode continuar com a ação.
                             </DialogDescription>
                         </DialogHeader>
                         <DialogFooter className="sm:justify-center">
@@ -108,14 +113,19 @@ export function PlanLimitExceededModal() {
                     <>
                         <DialogHeader>
                             <div className="mb-2 flex justify-center">
-                                <ArrowUp className="bg-primary/10 text-primary size-12 rounded-full p-2" />
+                                <ArrowUp className="size-12 rounded-full bg-primary/10 p-2 text-primary" />
                             </div>
-                            <DialogTitle className="text-center">Limite atingido</DialogTitle>
+                            <DialogTitle className="text-center">
+                                Limite atingido
+                            </DialogTitle>
                             <DialogDescription className="text-center">
-                                Você atingiu o limite de <strong>{limitLabel}</strong>
+                                Você atingiu o limite de{' '}
+                                <strong>{limitLabel}</strong>
                                 {current_plan ? (
                                     <>
-                                        {' '}do plano <strong>{current_plan.name}</strong>
+                                        {' '}
+                                        do plano{' '}
+                                        <strong>{current_plan.name}</strong>
                                     </>
                                 ) : null}
                                 .
@@ -124,8 +134,12 @@ export function PlanLimitExceededModal() {
 
                         {next_plan ? (
                             <div className="rounded-lg border border-border bg-muted/40 p-4 text-center">
-                                <p className="text-sm text-muted-foreground">Próximo plano</p>
-                                <p className="mt-1 text-lg font-semibold">{next_plan.name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                    Próximo plano
+                                </p>
+                                <p className="mt-1 text-lg font-semibold">
+                                    {next_plan.name}
+                                </p>
                                 {next_plan.formatted_price && (
                                     <p className="text-sm text-muted-foreground">
                                         {next_plan.formatted_price}/mês
@@ -139,16 +153,28 @@ export function PlanLimitExceededModal() {
                         )}
 
                         <DialogFooter className="flex-col gap-2 sm:flex-row">
-                            <Button variant="outline" onClick={handleClose} disabled={processing}>
+                            <Button
+                                variant="outline"
+                                onClick={handleClose}
+                                disabled={processing}
+                            >
                                 Cancelar
                             </Button>
                             {next_plan ? (
                                 next_plan.has_stripe ? (
-                                    <Button onClick={handleUpgrade} disabled={processing}>
-                                        {processing ? 'Atualizando...' : `Fazer upgrade para ${next_plan.name}`}
+                                    <Button
+                                        onClick={handleUpgrade}
+                                        disabled={processing}
+                                    >
+                                        {processing
+                                            ? 'Atualizando...'
+                                            : `Fazer upgrade para ${next_plan.name}`}
                                     </Button>
                                 ) : (
-                                    <Button disabled title="Entre em contato para fazer upgrade">
+                                    <Button
+                                        disabled
+                                        title="Entre em contato para fazer upgrade"
+                                    >
                                         Entre em contato
                                     </Button>
                                 )

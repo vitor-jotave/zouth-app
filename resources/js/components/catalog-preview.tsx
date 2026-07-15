@@ -214,7 +214,7 @@ function MinimalContent({
                                     style={{ borderRadius: tokens.radius }}
                                 >
                                     <img
-                                        src={settings.logo_url}
+                                        src={settings.logo_url ?? undefined}
                                         alt=""
                                         className="h-auto max-h-14 w-auto max-w-28 object-contain"
                                     />
@@ -370,7 +370,7 @@ function PlayfulContent({
                         {showLogo && (
                             <div className="mx-auto inline-flex max-w-full items-center justify-center">
                                 <img
-                                    src={settings.logo_url}
+                                    src={settings.logo_url ?? undefined}
                                     alt=""
                                     className="h-auto max-h-16 w-auto max-w-36 object-contain"
                                 />
@@ -584,7 +584,7 @@ function BoutiqueContent({
                                 style={{ borderRadius: tokens.radius }}
                             >
                                 <img
-                                    src={settings.logo_url}
+                                    src={settings.logo_url ?? undefined}
                                     alt=""
                                     className="h-auto max-h-24 w-auto max-w-full object-contain"
                                 />
@@ -667,7 +667,7 @@ const CatalogPreview = memo(function CatalogPreview({
     const tokens = LAYOUT_TOKENS[preset] ?? LAYOUT_TOKENS.minimal;
 
     // Background logic
-    let backgroundStyle: React.CSSProperties = {};
+    const backgroundStyle: React.CSSProperties = {};
     if (settings.background_mode === 'gradient' && settings.gradient_id) {
         backgroundStyle.background =
             GRADIENTS[settings.gradient_id as keyof typeof GRADIENTS] ??

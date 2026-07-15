@@ -27,7 +27,13 @@ interface Product {
     is_active: boolean;
     sort_order: number;
     price_cents?: number | null;
-    media?: Array<{ id: number; type: 'image' | 'video'; path: string; url?: string; sort_order: number }>;
+    media?: Array<{
+        id: number;
+        type: 'image' | 'video';
+        path: string;
+        url?: string;
+        sort_order: number;
+    }>;
     variations?: Array<{
         id: number;
         variation_type_id: number;
@@ -80,7 +86,12 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Editar produto', href: '#' },
 ];
 
-export default function ProductsEdit({ product, categories, variation_types, stock_structure }: Props) {
+export default function ProductsEdit({
+    product,
+    categories,
+    variation_types,
+    stock_structure,
+}: Props) {
     const resolvedProduct = 'data' in product ? product.data : product;
 
     return (

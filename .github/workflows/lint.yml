@@ -6,16 +6,18 @@ on:
       - develop
       - main
       - master
+      - feature/v1-production-ready
       - workos
   pull_request:
     branches:
       - develop
       - main
       - master
+      - feature/v1-production-ready
       - workos
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   quality:
@@ -27,23 +29,30 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
 
       - name: Install Dependencies
         run: |
-          composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
-          npm install
+          composer install --no-interaction --prefer-dist --optimize-autoloader
+          npm ci
 
       - name: Run Pint
-        run: composer lint
+        run: |
+          vendor/bin/pint --format agent
+          git diff --exit-code
 
-      - name: Format Frontend
-        run: npm run format
+      - name: Check Frontend Formatting
+        run: npm run format:check
 
       - name: Lint Frontend
         run: npm run lint
 
-      # - name: Commit Changes
-      #   uses: stefanzweifel/git-auto-commit-action@v7
-      #   with:
-      #     commit_message: fix code style
-      #     commit_options: '--no-verify'
+      - name: Check TypeScript
+        run: npm run types

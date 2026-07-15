@@ -6,7 +6,6 @@ import {
     Image,
     MessageSquare,
     Mic,
-    Plus,
     Trash2,
 } from 'lucide-react';
 import type { FormEvent } from 'react';

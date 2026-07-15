@@ -18,7 +18,6 @@ import {
     Sparkles,
     Star,
     Trash2,
-    X,
     Zap,
 } from 'lucide-react';
 import {
@@ -96,7 +95,7 @@ interface CatalogSettings {
     sections: Array<{
         type: string;
         enabled: boolean;
-        props: Record<string, any>;
+        props: Record<string, unknown>;
     }>;
 }
 
@@ -1491,7 +1490,7 @@ function MinimalLayout({
                                     style={{ borderRadius: tokens.radius }}
                                 >
                                     <img
-                                        src={settings.logo_url}
+                                        src={settings.logo_url ?? undefined}
                                         alt={
                                             settings.brand_name ??
                                             manufacturer.name
@@ -2446,10 +2445,6 @@ export default function PublicCatalog({
             {
                 preserveState: true,
                 preserveScroll: true,
-                onSuccess: (page) => {
-                    // The controller returns Inertia::location, so on success we get redirected
-                    // But if we get a flash, it means the order was created
-                },
                 onError: (errors) => {
                     setCheckoutErrors(errors);
                     setSubmitting(false);

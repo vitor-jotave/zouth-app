@@ -51,7 +51,11 @@ export default function ProductsCreate({ categories, variation_types }: Props) {
                     </Link>
                 </div>
 
-                <ProductForm mode="create" categories={categories} variationTypes={variation_types} />
+                <ProductForm
+                    mode="create"
+                    categories={categories}
+                    variationTypes={variation_types}
+                />
             </div>
         </AppLayout>
     );

@@ -76,7 +76,10 @@ function formatCnpj(raw: string | null): string {
     if (!raw) return '—';
     const digits = raw.replace(/\D/g, '');
     if (digits.length !== 14) return raw;
-    return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+    return digits.replace(
+        /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+        '$1.$2.$3/$4-$5',
+    );
 }
 
 type AddressFields = {
@@ -110,9 +113,12 @@ type EditFormData = {
 export default function ManufacturersIndex({ manufacturers }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
-    const [editingManufacturer, setEditingManufacturer] = useState<Manufacturer | null>(null);
+    const [editingManufacturer, setEditingManufacturer] =
+        useState<Manufacturer | null>(null);
     const [linkModalOpen, setLinkModalOpen] = useState(false);
-    const [planSelectionUrl, setPlanSelectionUrl] = useState<string | null>(null);
+    const [planSelectionUrl, setPlanSelectionUrl] = useState<string | null>(
+        null,
+    );
     const [copied, setCopied] = useState(false);
 
     const copyToClipboard = (text: string) => {
@@ -174,7 +180,12 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
             onSuccess: (page) => {
                 createForm.reset();
                 setCreateOpen(false);
-                const url = (page.props as { flash?: { plan_selection_url?: string | null } }).flash?.plan_selection_url ?? null;
+                const url =
+                    (
+                        page.props as {
+                            flash?: { plan_selection_url?: string | null };
+                        }
+                    ).flash?.plan_selection_url ?? null;
                 if (url) {
                     setPlanSelectionUrl(url);
                     setLinkModalOpen(true);
@@ -214,12 +225,19 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
     };
 
     const handleToggle = (manufacturerId: number) => {
-        router.post(toggleManufacturer.url(manufacturerId), {}, {
-            preserveScroll: true,
-        });
+        router.post(
+            toggleManufacturer.url(manufacturerId),
+            {},
+            {
+                preserveScroll: true,
+            },
+        );
     };
 
-    const addressFields = (form: ReturnType<typeof useForm<AddressFields>>, prefix?: 'create' | 'edit') => {
+    const addressFields = (
+        form: ReturnType<typeof useForm<AddressFields>>,
+        prefix?: 'create' | 'edit',
+    ) => {
         const id = (name: string) => `${prefix ?? 'f'}-${name}`;
         return (
             <>
@@ -229,23 +247,36 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                         <Input
                             id={id('zip_code')}
                             value={form.data.zip_code}
-                            onChange={(e) => form.setData('zip_code', e.target.value)}
+                            onChange={(e) =>
+                                form.setData('zip_code', e.target.value)
+                            }
                             placeholder="00000-000"
                             className="mt-1"
                         />
-                        <InputError message={form.errors.zip_code} className="mt-2" />
+                        <InputError
+                            message={form.errors.zip_code}
+                            className="mt-2"
+                        />
                     </div>
                     <div>
                         <Label htmlFor={id('state')}>Estado (UF)</Label>
                         <Input
                             id={id('state')}
                             value={form.data.state}
-                            onChange={(e) => form.setData('state', e.target.value.toUpperCase().slice(0, 2))}
+                            onChange={(e) =>
+                                form.setData(
+                                    'state',
+                                    e.target.value.toUpperCase().slice(0, 2),
+                                )
+                            }
                             placeholder="SP"
                             maxLength={2}
                             className="mt-1"
                         />
-                        <InputError message={form.errors.state} className="mt-2" />
+                        <InputError
+                            message={form.errors.state}
+                            className="mt-2"
+                        />
                     </div>
                 </div>
 
@@ -265,10 +296,15 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                     <Input
                         id={id('neighborhood')}
                         value={form.data.neighborhood}
-                        onChange={(e) => form.setData('neighborhood', e.target.value)}
+                        onChange={(e) =>
+                            form.setData('neighborhood', e.target.value)
+                        }
                         className="mt-1"
                     />
-                    <InputError message={form.errors.neighborhood} className="mt-2" />
+                    <InputError
+                        message={form.errors.neighborhood}
+                        className="mt-2"
+                    />
                 </div>
 
                 <div>
@@ -288,21 +324,31 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                         <Input
                             id={id('address_number')}
                             value={form.data.address_number}
-                            onChange={(e) => form.setData('address_number', e.target.value)}
+                            onChange={(e) =>
+                                form.setData('address_number', e.target.value)
+                            }
                             className="mt-1"
                         />
-                        <InputError message={form.errors.address_number} className="mt-2" />
+                        <InputError
+                            message={form.errors.address_number}
+                            className="mt-2"
+                        />
                     </div>
                     <div>
                         <Label htmlFor={id('complement')}>Complemento</Label>
                         <Input
                             id={id('complement')}
                             value={form.data.complement}
-                            onChange={(e) => form.setData('complement', e.target.value)}
+                            onChange={(e) =>
+                                form.setData('complement', e.target.value)
+                            }
                             placeholder="Apto, Sala, etc."
                             className="mt-1"
                         />
-                        <InputError message={form.errors.complement} className="mt-2" />
+                        <InputError
+                            message={form.errors.complement}
+                            className="mt-2"
+                        />
                     </div>
                 </div>
             </>
@@ -323,44 +369,83 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                             <DialogHeader>
                                 <DialogTitle>Criar Novo Fabricante</DialogTitle>
                                 <DialogDescription>
-                                    Preencha os dados do fabricante e do responsável. Um link de redefinição de senha será enviado ao responsável.
+                                    Preencha os dados do fabricante e do
+                                    responsável. Um link de redefinição de senha
+                                    será enviado ao responsável.
                                 </DialogDescription>
                             </DialogHeader>
-                            <form onSubmit={handleCreateSubmit} className="space-y-4">
+                            <form
+                                onSubmit={handleCreateSubmit}
+                                className="space-y-4"
+                            >
                                 <div>
-                                    <Label htmlFor="create-manufacturer_name">Nome do Fabricante</Label>
+                                    <Label htmlFor="create-manufacturer_name">
+                                        Nome do Fabricante
+                                    </Label>
                                     <Input
                                         id="create-manufacturer_name"
-                                        value={createForm.data.manufacturer_name}
-                                        onChange={(e) => createForm.setData('manufacturer_name', e.target.value)}
+                                        value={
+                                            createForm.data.manufacturer_name
+                                        }
+                                        onChange={(e) =>
+                                            createForm.setData(
+                                                'manufacturer_name',
+                                                e.target.value,
+                                            )
+                                        }
                                         className="mt-1"
                                         autoFocus
                                     />
-                                    <InputError message={createForm.errors.manufacturer_name} className="mt-2" />
+                                    <InputError
+                                        message={
+                                            createForm.errors.manufacturer_name
+                                        }
+                                        className="mt-2"
+                                    />
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <Label htmlFor="create-cnpj">CNPJ</Label>
+                                        <Label htmlFor="create-cnpj">
+                                            CNPJ
+                                        </Label>
                                         <Input
                                             id="create-cnpj"
                                             value={createForm.data.cnpj}
-                                            onChange={(e) => createForm.setData('cnpj', e.target.value)}
+                                            onChange={(e) =>
+                                                createForm.setData(
+                                                    'cnpj',
+                                                    e.target.value,
+                                                )
+                                            }
                                             placeholder="00.000.000/0000-00"
                                             className="mt-1"
                                         />
-                                        <InputError message={createForm.errors.cnpj} className="mt-2" />
+                                        <InputError
+                                            message={createForm.errors.cnpj}
+                                            className="mt-2"
+                                        />
                                     </div>
                                     <div>
-                                        <Label htmlFor="create-phone">Telefone</Label>
+                                        <Label htmlFor="create-phone">
+                                            Telefone
+                                        </Label>
                                         <Input
                                             id="create-phone"
                                             value={createForm.data.phone}
-                                            onChange={(e) => createForm.setData('phone', e.target.value)}
+                                            onChange={(e) =>
+                                                createForm.setData(
+                                                    'phone',
+                                                    e.target.value,
+                                                )
+                                            }
                                             placeholder="(11) 99999-9999"
                                             className="mt-1"
                                         />
-                                        <InputError message={createForm.errors.phone} className="mt-2" />
+                                        <InputError
+                                            message={createForm.errors.phone}
+                                            className="mt-2"
+                                        />
                                     </div>
                                 </div>
 
@@ -370,55 +455,106 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                                         id="create-logo"
                                         type="file"
                                         accept="image/*"
-                                        onChange={(e) => createForm.setData('logo', e.target.files?.[0] ?? null)}
+                                        onChange={(e) =>
+                                            createForm.setData(
+                                                'logo',
+                                                e.target.files?.[0] ?? null,
+                                            )
+                                        }
                                         className="mt-1"
                                     />
-                                    <InputError message={createForm.errors.logo} className="mt-2" />
+                                    <InputError
+                                        message={createForm.errors.logo}
+                                        className="mt-2"
+                                    />
                                 </div>
 
-                                <p className="text-sm font-medium text-muted-foreground">Endereço</p>
+                                <p className="text-sm font-medium text-muted-foreground">
+                                    Endereço
+                                </p>
                                 {addressFields(createForm, 'create')}
 
-                                <p className="text-sm font-medium text-muted-foreground">Responsável</p>
+                                <p className="text-sm font-medium text-muted-foreground">
+                                    Responsável
+                                </p>
 
                                 <div>
-                                    <Label htmlFor="create-owner_name">Nome do Responsável</Label>
+                                    <Label htmlFor="create-owner_name">
+                                        Nome do Responsável
+                                    </Label>
                                     <Input
                                         id="create-owner_name"
                                         value={createForm.data.owner_name}
-                                        onChange={(e) => createForm.setData('owner_name', e.target.value)}
+                                        onChange={(e) =>
+                                            createForm.setData(
+                                                'owner_name',
+                                                e.target.value,
+                                            )
+                                        }
                                         className="mt-1"
                                     />
-                                    <InputError message={createForm.errors.owner_name} className="mt-2" />
+                                    <InputError
+                                        message={createForm.errors.owner_name}
+                                        className="mt-2"
+                                    />
                                 </div>
 
                                 <div>
-                                    <Label htmlFor="create-owner_email">E-mail do Responsável</Label>
+                                    <Label htmlFor="create-owner_email">
+                                        E-mail do Responsável
+                                    </Label>
                                     <Input
                                         id="create-owner_email"
                                         type="email"
                                         value={createForm.data.owner_email}
-                                        onChange={(e) => createForm.setData('owner_email', e.target.value)}
+                                        onChange={(e) =>
+                                            createForm.setData(
+                                                'owner_email',
+                                                e.target.value,
+                                            )
+                                        }
                                         className="mt-1"
                                     />
-                                    <InputError message={createForm.errors.owner_email} className="mt-2" />
+                                    <InputError
+                                        message={createForm.errors.owner_email}
+                                        className="mt-2"
+                                    />
                                 </div>
 
                                 <div>
-                                    <Label htmlFor="create-owner_temporary_password">Senha Temporária</Label>
+                                    <Label htmlFor="create-owner_temporary_password">
+                                        Senha Temporária
+                                    </Label>
                                     <Input
                                         id="create-owner_temporary_password"
                                         type="text"
-                                        value={createForm.data.owner_temporary_password}
-                                        onChange={(e) => createForm.setData('owner_temporary_password', e.target.value)}
+                                        value={
+                                            createForm.data
+                                                .owner_temporary_password
+                                        }
+                                        onChange={(e) =>
+                                            createForm.setData(
+                                                'owner_temporary_password',
+                                                e.target.value,
+                                            )
+                                        }
                                         placeholder="Opcional — mínimo 6 caracteres"
                                         className="mt-1"
                                         autoComplete="off"
                                     />
                                     <p className="mt-1 text-xs text-muted-foreground">
-                                        Se informada, a conta será criada com esta senha. O e-mail de redefinição de senha continua sendo enviado normalmente.
+                                        Se informada, a conta será criada com
+                                        esta senha. O e-mail de redefinição de
+                                        senha continua sendo enviado
+                                        normalmente.
                                     </p>
-                                    <InputError message={createForm.errors.owner_temporary_password} className="mt-2" />
+                                    <InputError
+                                        message={
+                                            createForm.errors
+                                                .owner_temporary_password
+                                        }
+                                        className="mt-2"
+                                    />
                                 </div>
 
                                 <div className="flex justify-end gap-2 pt-2">
@@ -429,7 +565,10 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                                     >
                                         Cancelar
                                     </Button>
-                                    <Button type="submit" disabled={createForm.processing}>
+                                    <Button
+                                        type="submit"
+                                        disabled={createForm.processing}
+                                    >
                                         Criar Fabricante
                                     </Button>
                                 </div>
@@ -449,15 +588,22 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                         </DialogHeader>
                         <form onSubmit={handleEditSubmit} className="space-y-4">
                             <div>
-                                <Label htmlFor="edit-name">Nome do Fabricante</Label>
+                                <Label htmlFor="edit-name">
+                                    Nome do Fabricante
+                                </Label>
                                 <Input
                                     id="edit-name"
                                     value={editForm.data.name}
-                                    onChange={(e) => editForm.setData('name', e.target.value)}
+                                    onChange={(e) =>
+                                        editForm.setData('name', e.target.value)
+                                    }
                                     className="mt-1"
                                     autoFocus
                                 />
-                                <InputError message={editForm.errors.name} className="mt-2" />
+                                <InputError
+                                    message={editForm.errors.name}
+                                    className="mt-2"
+                                />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
@@ -466,46 +612,71 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                                     <Input
                                         id="edit-cnpj"
                                         value={editForm.data.cnpj}
-                                        onChange={(e) => editForm.setData('cnpj', e.target.value)}
+                                        onChange={(e) =>
+                                            editForm.setData(
+                                                'cnpj',
+                                                e.target.value,
+                                            )
+                                        }
                                         placeholder="00.000.000/0000-00"
                                         className="mt-1"
                                     />
-                                    <InputError message={editForm.errors.cnpj} className="mt-2" />
+                                    <InputError
+                                        message={editForm.errors.cnpj}
+                                        className="mt-2"
+                                    />
                                 </div>
                                 <div>
                                     <Label htmlFor="edit-phone">Telefone</Label>
                                     <Input
                                         id="edit-phone"
                                         value={editForm.data.phone}
-                                        onChange={(e) => editForm.setData('phone', e.target.value)}
+                                        onChange={(e) =>
+                                            editForm.setData(
+                                                'phone',
+                                                e.target.value,
+                                            )
+                                        }
                                         placeholder="(11) 99999-9999"
                                         className="mt-1"
                                     />
-                                    <InputError message={editForm.errors.phone} className="mt-2" />
+                                    <InputError
+                                        message={editForm.errors.phone}
+                                        className="mt-2"
+                                    />
                                 </div>
                             </div>
 
                             <div>
                                 <Label>Logo</Label>
-                                {editingManufacturer?.logo_url && !editForm.data.remove_logo && (
-                                    <div className="mt-1 mb-2">
-                                        <img
-                                            src={editingManufacturer.logo_url}
-                                            alt="Logo atual"
-                                            className="h-16 w-auto rounded border object-contain"
-                                        />
-                                    </div>
-                                )}
+                                {editingManufacturer?.logo_url &&
+                                    !editForm.data.remove_logo && (
+                                        <div className="mt-1 mb-2">
+                                            <img
+                                                src={
+                                                    editingManufacturer.logo_url
+                                                }
+                                                alt="Logo atual"
+                                                className="h-16 w-auto rounded border object-contain"
+                                            />
+                                        </div>
+                                    )}
                                 {editingManufacturer?.logo_url && (
                                     <div className="mb-2 flex items-center gap-2">
                                         <Checkbox
                                             id="edit-remove_logo"
                                             checked={editForm.data.remove_logo}
                                             onCheckedChange={(checked) =>
-                                                editForm.setData('remove_logo', checked === true)
+                                                editForm.setData(
+                                                    'remove_logo',
+                                                    checked === true,
+                                                )
                                             }
                                         />
-                                        <Label htmlFor="edit-remove_logo" className="cursor-pointer font-normal">
+                                        <Label
+                                            htmlFor="edit-remove_logo"
+                                            className="cursor-pointer font-normal"
+                                        >
                                             Remover logo atual
                                         </Label>
                                     </div>
@@ -516,15 +687,25 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                                             id="edit-logo"
                                             type="file"
                                             accept="image/*"
-                                            onChange={(e) => editForm.setData('logo', e.target.files?.[0] ?? null)}
+                                            onChange={(e) =>
+                                                editForm.setData(
+                                                    'logo',
+                                                    e.target.files?.[0] ?? null,
+                                                )
+                                            }
                                             className="mt-1"
                                         />
-                                        <InputError message={editForm.errors.logo} className="mt-2" />
+                                        <InputError
+                                            message={editForm.errors.logo}
+                                            className="mt-2"
+                                        />
                                     </>
                                 )}
                             </div>
 
-                            <p className="text-sm font-medium text-muted-foreground">Endereço</p>
+                            <p className="text-sm font-medium text-muted-foreground">
+                                Endereço
+                            </p>
                             {addressFields(editForm, 'edit')}
 
                             <div className="flex justify-end gap-2 pt-2">
@@ -535,7 +716,10 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                                 >
                                     Cancelar
                                 </Button>
-                                <Button type="submit" disabled={editForm.processing}>
+                                <Button
+                                    type="submit"
+                                    disabled={editForm.processing}
+                                >
                                     Salvar Alterações
                                 </Button>
                             </div>
@@ -555,14 +739,20 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                                 <TableHead>Usuários</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Criado</TableHead>
-                                <TableHead className="text-right">Ações</TableHead>
+                                <TableHead className="text-right">
+                                    Ações
+                                </TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {manufacturers.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={9} className="text-center text-muted-foreground">
-                                        Nenhum fabricante encontrado. Crie um para começar.
+                                    <TableCell
+                                        colSpan={9}
+                                        className="text-center text-muted-foreground"
+                                    >
+                                        Nenhum fabricante encontrado. Crie um
+                                        para começar.
                                     </TableCell>
                                 </TableRow>
                             ) : (
@@ -572,7 +762,9 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                                             <div className="flex items-center gap-2">
                                                 {manufacturer.logo_url && (
                                                     <img
-                                                        src={manufacturer.logo_url}
+                                                        src={
+                                                            manufacturer.logo_url
+                                                        }
                                                         alt={manufacturer.name}
                                                         className="h-6 w-6 rounded object-contain"
                                                     />
@@ -587,18 +779,27 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                                             {manufacturer.phone ?? '—'}
                                         </TableCell>
                                         <TableCell className="text-sm">
-                                            {manufacturer.city && manufacturer.state
+                                            {manufacturer.city &&
+                                            manufacturer.state
                                                 ? `${manufacturer.city}/${manufacturer.state}`
-                                                : manufacturer.city ?? manufacturer.state ?? '—'}
+                                                : (manufacturer.city ??
+                                                  manufacturer.state ??
+                                                  '—')}
                                         </TableCell>
                                         <TableCell>
                                             {manufacturer.owner ? (
                                                 <div className="flex flex-col">
                                                     <span className="text-sm">
-                                                        {manufacturer.owner.name}
+                                                        {
+                                                            manufacturer.owner
+                                                                .name
+                                                        }
                                                     </span>
                                                     <span className="text-xs text-muted-foreground">
-                                                        {manufacturer.owner.email}
+                                                        {
+                                                            manufacturer.owner
+                                                                .email
+                                                        }
                                                     </span>
                                                 </div>
                                             ) : (
@@ -607,32 +808,50 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                                                 </span>
                                             )}
                                         </TableCell>
-                                        <TableCell>{manufacturer.users_count}</TableCell>
+                                        <TableCell>
+                                            {manufacturer.users_count}
+                                        </TableCell>
                                         <TableCell>
                                             {manufacturer.is_active ? (
-                                                <Badge variant="default">Ativo</Badge>
+                                                <Badge variant="default">
+                                                    Ativo
+                                                </Badge>
                                             ) : (
-                                                <Badge variant="secondary">Inativo</Badge>
+                                                <Badge variant="secondary">
+                                                    Inativo
+                                                </Badge>
                                             )}
                                         </TableCell>
                                         <TableCell>
-                                            {new Date(manufacturer.created_at).toLocaleDateString('pt-BR')}
+                                            {new Date(
+                                                manufacturer.created_at,
+                                            ).toLocaleDateString('pt-BR')}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-2">
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
-                                                    onClick={() => handleEditOpen(manufacturer)}
+                                                    onClick={() =>
+                                                        handleEditOpen(
+                                                            manufacturer,
+                                                        )
+                                                    }
                                                 >
                                                     Editar
                                                 </Button>
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
-                                                    onClick={() => handleToggle(manufacturer.id)}
+                                                    onClick={() =>
+                                                        handleToggle(
+                                                            manufacturer.id,
+                                                        )
+                                                    }
                                                 >
-                                                    {manufacturer.is_active ? 'Desativar' : 'Ativar'}
+                                                    {manufacturer.is_active
+                                                        ? 'Desativar'
+                                                        : 'Ativar'}
                                                 </Button>
                                             </div>
                                         </TableCell>
@@ -650,7 +869,9 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                     <DialogHeader>
                         <DialogTitle>Link de seleção de plano</DialogTitle>
                         <DialogDescription>
-                            O link abaixo foi enviado ao responsável por e-mail. Guarde-o caso precise reenviar manualmente ou acompanhar o processo de ativação.
+                            O link abaixo foi enviado ao responsável por e-mail.
+                            Guarde-o caso precise reenviar manualmente ou
+                            acompanhar o processo de ativação.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex items-center gap-2">
@@ -676,7 +897,9 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                         Este link expira em 3 dias.
                     </p>
                     <DialogFooter>
-                        <Button onClick={() => setLinkModalOpen(false)}>Fechar</Button>
+                        <Button onClick={() => setLinkModalOpen(false)}>
+                            Fechar
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

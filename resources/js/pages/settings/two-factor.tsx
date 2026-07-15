@@ -58,9 +58,10 @@ export default function TwoFactor({
                             <Badge variant="default">Ativado</Badge>
                             <p className="text-muted-foreground">
                                 Com a autenticação de dois fatores ativada, você
-                                será solicitado a inserir um PIN seguro e aleatório durante o
-                                login, que você poderá obter no
-                                aplicativo compatível com TOTP em seu telefone.
+                                será solicitado a inserir um PIN seguro e
+                                aleatório durante o login, que você poderá obter
+                                no aplicativo compatível com TOTP em seu
+                                telefone.
                             </p>
 
                             <TwoFactorRecoveryCodes
@@ -88,9 +89,10 @@ export default function TwoFactor({
                             <Badge variant="destructive">Desativado</Badge>
                             <p className="text-muted-foreground">
                                 Com a autenticação de dois fatores ativada, você
-                                será solicitado a inserir um PIN seguro e aleatório durante o
-                                login, que você poderá obter no
-                                aplicativo compatível com TOTP em seu telefone.
+                                será solicitado a inserir um PIN seguro e
+                                aleatório durante o login, que você poderá obter
+                                no aplicativo compatível com TOTP em seu
+                                telefone.
                             </p>
 
                             <div>
