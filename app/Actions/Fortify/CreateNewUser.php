@@ -19,13 +19,16 @@ class CreateNewUser implements CreatesNewUsers
      * Self-registered users are always sales representatives.
      * Manufacturer owners and superadmins are created by the superadmin panel.
      *
-     * @param  array<string, string>  $input
+     * @param  array<string, mixed>  $input
      */
     public function create(array $input): User
     {
         Validator::make($input, [
             ...$this->profileRules(),
             'password' => $this->passwordRules(),
+            'terms' => ['required', 'accepted'],
+        ], [
+            'terms.accepted' => 'Você precisa aceitar os Termos de Uso e a Política de Privacidade.',
         ])->validate();
 
         return User::create([

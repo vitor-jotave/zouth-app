@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\PlanController;
 use App\Http\Controllers\AffiliationController;
 use App\Http\Controllers\CatalogSettingsController;
 use App\Http\Controllers\EvolutionWebhookController;
+use App\Http\Controllers\LegalController;
 use App\Http\Controllers\Manufacturer\BillingController;
 use App\Http\Controllers\Manufacturer\CustomerController as ManufacturerCustomerController;
 use App\Http\Controllers\Manufacturer\OrderController as ManufacturerOrderController;
@@ -31,8 +32,18 @@ use Laravel\Fortify\Features;
 Route::get('/', function () {
     return Inertia::render('homepage', [
         'canRegister' => Features::enabled(Features::registration()),
+        'commercial' => [
+            'salesContactUrl' => config('commercial.sales_contact_url'),
+            'demoCatalogUrl' => config('commercial.demo_catalog_url'),
+        ],
     ]);
 })->name('home');
+
+Route::controller(LegalController::class)->prefix('legal')->name('legal.')->group(function () {
+    Route::get('termos', 'terms')->name('terms');
+    Route::get('privacidade', 'privacy')->name('privacy');
+    Route::get('lgpd', 'lgpd')->name('lgpd');
+});
 
 Route::get('catalog/{token}', [PublicCatalogController::class, 'show'])
     ->middleware('throttle:60,1')
