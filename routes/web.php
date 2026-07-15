@@ -9,6 +9,7 @@ use App\Http\Controllers\EvolutionWebhookController;
 use App\Http\Controllers\LegalController;
 use App\Http\Controllers\Manufacturer\BillingController;
 use App\Http\Controllers\Manufacturer\CustomerController as ManufacturerCustomerController;
+use App\Http\Controllers\Manufacturer\DashboardController as ManufacturerDashboardController;
 use App\Http\Controllers\Manufacturer\OrderController as ManufacturerOrderController;
 use App\Http\Controllers\Manufacturer\ProductComboController;
 use App\Http\Controllers\Manufacturer\UserController as ManufacturerUserController;
@@ -72,9 +73,7 @@ Route::controller(PlanSelectionController::class)
 
 // Manufacturer User Routes (tenant via session)
 Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function () {
-    Route::get('dashboard', function () {
-        return Inertia::render('dashboard');
-    })->name('dashboard');
+    Route::get('dashboard', ManufacturerDashboardController::class)->name('dashboard');
 
     Route::controller(ManufacturerUserController::class)->prefix('users')->name('users.')->group(function () {
         Route::get('/', 'index')->name('index');
