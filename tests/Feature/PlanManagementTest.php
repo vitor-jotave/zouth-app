@@ -3,6 +3,7 @@
 use App\Models\Manufacturer;
 use App\Models\Plan;
 use App\Models\User;
+use Inertia\Testing\AssertableInertia as Assert;
 
 function createSuperadmin(): User
 {
@@ -44,6 +45,40 @@ test('superadmin can view plans index', function () {
     $this->actingAs(createSuperadmin())
         ->get(route('admin.plans.index'))
         ->assertOk();
+});
+
+test('plans index counts only subscriptions that grant access', function () {
+    $this->withoutVite();
+
+    $plan = Plan::factory()->withStripe()->create(['sort_order' => 1]);
+    $otherPlan = Plan::factory()->withStripe()->create(['sort_order' => 2]);
+
+    $activeManufacturer = Manufacturer::factory()->create(['current_plan_id' => $plan->id]);
+    $trialingManufacturer = Manufacturer::factory()->create(['current_plan_id' => $plan->id]);
+    $pastDueManufacturer = Manufacturer::factory()->create(['current_plan_id' => $plan->id]);
+    Manufacturer::factory()->create(['current_plan_id' => $plan->id]);
+
+    foreach ([
+        [$activeManufacturer, 'active'],
+        [$trialingManufacturer, 'trialing'],
+        [$pastDueManufacturer, 'past_due'],
+    ] as [$manufacturer, $status]) {
+        $manufacturer->subscriptions()->create([
+            'type' => 'default',
+            'stripe_id' => 'sub_'.strtolower($status),
+            'stripe_status' => $status,
+            'stripe_price' => $plan->stripe_price_id,
+        ]);
+    }
+
+    $this->actingAs(createSuperadmin())
+        ->get(route('admin.plans.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('plans.0.id', $plan->id)
+            ->where('plans.0.subscribers_count', 2)
+            ->where('plans.1.id', $otherPlan->id)
+            ->where('plans.1.subscribers_count', 0)
+        );
 });
 
 test('superadmin can view create plan page', function () {

@@ -65,6 +65,42 @@ test('subscription created event syncs current_plan_id', function () {
     expect($manufacturer->fresh()->current_plan_id)->toBe($plan->id);
 });
 
+test('subscription created on trial syncs current_plan_id', function () {
+    $plan = Plan::factory()->withStripe()->create();
+    $manufacturer = Manufacturer::factory()->create([
+        'stripe_id' => 'cus_trialing123',
+        'current_plan_id' => null,
+    ]);
+
+    $payload = stripePayload('customer.subscription.created', [
+        'data' => [
+            'object' => subscriptionObject('cus_trialing123', $plan->stripe_price_id, 'trialing'),
+        ],
+    ]);
+
+    (new StripeEventListener)->handle(new WebhookReceived($payload));
+
+    expect($manufacturer->fresh()->current_plan_id)->toBe($plan->id);
+});
+
+test('subscription created without entitlement does not grant a plan', function () {
+    $plan = Plan::factory()->withStripe()->create();
+    $manufacturer = Manufacturer::factory()->create([
+        'stripe_id' => 'cus_incomplete123',
+        'current_plan_id' => null,
+    ]);
+
+    $payload = stripePayload('customer.subscription.created', [
+        'data' => [
+            'object' => subscriptionObject('cus_incomplete123', $plan->stripe_price_id, 'incomplete'),
+        ],
+    ]);
+
+    (new StripeEventListener)->handle(new WebhookReceived($payload));
+
+    expect($manufacturer->fresh()->current_plan_id)->toBeNull();
+});
+
 test('subscription updated event syncs current_plan_id on plan swap', function () {
     $oldPlan = Plan::factory()->basic()->withStripe()->create();
     $newPlan = Plan::factory()->premium()->withStripe()->create();
@@ -161,7 +197,7 @@ test('subscription updated with active status keeps plan synced', function () {
     expect($manufacturer->fresh()->current_plan_id)->toBe($plan->id);
 });
 
-test('subscription updated with past_due status keeps plan synced', function () {
+test('subscription updated with past_due status clears current_plan_id', function () {
     $plan = Plan::factory()->withStripe()->create();
     $manufacturer = Manufacturer::factory()->create([
         'stripe_id' => 'cus_pastdue004',
@@ -177,7 +213,7 @@ test('subscription updated with past_due status keeps plan synced', function () 
     $listener = new StripeEventListener;
     $listener->handle(new WebhookReceived($payload));
 
-    expect($manufacturer->fresh()->current_plan_id)->toBe($plan->id);
+    expect($manufacturer->fresh()->current_plan_id)->toBeNull();
 });
 
 test('subscription deleted event clears current_plan_id', function () {
@@ -264,8 +300,10 @@ test('webhook with unknown customer is handled gracefully', function () {
 test('webhook with unknown price is handled gracefully', function () {
     Log::spy();
 
-    Manufacturer::factory()->create([
+    $currentPlan = Plan::factory()->withStripe()->create();
+    $manufacturer = Manufacturer::factory()->create([
         'stripe_id' => 'cus_unknownprice',
+        'current_plan_id' => $currentPlan->id,
     ]);
 
     $payload = stripePayload('customer.subscription.created', [
@@ -280,6 +318,8 @@ test('webhook with unknown price is handled gracefully', function () {
     Log::shouldHaveReceived('warning')
         ->withArgs(fn (string $message) => str_contains($message, 'no matching plan'))
         ->once();
+
+    expect($manufacturer->fresh()->current_plan_id)->toBeNull();
 });
 
 test('listener is registered in AppServiceProvider', function () {

@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StorePlanRequest;
 use App\Http\Requests\UpdatePlanRequest;
 use App\Models\Plan;
+use App\Services\PlanLimitService;
 use App\Services\PlanStripeSyncService;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
+use Laravel\Cashier\Subscription;
 
 class PlanController extends Controller
 {
@@ -22,8 +24,18 @@ class PlanController extends Controller
      */
     public function index(): Response
     {
+        $subscriberCounts = Subscription::query()
+            ->whereIn('stripe_status', PlanLimitService::ENTITLED_SUBSCRIPTION_STATUSES)
+            ->whereNotNull('stripe_price')
+            ->where(function ($query) {
+                $query->whereNull('ends_at')
+                    ->orWhere('ends_at', '>', now());
+            })
+            ->get(['manufacturer_id', 'stripe_price'])
+            ->groupBy('stripe_price')
+            ->map(fn ($subscriptions) => $subscriptions->unique('manufacturer_id')->count());
+
         $plans = Plan::query()
-            ->withCount('manufacturers')
             ->orderBy('sort_order')
             ->orderBy('name')
             ->get()
@@ -45,7 +57,7 @@ class PlanController extends Controller
                 'allow_csv_import' => $plan->allow_csv_import,
                 'stripe_product_id' => $plan->stripe_product_id,
                 'stripe_price_id' => $plan->stripe_price_id,
-                'manufacturers_count' => $plan->manufacturers_count,
+                'subscribers_count' => $subscriberCounts->get($plan->stripe_price_id, 0),
                 'created_at' => $plan->created_at->toDateTimeString(),
             ]);
 
