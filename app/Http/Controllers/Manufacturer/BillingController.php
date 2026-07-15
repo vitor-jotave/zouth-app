@@ -8,6 +8,7 @@ use App\Services\PlanLimitService;
 use App\Services\TenantManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\URL;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -50,7 +51,7 @@ class BillingController extends Controller
             ]);
 
         $subscription = $manufacturer->subscription('default');
-        $currentPlan = $manufacturer->currentPlan;
+        $currentPlan = $this->limitService->activePlan($manufacturer);
 
         return Inertia::render('manufacturer/billing/index', [
             'plans' => $plans,
@@ -62,7 +63,7 @@ class BillingController extends Controller
                 'ends_at' => $subscription->ends_at?->toDateTimeString(),
                 'on_grace_period' => $subscription->onGracePeriod(),
                 'cancelled' => $subscription->canceled(),
-                'active' => $subscription->active(),
+                'active' => $this->limitService->subscriptionGrantsAccess($subscription),
             ] : null,
             'usage' => $this->limitService->usage($manufacturer),
         ]);
@@ -102,7 +103,11 @@ class BillingController extends Controller
         }
 
         return $subscriptionBuilder->checkout([
-            'success_url' => route('manufacturer.billing.checkout.success', $plan),
+            'success_url' => URL::temporarySignedRoute(
+                'manufacturer.billing.checkout.success',
+                now()->addHour(),
+                ['plan' => $plan->id],
+            ),
             'cancel_url' => route('manufacturer.billing.index'),
         ])->redirect();
     }
@@ -110,18 +115,18 @@ class BillingController extends Controller
     /**
      * Handle the return from a successful Stripe Checkout session.
      */
-    public function checkoutSuccess(Plan $plan): RedirectResponse
+    public function checkoutSuccess(Request $request, Plan $plan): RedirectResponse
     {
+        abort_unless($request->hasValidSignature(), 403);
+
         $manufacturer = $this->tenantManager->get();
 
         if (! $manufacturer) {
             abort(403);
         }
 
-        $manufacturer->update(['current_plan_id' => $plan->id]);
-
         return redirect()->route('manufacturer.billing.index')
-            ->with('success', 'Assinatura realizada com sucesso! Bem-vindo ao plano '.$plan->name.'.');
+            ->with('success', 'Checkout recebido. O plano '.$plan->name.' será liberado automaticamente após a confirmação do Stripe.');
     }
 
     /**
@@ -147,7 +152,7 @@ class BillingController extends Controller
 
         $subscription = $manufacturer->subscription('default');
 
-        if (! $subscription || ! $subscription->active()) {
+        if (! $this->limitService->subscriptionGrantsAccess($subscription)) {
             return back()->withErrors(['plan_id' => 'Você não possui uma assinatura ativa.']);
         }
 
@@ -161,10 +166,8 @@ class BillingController extends Controller
 
         $subscription->swap($plan->stripe_price_id);
 
-        $manufacturer->update(['current_plan_id' => $plan->id]);
-
         return redirect()->route('manufacturer.billing.index')
-            ->with('success', 'Plano alterado com sucesso!');
+            ->with('success', 'Alteração enviada ao Stripe. O novo plano será liberado após a confirmação.');
     }
 
     /**
@@ -190,15 +193,16 @@ class BillingController extends Controller
 
         $subscription = $manufacturer->subscription('default');
 
-        if (! $subscription || ! $subscription->active()) {
+        if (! $this->limitService->subscriptionGrantsAccess($subscription)) {
             return back()->withErrors(['plan_id' => 'Você não possui uma assinatura ativa.']);
         }
 
         $subscription->swap($plan->stripe_price_id);
 
-        $manufacturer->update(['current_plan_id' => $plan->id]);
-
-        return back()->with('upgrade_success', ['plan_name' => $plan->name]);
+        return back()->with('upgrade_success', [
+            'plan_name' => $plan->name,
+            'pending_confirmation' => true,
+        ]);
     }
 
     /**

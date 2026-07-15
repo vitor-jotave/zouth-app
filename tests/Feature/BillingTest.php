@@ -3,6 +3,7 @@
 use App\Models\Manufacturer;
 use App\Models\Plan;
 use App\Models\User;
+use Illuminate\Support\Facades\URL;
 
 function setupBillingUser(): array
 {
@@ -84,15 +85,29 @@ test('checkout rejects plan without stripe_price_id', function () {
         ->assertSessionHasErrors('plan_id');
 });
 
-test('checkout success updates current plan', function () {
-    [$user, $manufacturer] = setupBillingUser();
+test('checkout success waits for the Stripe webhook before updating the plan', function () {
+    [$user, $manufacturer, $currentPlan] = setupBillingUser();
+    $newPlan = Plan::factory()->create();
+
+    $this->actingAs($user)
+        ->get(URL::temporarySignedRoute(
+            'manufacturer.billing.checkout.success',
+            now()->addHour(),
+            ['plan' => $newPlan->id],
+        ))
+        ->assertRedirect(route('manufacturer.billing.index'))
+        ->assertSessionHas('success', fn (string $message) => str_contains($message, 'confirmação do Stripe'));
+
+    expect($manufacturer->fresh()->current_plan_id)->toBe($currentPlan->id);
+});
+
+test('checkout success rejects an unsigned URL', function () {
+    [$user] = setupBillingUser();
     $newPlan = Plan::factory()->create();
 
     $this->actingAs($user)
         ->get(route('manufacturer.billing.checkout.success', $newPlan))
-        ->assertRedirect(route('manufacturer.billing.index'));
-
-    expect($manufacturer->fresh()->current_plan_id)->toBe($newPlan->id);
+        ->assertForbidden();
 });
 
 test('swap requires plan_id', function () {

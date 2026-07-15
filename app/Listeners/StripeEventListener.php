@@ -4,6 +4,7 @@ namespace App\Listeners;
 
 use App\Models\Manufacturer;
 use App\Models\Plan;
+use App\Services\PlanLimitService;
 use Illuminate\Support\Facades\Log;
 use Laravel\Cashier\Events\WebhookReceived;
 
@@ -25,7 +26,6 @@ class StripeEventListener
             'customer.subscription.updated' => $this->handleSubscriptionUpdated($event->payload),
             'customer.subscription.deleted' => $this->handleSubscriptionDeleted($event->payload),
             'invoice.payment_action_required' => $this->handlePaymentActionRequired($event->payload),
-            'invoice.payment_succeeded' => $this->handlePaymentSucceeded($event->payload),
             default => null,
         };
     }
@@ -37,7 +37,7 @@ class StripeEventListener
      */
     protected function handleSubscriptionCreated(array $payload): void
     {
-        $this->syncPlanFromSubscription($payload);
+        $this->syncEntitlementFromSubscription($payload);
     }
 
     /**
@@ -47,18 +47,7 @@ class StripeEventListener
      */
     protected function handleSubscriptionUpdated(array $payload): void
     {
-        $subscription = $payload['data']['object'] ?? [];
-        $status = $subscription['status'] ?? null;
-
-        // If the subscription went to an inactive state, clear the plan.
-        if (in_array($status, ['canceled', 'unpaid', 'incomplete_expired'])) {
-            $this->clearPlanForCustomer($subscription['customer'] ?? null, $status);
-
-            return;
-        }
-
-        // For active/trialing/past_due — sync the plan from the price.
-        $this->syncPlanFromSubscription($payload);
+        $this->syncEntitlementFromSubscription($payload);
     }
 
     /**
@@ -94,50 +83,19 @@ class StripeEventListener
         }
     }
 
-    /**
-     * Invoice payment succeeded — ensure plan is synced.
-     *
-     * @param  array<string, mixed>  $payload
-     */
-    protected function handlePaymentSucceeded(array $payload): void
+    /** @param array<string, mixed> $payload */
+    protected function syncEntitlementFromSubscription(array $payload): void
     {
-        $invoice = $payload['data']['object'] ?? [];
-        $stripeCustomerId = $invoice['customer'] ?? null;
-        $subscriptionId = $invoice['subscription'] ?? null;
+        $subscription = $payload['data']['object'] ?? [];
+        $status = $subscription['status'] ?? null;
 
-        if (! $stripeCustomerId || ! $subscriptionId) {
+        if (! in_array($status, PlanLimitService::ENTITLED_SUBSCRIPTION_STATUSES, true)) {
+            $this->clearPlanForCustomer($subscription['customer'] ?? null, $status ?? 'unknown');
+
             return;
         }
 
-        $manufacturer = $this->findManufacturer($stripeCustomerId);
-
-        if (! $manufacturer) {
-            return;
-        }
-
-        // Get the subscription's current price from the local DB (Cashier already synced it).
-        $subscription = $manufacturer->subscriptions()
-            ->where('stripe_id', $subscriptionId)
-            ->first();
-
-        if (! $subscription) {
-            return;
-        }
-
-        $priceId = $subscription->stripe_price;
-
-        if ($priceId) {
-            $plan = Plan::where('stripe_price_id', $priceId)->first();
-
-            if ($plan && $manufacturer->current_plan_id !== $plan->id) {
-                $manufacturer->update(['current_plan_id' => $plan->id]);
-
-                Log::info('Stripe: plan synced after successful payment', [
-                    'manufacturer_id' => $manufacturer->id,
-                    'plan_id' => $plan->id,
-                ]);
-            }
-        }
+        $this->syncPlanFromSubscription($payload);
     }
 
     /**
@@ -169,6 +127,8 @@ class StripeEventListener
                 'subscription_id' => $subscription['id'] ?? null,
             ]);
 
+            $this->clearPlanForCustomer($stripeCustomerId, 'missing_price');
+
             return;
         }
 
@@ -179,6 +139,8 @@ class StripeEventListener
                 'manufacturer_id' => $manufacturer->id,
                 'stripe_price_id' => $priceId,
             ]);
+
+            $this->clearPlanForCustomer($stripeCustomerId, 'unknown_price');
 
             return;
         }

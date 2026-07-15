@@ -7,15 +7,44 @@ use App\Models\ManufacturerAffiliation;
 use App\Models\Plan;
 use App\Models\ProductMedia;
 use Carbon\CarbonImmutable;
+use Laravel\Cashier\Subscription;
 
 class PlanLimitService
 {
+    /** @var list<string> */
+    public const ENTITLED_SUBSCRIPTION_STATUSES = ['active', 'trialing'];
+
     /**
      * Get the active plan for a manufacturer, or null if none.
      */
     public function activePlan(Manufacturer $manufacturer): ?Plan
     {
-        return $manufacturer->currentPlan;
+        $plan = $manufacturer->currentPlan;
+
+        if (! $plan || ! $plan->stripe_price_id) {
+            return $plan;
+        }
+
+        $hasEntitledSubscription = $manufacturer->subscriptions()
+            ->where('type', 'default')
+            ->where('stripe_price', $plan->stripe_price_id)
+            ->whereIn('stripe_status', self::ENTITLED_SUBSCRIPTION_STATUSES)
+            ->where(function ($query) {
+                $query->whereNull('ends_at')
+                    ->orWhere('ends_at', '>', now());
+            })
+            ->exists();
+
+        return $hasEntitledSubscription ? $plan : null;
+    }
+
+    public function subscriptionGrantsAccess(?Subscription $subscription): bool
+    {
+        if (! $subscription || ! in_array($subscription->stripe_status, self::ENTITLED_SUBSCRIPTION_STATUSES, true)) {
+            return false;
+        }
+
+        return $subscription->ends_at === null || $subscription->ends_at->isFuture();
     }
 
     /**
