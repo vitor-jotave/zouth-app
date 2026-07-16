@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Manufacturer;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ChangeSubscriptionPlanRequest;
 use App\Models\Plan;
 use App\Services\PlanLimitService;
 use App\Services\TenantManager;
@@ -131,19 +132,15 @@ class BillingController extends Controller
     /**
      * Swap to a different plan.
      */
-    public function swap(Request $request): RedirectResponse
+    public function swap(ChangeSubscriptionPlanRequest $request): RedirectResponse
     {
-        $request->validate([
-            'plan_id' => ['required', 'exists:plans,id'],
-        ]);
-
         $manufacturer = $this->tenantManager->get();
 
         if (! $manufacturer) {
             abort(403);
         }
 
-        $plan = Plan::findOrFail($request->plan_id);
+        $plan = Plan::query()->findOrFail($request->integer('plan_id'));
 
         if (! $plan->stripe_price_id) {
             return back()->withErrors(['plan_id' => 'Este plano ainda não está configurado para assinaturas.']);
@@ -172,19 +169,15 @@ class BillingController extends Controller
     /**
      * Upgrade to a higher plan and redirect back to continue the user's action.
      */
-    public function upgrade(Request $request): RedirectResponse
+    public function upgrade(ChangeSubscriptionPlanRequest $request): RedirectResponse
     {
-        $request->validate([
-            'plan_id' => ['required', 'exists:plans,id'],
-        ]);
-
         $manufacturer = $this->tenantManager->get();
 
         if (! $manufacturer) {
             abort(403);
         }
 
-        $plan = Plan::findOrFail($request->plan_id);
+        $plan = Plan::query()->findOrFail($request->integer('plan_id'));
 
         if (! $plan->stripe_price_id) {
             return back()->withErrors(['plan_id' => 'Este plano ainda não está configurado para assinaturas.']);
@@ -194,6 +187,12 @@ class BillingController extends Controller
 
         if (! $this->limitService->subscriptionGrantsAccess($subscription)) {
             return back()->withErrors(['plan_id' => 'Você não possui uma assinatura ativa.']);
+        }
+
+        $currentPlan = $this->limitService->activePlan($manufacturer);
+
+        if (! $currentPlan || $plan->sort_order <= $currentPlan->sort_order) {
+            return back()->withErrors(['plan_id' => 'Selecione um plano superior ao seu plano atual.']);
         }
 
         $subscription->swap($plan->stripe_price_id);
