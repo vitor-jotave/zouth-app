@@ -1,11 +1,9 @@
 import { Head, router, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
-    Check,
     Crown,
     ExternalLink,
     Infinity as InfinityIcon,
-    X,
 } from 'lucide-react';
 import { checkout } from '@/actions/App/Http/Controllers/Manufacturer/BillingController';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -40,7 +38,6 @@ type Plan = {
     max_users: number | null;
     max_data_mb: number | null;
     max_files_gb: number | null;
-    allow_csv_import: boolean;
     has_stripe: boolean;
 };
 
@@ -419,22 +416,6 @@ export default function BillingIndex({
                                                         : 'Ilimitado'
                                                 }
                                             />
-                                            <li className="flex items-center gap-2">
-                                                {plan.allow_csv_import ? (
-                                                    <Check className="h-4 w-4 text-green-600" />
-                                                ) : (
-                                                    <X className="h-4 w-4 text-muted-foreground" />
-                                                )}
-                                                <span
-                                                    className={
-                                                        !plan.allow_csv_import
-                                                            ? 'text-muted-foreground'
-                                                            : ''
-                                                    }
-                                                >
-                                                    Importação CSV
-                                                </span>
-                                            </li>
                                         </ul>
                                     </CardContent>
                                     <CardFooter>

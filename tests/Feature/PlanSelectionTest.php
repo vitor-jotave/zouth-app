@@ -32,6 +32,8 @@ it('shows the plan selection page with a valid signed URL', function () {
         ->component('plan-selection/index')
         ->has('manufacturer')
         ->has('plans')
+        ->has('plans.0')
+        ->missing('plans.0.allow_csv_import')
         ->has('checkoutUrls')
     );
 });

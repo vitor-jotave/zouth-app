@@ -46,7 +46,6 @@ class BillingController extends Controller
                 'max_users' => $plan->max_users,
                 'max_data_mb' => $plan->max_data_mb,
                 'max_files_gb' => $plan->max_files_gb,
-                'allow_csv_import' => $plan->allow_csv_import,
                 'has_stripe' => $plan->stripe_price_id !== null,
             ]);
 
