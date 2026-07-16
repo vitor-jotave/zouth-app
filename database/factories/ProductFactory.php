@@ -27,7 +27,7 @@ class ProductFactory extends Factory
             'name' => fake()->words(3, true),
             'sku' => strtoupper(fake()->bothify('SKU-####')),
             'description' => fake()->sentence(),
-            'base_quantity' => fake()->numberBetween(0, 50),
+            'base_quantity' => 20,
             'is_active' => true,
             'sort_order' => 0,
             'price_cents' => fake()->numberBetween(990, 99900),

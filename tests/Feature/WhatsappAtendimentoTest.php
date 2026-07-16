@@ -276,6 +276,17 @@ test('webhook rejects invalid api key', function () {
     ])->assertUnauthorized();
 });
 
+test('webhook rejects requests when the api key is not configured', function () {
+    config()->set('evolution.api_key');
+
+    $instance = WhatsappInstance::factory()->create();
+
+    $this->postJson("/webhooks/evolution/{$instance->instance_name}", [
+        'event' => 'CONNECTION_UPDATE',
+        'data' => ['state' => 'open'],
+    ])->assertUnauthorized();
+});
+
 test('webhook updates connection status', function () {
     $instance = WhatsappInstance::factory()->create(['status' => 'connecting']);
 

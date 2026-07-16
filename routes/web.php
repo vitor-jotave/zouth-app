@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\PlanController;
 use App\Http\Controllers\AffiliationController;
 use App\Http\Controllers\CatalogSettingsController;
 use App\Http\Controllers\EvolutionWebhookController;
+use App\Http\Controllers\Health\ReadinessController;
 use App\Http\Controllers\LegalController;
 use App\Http\Controllers\Manufacturer\BillingController;
 use App\Http\Controllers\Manufacturer\CustomerController as ManufacturerCustomerController;
@@ -39,6 +40,11 @@ Route::get('/', function () {
         ],
     ]);
 })->name('home');
+
+Route::get('health/live', fn () => response()->json(['status' => 'ok']))
+    ->name('health.live');
+Route::get('health/ready', ReadinessController::class)
+    ->name('health.ready');
 
 Route::controller(LegalController::class)->prefix('legal')->name('legal.')->group(function () {
     Route::get('termos', 'terms')->name('terms');

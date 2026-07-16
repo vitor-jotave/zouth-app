@@ -183,6 +183,7 @@ interface CartItem {
     size?: string | null;
     color?: string | null;
     selected_variations?: Record<string, string>;
+    unit_price_cents?: number | null;
 }
 
 type DocumentType = 'cpf' | 'cnpj';
@@ -265,6 +266,54 @@ function productHasRequiredSelection(
 ): boolean {
     return product.variations.every((variation) =>
         Boolean(selectedValues[variation.type_name]),
+    );
+}
+
+function selectedVariantStock(
+    product: Product,
+    selectedValues: Record<string, string>,
+): Product['variant_stocks'][number] | null {
+    if (!productHasRequiredSelection(product, selectedValues)) {
+        return null;
+    }
+
+    return (
+        product.variant_stocks.find((stock) => {
+            const stockEntries = Object.entries(stock.variation_key);
+            const selectedEntries = Object.entries(selectedValues);
+
+            return (
+                stockEntries.length === selectedEntries.length &&
+                stockEntries.every(
+                    ([name, value]) => selectedValues[name] === value,
+                )
+            );
+        }) ?? null
+    );
+}
+
+function availableStockForSelection(
+    product: Product,
+    selectedValues: Record<string, string>,
+): number | null {
+    if (!productHasRequiredSelection(product, selectedValues)) {
+        return null;
+    }
+
+    if (product.variations.length === 0) {
+        return product.total_stock;
+    }
+
+    return selectedVariantStock(product, selectedValues)?.quantity ?? 0;
+}
+
+function priceForSelection(
+    product: Product,
+    selectedValues: Record<string, string>,
+): number | null | undefined {
+    return (
+        selectedVariantStock(product, selectedValues)?.price_cents ??
+        product.price_cents
     );
 }
 
@@ -625,7 +674,8 @@ function ProductQuickViewModal({
         return null;
     }
 
-    const canAdd = productHasRequiredSelection(product, selectedValues);
+    const availableStock = availableStockForSelection(product, selectedValues);
+    const canAdd = availableStock !== null && availableStock > 0;
 
     return (
         <Dialog
@@ -716,7 +766,7 @@ function ProductQuickViewModal({
                             >
                                 <AddToCartContent
                                     isAdded={isAdded}
-                                    canAdd={canAdd}
+                                    availableStock={availableStock}
                                 />
                             </Button>
                         </div>
@@ -1175,10 +1225,10 @@ function CatalogCollections({
 
 function AddToCartContent({
     isAdded,
-    canAdd,
+    availableStock,
 }: {
     isAdded: boolean;
-    canAdd: boolean;
+    availableStock: number | null;
 }) {
     if (isAdded) {
         return (
@@ -1189,8 +1239,12 @@ function AddToCartContent({
         );
     }
 
-    if (!canAdd) {
+    if (availableStock === null) {
         return <>Selecione opções</>;
+    }
+
+    if (availableStock === 0) {
+        return <>Esgotado</>;
     }
 
     return (
@@ -1306,6 +1360,7 @@ function ComboGridSection({
                 >
                     {combos.map((combo) => {
                         const isAdded = addedProductId === combo.id;
+                        const availableStock = combo.total_stock;
 
                         return (
                             <article
@@ -1372,8 +1427,9 @@ function ComboGridSection({
                                         <button
                                             type="button"
                                             onClick={() => onAddToCart(combo)}
+                                            disabled={availableStock === 0}
                                             aria-live="polite"
-                                            className="inline-flex min-w-28 items-center justify-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90"
+                                            className="inline-flex min-w-28 items-center justify-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                                             style={{
                                                 backgroundColor: isAdded
                                                     ? settings.accent_color
@@ -1382,7 +1438,7 @@ function ComboGridSection({
                                         >
                                             <AddToCartContent
                                                 isAdded={isAdded}
-                                                canAdd
+                                                availableStock={availableStock}
                                             />
                                         </button>
                                         <button
@@ -1574,10 +1630,12 @@ function MinimalLayout({
                             const isAdded = addedProductId === product.id;
                             const selectedValues =
                                 selectedVariations[product.id] ?? {};
-                            const canAdd = productHasRequiredSelection(
+                            const availableStock = availableStockForSelection(
                                 product,
                                 selectedValues,
                             );
+                            const canAdd =
+                                availableStock !== null && availableStock > 0;
 
                             return (
                                 <article
@@ -1666,7 +1724,9 @@ function MinimalLayout({
                                             >
                                                 <AddToCartContent
                                                     isAdded={isAdded}
-                                                    canAdd={canAdd}
+                                                    availableStock={
+                                                        availableStock
+                                                    }
                                                 />
                                             </button>
                                         </div>
@@ -1857,10 +1917,12 @@ function PlayfulLayout({
                             const isAdded = addedProductId === product.id;
                             const selectedValues =
                                 selectedVariations[product.id] ?? {};
-                            const canAdd = productHasRequiredSelection(
+                            const availableStock = availableStockForSelection(
                                 product,
                                 selectedValues,
                             );
+                            const canAdd =
+                                availableStock !== null && availableStock > 0;
 
                             return (
                                 <article
@@ -1971,7 +2033,7 @@ function PlayfulLayout({
                                         >
                                             <AddToCartContent
                                                 isAdded={isAdded}
-                                                canAdd={canAdd}
+                                                availableStock={availableStock}
                                             />
                                         </button>
                                     </div>
@@ -2155,10 +2217,12 @@ function BoutiqueLayout({
                             const isAdded = addedProductId === product.id;
                             const selectedValues =
                                 selectedVariations[product.id] ?? {};
-                            const canAdd = productHasRequiredSelection(
+                            const availableStock = availableStockForSelection(
                                 product,
                                 selectedValues,
                             );
+                            const canAdd =
+                                availableStock !== null && availableStock > 0;
 
                             return (
                                 <article
@@ -2246,7 +2310,7 @@ function BoutiqueLayout({
                                         >
                                             <AddToCartContent
                                                 isAdded={isAdded}
-                                                canAdd={canAdd}
+                                                availableStock={availableStock}
                                             />
                                         </button>
                                     </div>
@@ -2321,11 +2385,11 @@ export default function PublicCatalog({
     const cartTotal = cart.reduce((sum, item) => sum + item.quantity, 0);
 
     const cartPriceTotal = cart.reduce((sum, item) => {
-        if (item.product.price_cents == null) return sum;
-        return sum + item.product.price_cents * item.quantity;
+        if (item.unit_price_cents == null) return sum;
+        return sum + item.unit_price_cents * item.quantity;
     }, 0);
 
-    const hasAnyPriced = cart.some((item) => item.product.price_cents != null);
+    const hasAnyPriced = cart.some((item) => item.unit_price_cents != null);
 
     useEffect(() => {
         if (addedProductId === null) {
@@ -2362,6 +2426,14 @@ export default function PublicCatalog({
 
             const options = cartOptionsFromSelection(product, selectedValues);
             const key = cartItemKey(product.id, options.selected_variations);
+            const availableStock = availableStockForSelection(
+                product,
+                selectedValues,
+            );
+
+            if (availableStock === null || availableStock === 0) {
+                return;
+            }
 
             setAddedProductId(product.id);
 
@@ -2371,7 +2443,13 @@ export default function PublicCatalog({
                 if (existing) {
                     return prev.map((item) =>
                         item.key === key
-                            ? { ...item, quantity: item.quantity + 1 }
+                            ? {
+                                  ...item,
+                                  quantity: Math.min(
+                                      item.quantity + 1,
+                                      availableStock,
+                                  ),
+                              }
                             : item,
                     );
                 }
@@ -2382,6 +2460,10 @@ export default function PublicCatalog({
                         key,
                         product,
                         quantity: 1,
+                        unit_price_cents: priceForSelection(
+                            product,
+                            selectedValues,
+                        ),
                         ...options,
                     },
                 ];
@@ -2396,9 +2478,22 @@ export default function PublicCatalog({
             return;
         }
         setCart((prev) =>
-            prev.map((item) =>
-                item.key === itemKey ? { ...item, quantity } : item,
-            ),
+            prev.map((item) => {
+                if (item.key !== itemKey) {
+                    return item;
+                }
+
+                const availableStock =
+                    availableStockForSelection(
+                        item.product,
+                        item.selected_variations ?? {},
+                    ) ?? 0;
+
+                return {
+                    ...item,
+                    quantity: Math.min(quantity, availableStock),
+                };
+            }),
         );
     };
 
@@ -2435,6 +2530,7 @@ export default function PublicCatalog({
                     quantity: item.quantity,
                     size: item.size ?? null,
                     color: item.color ?? null,
+                    selected_variations: item.selected_variations ?? null,
                 })),
                 utm_source: params.get('utm_source'),
                 utm_medium: params.get('utm_medium'),
@@ -2691,7 +2787,7 @@ export default function PublicCatalog({
                                             )}
                                             <p className="text-xs font-medium">
                                                 {formatPrice(
-                                                    item.product.price_cents,
+                                                    item.unit_price_cents,
                                                 )}
                                             </p>
                                             <ComboSummary
@@ -2703,6 +2799,14 @@ export default function PublicCatalog({
                                                 variant="outline"
                                                 size="icon"
                                                 className="h-7 w-7"
+                                                disabled={
+                                                    item.quantity >=
+                                                    (availableStockForSelection(
+                                                        item.product,
+                                                        item.selected_variations ??
+                                                            {},
+                                                    ) ?? 0)
+                                                }
                                                 onClick={() =>
                                                     updateQuantity(
                                                         item.key,
@@ -3126,6 +3230,9 @@ export default function PublicCatalog({
                                     {formatPrice(cartPriceTotal)}
                                 </p>
                             )}
+                            <p className="mt-2 text-xs text-muted-foreground">
+                                O estoque e reservado quando o pedido e enviado.
+                            </p>
                         </div>
                     </div>
 

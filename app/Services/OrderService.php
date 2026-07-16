@@ -7,10 +7,14 @@ use App\Models\Order;
 use App\Models\Product;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class OrderService
 {
-    public function __construct(private CustomerService $customerService) {}
+    public function __construct(
+        private CustomerService $customerService,
+        private InventoryReservationService $inventoryReservationService,
+    ) {}
 
     /**
      * @param  array{
@@ -36,7 +40,7 @@ class OrderService
      *     utm_campaign?: string|null,
      *     utm_content?: string|null,
      *     utm_term?: string|null,
-     *     items: array<int, array{product_id: int, quantity: int, size?: string|null, color?: string|null}>
+     *     items: array<int, array{product_id: int, quantity: int, size?: string|null, color?: string|null, selected_variations?: array<string, string>|null}>
      * }  $data
      */
     public function createPublicOrder(array $data): Order
@@ -75,7 +79,9 @@ class OrderService
             $productIds = collect($data['items'])->pluck('product_id')->unique();
             $products = Product::whereIn('id', $productIds)
                 ->where('manufacturer_id', $data['manufacturer_id'])
-                ->with(['comboItems.componentProduct'])
+                ->where('is_active', true)
+                ->with(['comboItems.componentProduct', 'productVariations'])
+                ->lockForUpdate()
                 ->get()
                 ->keyBy('id');
 
@@ -83,24 +89,32 @@ class OrderService
                 $product = $products->get($item['product_id']);
 
                 if (! $product) {
-                    continue;
+                    throw ValidationException::withMessages([
+                        'items' => 'Um ou mais produtos nao estao mais disponiveis.',
+                    ]);
                 }
+
+                $reservation = $this->inventoryReservationService->reserve($product, $item);
 
                 $order->items()->create([
                     'product_id' => $product->id,
                     'product_name' => $product->name,
                     'product_sku' => $product->sku,
-                    'unit_price' => $product->price_cents !== null
-                        ? $product->price_cents / 100
+                    'unit_price' => $reservation['unit_price_cents'] !== null
+                        ? $reservation['unit_price_cents'] / 100
                         : null,
                     'quantity' => $item['quantity'],
                     'size' => $item['size'] ?? null,
                     'color' => $item['color'] ?? null,
+                    'product_variant_stock_id' => $reservation['product_variant_stock_id'],
+                    'selected_variations' => $reservation['selected_variations'],
                     'combo_components' => $product->isCombo()
                         ? $this->comboComponentsSnapshot($product)
                         : null,
                 ]);
             }
+
+            $order->update(['inventory_reserved_at' => now()]);
 
             $order->statusHistory()->create([
                 'from_status' => OrderStatus::New->value,
@@ -123,23 +137,33 @@ class OrderService
             'product_name' => $item->componentProduct?->name,
             'product_sku' => $item->componentProduct?->sku,
             'variation_key' => $item->variation_key,
+            'product_variant_stock_id' => $item->component_variant_stock_id,
             'quantity' => $item->quantity,
         ])->values()->all();
     }
 
     public function updateStatus(Order $order, OrderStatus $newStatus, ?int $userId = null): Order
     {
-        $oldStatus = $order->status;
+        return DB::transaction(function () use ($order, $newStatus, $userId): Order {
+            $lockedOrder = Order::query()->lockForUpdate()->findOrFail($order->id);
+            $oldStatus = $lockedOrder->status;
 
-        $order->update(['status' => $newStatus]);
+            if ($newStatus === OrderStatus::Cancelled && $lockedOrder->inventory_reserved_at && ! $lockedOrder->inventory_released_at) {
+                $this->inventoryReservationService->release($lockedOrder);
+                $lockedOrder->inventory_released_at = now();
+            }
 
-        $order->statusHistory()->create([
-            'from_status' => $oldStatus->value,
-            'to_status' => $newStatus->value,
-            'changed_by_user_id' => $userId,
-            'created_at' => now(),
-        ]);
+            $lockedOrder->status = $newStatus;
+            $lockedOrder->save();
 
-        return $order->refresh();
+            $lockedOrder->statusHistory()->create([
+                'from_status' => $oldStatus->value,
+                'to_status' => $newStatus->value,
+                'changed_by_user_id' => $userId,
+                'created_at' => now(),
+            ]);
+
+            return $lockedOrder->refresh();
+        });
     }
 }

@@ -333,9 +333,11 @@ it('creates a public order with combo price and composition snapshot', function 
             'product_name' => 'Body Avulso',
             'product_sku' => 'BODY-SNAP',
             'variation_key' => null,
+            'product_variant_stock_id' => null,
             'quantity' => 3,
         ],
     ]);
+    expect($component->fresh()->base_quantity)->toBe(3);
 
     $this->get("/o/{$order->public_token}")
         ->assertOk()
