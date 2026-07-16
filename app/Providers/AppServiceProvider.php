@@ -11,9 +11,12 @@ use App\Services\TenantManager;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
@@ -49,8 +52,24 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(WebhookReceived::class, StripeEventListener::class);
 
         $this->configureDefaults();
+        $this->configureQueueMonitoring();
         $this->configureRateLimiting();
         $this->configureUrl();
+    }
+
+    /**
+     * Emit a structured critical log whenever a queued job fails permanently.
+     */
+    protected function configureQueueMonitoring(): void
+    {
+        Queue::failing(function (JobFailed $event): void {
+            Log::critical('Queue job failed.', [
+                'connection' => $event->connectionName,
+                'queue' => $event->job->getQueue(),
+                'job' => $event->job->resolveName(),
+                'exception' => $event->exception,
+            ]);
+        });
     }
 
     /**

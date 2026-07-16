@@ -11,6 +11,7 @@ use App\Services\EvolutionApiService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Throwable;
@@ -79,6 +80,13 @@ class ProcessWhatsappFunnelStep implements ShouldQueue
                 'status' => 'failed',
                 'completed_at' => now(),
                 'error_message' => $exception->getMessage(),
+            ]);
+
+            Log::critical('WhatsApp funnel step failed.', [
+                'funnel_run_id' => $this->stepRun->whatsapp_funnel_run_id,
+                'funnel_run_step_id' => $this->stepRun->id,
+                'step_type' => $this->stepRun->type,
+                'exception' => $exception,
             ]);
         }
     }

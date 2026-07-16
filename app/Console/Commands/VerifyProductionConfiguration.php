@@ -50,6 +50,7 @@ class VerifyProductionConfiguration extends Command
             'APP_DEBUG' => $this->check(config('app.debug') === false, 'Defina APP_DEBUG=false.'),
             'APP_KEY' => $this->check(filled(config('app.key')), 'Gere e configure APP_KEY.'),
             'APP_URL' => $this->check(str_starts_with($appUrl, 'https://'), 'Use uma APP_URL publica com HTTPS.'),
+            'LOG_CHANNEL' => $this->check($this->logsToStandardError(), 'Direcione os logs para stderr ou para uma stack que inclua stderr.'),
             'TRUSTED_HOSTS' => $this->check(config('app.trusted_hosts') !== [], 'Configure ao menos um host permitido.'),
             'TRUSTED_PROXIES' => $this->check(filled(config('trustedproxy.proxies')), 'Configure os proxies reversos permitidos.'),
             'DB_CONNECTION' => $this->check(config('database.default') !== 'sqlite', 'Use PostgreSQL ou outro banco persistente.'),
@@ -124,5 +125,22 @@ class VerifyProductionConfiguration extends Command
     private function isHttpsUrl(mixed $url): bool
     {
         return is_string($url) && str_starts_with($url, 'https://');
+    }
+
+    private function logsToStandardError(): bool
+    {
+        $defaultChannel = config('logging.default');
+
+        if ($defaultChannel === 'stderr') {
+            return true;
+        }
+
+        if ($defaultChannel !== 'stack') {
+            return false;
+        }
+
+        $stackChannels = config('logging.channels.stack.channels', []);
+
+        return is_array($stackChannels) && in_array('stderr', $stackChannels, true);
     }
 }

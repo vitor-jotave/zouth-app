@@ -9,6 +9,8 @@ beforeEach(function () {
         'app.key' => 'base64:'.base64_encode(str_repeat('a', 32)),
         'app.url' => 'https://zouth.app',
         'app.trusted_hosts' => ['^zouth\\.app$'],
+        'logging.default' => 'stack',
+        'logging.channels.stack.channels' => ['stderr'],
         'trustedproxy.proxies' => '*',
         'database.default' => 'pgsql',
         'cache.default' => 'database',
@@ -45,5 +47,16 @@ it('rejects an unsafe production configuration', function () {
     config([...$this->configuration, 'app.debug' => true]);
 
     $this->artisan('app:verify-production', ['--skip-connectivity' => true])
+        ->assertExitCode(1);
+});
+
+it('rejects production logs that are only written to local files', function () {
+    config([
+        ...$this->configuration,
+        'logging.default' => 'single',
+    ]);
+
+    $this->artisan('app:verify-production', ['--skip-connectivity' => true])
+        ->expectsOutputToContain('LOG_CHANNEL')
         ->assertExitCode(1);
 });
