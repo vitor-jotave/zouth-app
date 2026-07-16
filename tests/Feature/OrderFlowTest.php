@@ -395,6 +395,12 @@ it('associates sales rep when ref query param matches an active affiliation', fu
 
 it('shows order tracking page for a valid token', function () {
     $order = Order::factory()->forManufacturer($this->manufacturer)->create();
+    OrderStatusHistory::create([
+        'order_id' => $order->id,
+        'from_status' => OrderStatus::New,
+        'to_status' => OrderStatus::Confirmed,
+        'changed_by_user_id' => $this->owner->id,
+    ]);
     OrderItem::factory()->create([
         'order_id' => $order->id,
         'unit_price' => '129.90',
@@ -415,6 +421,8 @@ it('shows order tracking page for a valid token', function () {
         ->where('order.public_token', $order->public_token)
         ->where('order.total_items', 5)
         ->where('order.total_amount', '499.50')
+        ->has('order.status_history', 1)
+        ->missing('order.status_history.0.changed_by')
     );
 });
 
@@ -470,6 +478,12 @@ it('searches orders by customer name', function () {
 
 it('shows a specific order belonging to the manufacturer', function () {
     $order = Order::factory()->forManufacturer($this->manufacturer)->create();
+    OrderStatusHistory::create([
+        'order_id' => $order->id,
+        'from_status' => OrderStatus::New,
+        'to_status' => OrderStatus::Confirmed,
+        'changed_by_user_id' => $this->owner->id,
+    ]);
     OrderItem::factory()->create([
         'order_id' => $order->id,
         'unit_price' => '129.90',
@@ -490,6 +504,7 @@ it('shows a specific order belonging to the manufacturer', function () {
         ->where('order.id', $order->id)
         ->where('order.total_items', 5)
         ->where('order.total_amount', '499.50')
+        ->where('order.status_history.0.changed_by', $this->owner->name)
     );
 });
 
