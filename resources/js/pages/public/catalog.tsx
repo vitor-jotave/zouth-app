@@ -1,5 +1,6 @@
 import { Head, router } from '@inertiajs/react';
 import {
+    AlertCircle,
     Box,
     Check,
     ChevronLeft,
@@ -31,6 +32,7 @@ import {
     type ReactNode,
 } from 'react';
 import { Pagination } from '@/components/pagination';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -3219,6 +3221,15 @@ export default function PublicCatalog({
                             <p className="text-xs text-destructive">
                                 {checkoutErrors.items}
                             </p>
+                        )}
+
+                        {checkoutErrors.limit && (
+                            <Alert variant="destructive">
+                                <AlertCircle className="size-4" />
+                                <AlertDescription>
+                                    {checkoutErrors.limit}
+                                </AlertDescription>
+                            </Alert>
                         )}
 
                         <div className="rounded-md bg-muted p-3">

@@ -309,6 +309,24 @@ it('requires at least phone or email', function () {
     $response->assertSessionHasErrors(['customer_phone', 'customer_email']);
 });
 
+it('returns a visible limit error when the manufacturer has no active subscription', function () {
+    $this->manufacturer->currentPlan->update([
+        'stripe_price_id' => 'price_requires_active_subscription',
+    ]);
+
+    $response = $this->post(
+        "/catalog/{$this->catalogSetting->public_token}/orders",
+        ($this->validCustomerData)([
+            'items' => [['product_id' => $this->product1->id, 'quantity' => 1]],
+        ]),
+    );
+
+    $response->assertSessionHasErrors([
+        'limit' => 'Este catálogo não está disponível para novos pedidos no momento. Tente novamente mais tarde.',
+    ]);
+    expect(Order::count())->toBe(0);
+});
+
 it('accepts order with email only (no phone)', function () {
     $response = $this->post("/catalog/{$this->catalogSetting->public_token}/orders", ($this->validCustomerData)([
         'customer_name' => 'Teste',
