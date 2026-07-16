@@ -137,6 +137,17 @@ class EvolutionWebhookController extends Controller
             ]
         );
 
+        if (! $message->wasRecentlyCreated) {
+            if ($message->whatsapp_conversation_id !== $conversation->id) {
+                Log::warning('Evolution webhook: message ID already belongs to another conversation', [
+                    'instance' => $instance->instance_name,
+                    'message_id' => $messageId,
+                ]);
+            }
+
+            return;
+        }
+
         // Update conversation's last message
         $conversation->update([
             'last_message_body' => $body,
@@ -175,7 +186,10 @@ class EvolutionWebhookController extends Controller
             return;
         }
 
-        WhatsappMessage::where('message_id', $messageId)->update(['status' => $newStatus]);
+        WhatsappMessage::query()
+            ->where('message_id', $messageId)
+            ->whereHas('conversation', fn ($query) => $query->where('whatsapp_instance_id', $instance->id))
+            ->update(['status' => $newStatus]);
     }
 
     /**
