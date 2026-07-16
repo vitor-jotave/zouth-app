@@ -23,6 +23,8 @@ class OrderItem extends Model
         'quantity',
         'size',
         'color',
+        'product_variant_stock_id',
+        'selected_variations',
         'combo_components',
     ];
 
@@ -31,6 +33,7 @@ class OrderItem extends Model
         return [
             'unit_price' => 'decimal:2',
             'quantity' => 'integer',
+            'selected_variations' => 'array',
             'combo_components' => 'array',
         ];
     }

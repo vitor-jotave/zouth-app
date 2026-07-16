@@ -7,6 +7,10 @@ use App\Models\WhatsappInstance;
 use App\Models\WhatsappMessage;
 use App\Services\EvolutionApiService;
 
+beforeEach(function () {
+    config()->set('evolution.api_key', 'test-evolution-api-key');
+});
+
 function createWhatsappTestManufacturer(): array
 {
     $manufacturer = Manufacturer::factory()->create(['is_active' => true]);
@@ -274,6 +278,23 @@ test('webhook rejects invalid api key', function () {
     ], [
         'apikey' => 'wrong-key',
     ])->assertUnauthorized();
+});
+
+test('webhook rejects requests when the api key is not configured', function () {
+    $configuredApiKey = config('evolution.api_key');
+
+    try {
+        config()->set('evolution.api_key');
+
+        $instance = WhatsappInstance::factory()->create();
+
+        $this->postJson("/webhooks/evolution/{$instance->instance_name}", [
+            'event' => 'CONNECTION_UPDATE',
+            'data' => ['state' => 'open'],
+        ])->assertUnauthorized();
+    } finally {
+        config()->set('evolution.api_key', $configuredApiKey);
+    }
 });
 
 test('webhook updates connection status', function () {

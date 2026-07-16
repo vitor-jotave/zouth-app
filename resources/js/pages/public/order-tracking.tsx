@@ -19,6 +19,7 @@ interface OrderItem {
     quantity: number;
     size: string | null;
     color: string | null;
+    selected_variations: Record<string, string> | null;
     combo_components: Array<{
         product_id: number;
         product_name: string | null;
@@ -267,11 +268,25 @@ export default function OrderTracking({ order, manufacturer }: Props) {
                                         {item.product_sku && (
                                             <span>SKU {item.product_sku}</span>
                                         )}
-                                        {item.size && (
-                                            <span>Tam: {item.size}</span>
-                                        )}
-                                        {item.color && (
-                                            <span>Cor: {item.color}</span>
+                                        {item.selected_variations ? (
+                                            <span>
+                                                {variationSummary(
+                                                    item.selected_variations,
+                                                )}
+                                            </span>
+                                        ) : (
+                                            <>
+                                                {item.size && (
+                                                    <span>
+                                                        Tam: {item.size}
+                                                    </span>
+                                                )}
+                                                {item.color && (
+                                                    <span>
+                                                        Cor: {item.color}
+                                                    </span>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                     {item.unit_price != null && (

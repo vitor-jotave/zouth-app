@@ -26,9 +26,12 @@ return Application::configure(basePath: dirname(__DIR__))
             'webhooks/evolution/*',
         ]);
 
-        // Configurar trust proxies para Cloudflare
+        $middleware->trustHosts(
+            at: fn (): array => config('app.trusted_hosts'),
+            subdomains: false,
+        );
+
         $middleware->trustProxies(
-            at: '**',
             headers: Request::HEADER_X_FORWARDED_FOR |
                      Request::HEADER_X_FORWARDED_HOST |
                      Request::HEADER_X_FORWARDED_PORT |

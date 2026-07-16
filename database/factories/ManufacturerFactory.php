@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Str;
 
 /**
  * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Manufacturer>
@@ -20,7 +21,7 @@ class ManufacturerFactory extends Factory
 
         return [
             'name' => $name,
-            'slug' => \Illuminate\Support\Str::slug($name),
+            'slug' => Str::slug($name).'-'.Str::lower((string) Str::ulid()),
             'cnpj' => $this->generateValidCnpj(),
             'phone' => fake()->numerify('(##) #####-####'),
             'zip_code' => fake()->numerify('#####-###'),

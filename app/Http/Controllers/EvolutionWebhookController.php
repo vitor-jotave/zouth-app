@@ -18,8 +18,12 @@ class EvolutionWebhookController extends Controller
     public function handle(Request $request, string $instanceName): JsonResponse
     {
         $apiKey = $request->header('apikey');
+        $configuredApiKey = config('evolution.api_key');
 
-        if ($apiKey !== config('evolution.api_key')) {
+        if (! is_string($configuredApiKey)
+            || $configuredApiKey === ''
+            || ! is_string($apiKey)
+            || ! hash_equals($configuredApiKey, $apiKey)) {
             Log::warning('Evolution webhook: invalid API key', ['instance' => $instanceName]);
 
             return response()->json(['error' => 'Unauthorized'], 401);

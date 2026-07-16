@@ -20,9 +20,22 @@ cmd = '/assets/start.sh'
 [staticAssets]
 "start.sh" = '''
 #!/bin/bash
+set -euo pipefail
 
 # Transform the nginx configuration
 node /assets/scripts/prestart.mjs /assets/nginx.template.conf /etc/nginx.conf
+
+if [ "${APP_ENV:-production}" = "production" ]; then
+    php /app/artisan app:verify-production --skip-connectivity
+fi
+
+php /app/artisan migrate --force
+php /app/artisan storage:link
+php /app/artisan optimize
+
+if [ "${APP_ENV:-production}" = "production" ]; then
+    php /app/artisan app:verify-production
+fi
 
 # Start supervisor
 supervisord -c /etc/supervisord.conf -n
@@ -76,16 +89,29 @@ stderr_logfile=/var/log/worker-phpfpm.log
 "worker-laravel.conf" = '''
 [program:worker-laravel]
 process_name=%(program_name)s_%(process_num)02d
-command=bash -c 'exec php /app/artisan queue:work --sleep=3 --tries=3 --max-time=3600'
+command=bash -c 'exec php /app/artisan queue:work --sleep=3 --tries=3 --timeout=60 --backoff=5 --max-jobs=500 --max-time=3600'
 autostart=true
 autorestart=true
 stopasgroup=true
 killasgroup=true
-numprocs=12 # To reduce memory/CPU usage, change to 2.
+numprocs=2
 startsecs=0
 stopwaitsecs=3600
 stdout_logfile=/var/log/worker-laravel.log
 stderr_logfile=/var/log/worker-laravel.log
+'''
+
+"worker-scheduler.conf" = '''
+[program:worker-scheduler]
+process_name=%(program_name)s
+command=bash -c 'exec php /app/artisan schedule:work'
+autostart=true
+autorestart=true
+stopasgroup=true
+killasgroup=true
+startsecs=0
+stdout_logfile=/var/log/worker-scheduler.log
+stderr_logfile=/var/log/worker-scheduler.log
 '''
 
 "php-fpm.conf" = '''

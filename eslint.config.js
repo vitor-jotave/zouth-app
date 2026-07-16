@@ -35,6 +35,7 @@ export default [
     {
         ...importPlugin.flatConfigs.recommended,
         settings: {
+            'import/internal-regex': '^@/',
             'import/resolver': {
                 typescript: true,
                 node: true,
