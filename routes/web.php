@@ -65,6 +65,7 @@ Route::get('o/{publicToken}', [PublicOrderController::class, 'show'])
     ->name('public.order.show');
 
 Route::post('webhooks/evolution/{instanceName}', [EvolutionWebhookController::class, 'handle'])
+    ->middleware('throttle:evolution-webhook')
     ->name('webhooks.evolution');
 
 // Public plan selection routes (secured via signed URLs)
