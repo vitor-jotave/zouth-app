@@ -46,9 +46,8 @@ supervisord -c /etc/supervisord.conf -n
 file=/assets/supervisor.sock
 
 [supervisord]
-logfile=/var/log/supervisord.log
-logfile_maxbytes=50MB
-logfile_backups=10
+logfile=/dev/stdout
+logfile_maxbytes=0
 loglevel=info
 pidfile=/assets/supervisord.pid
 nodaemon=false
@@ -72,8 +71,10 @@ process_name=%(program_name)s_%(process_num)02d
 command=nginx -c /etc/nginx.conf
 autostart=true
 autorestart=true
-stdout_logfile=/var/log/worker-nginx.log
-stderr_logfile=/var/log/worker-nginx.log
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
 '''
 
 "worker-phpfpm.conf" = '''
@@ -82,8 +83,10 @@ process_name=%(program_name)s_%(process_num)02d
 command=php-fpm -y /assets/php-fpm.conf -F
 autostart=true
 autorestart=true
-stdout_logfile=/var/log/worker-phpfpm.log
-stderr_logfile=/var/log/worker-phpfpm.log
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
 '''
 
 "worker-laravel.conf" = '''
@@ -97,8 +100,10 @@ killasgroup=true
 numprocs=2
 startsecs=0
 stopwaitsecs=3600
-stdout_logfile=/var/log/worker-laravel.log
-stderr_logfile=/var/log/worker-laravel.log
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
 '''
 
 "worker-scheduler.conf" = '''
@@ -110,8 +115,10 @@ autorestart=true
 stopasgroup=true
 killasgroup=true
 startsecs=0
-stdout_logfile=/var/log/worker-scheduler.log
-stderr_logfile=/var/log/worker-scheduler.log
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
 '''
 
 "php-fpm.conf" = '''
@@ -137,8 +144,10 @@ process_name=%(program_name)s_%(process_num)02d
 command=bash -c 'exec php /app/artisan inertia:start-ssr'
 autostart=true
 autorestart=true
-stderr_logfile=/var/log/worker-inertia-ssr.log
-stdout_logfile=/var/log/worker-inertia-ssr.log
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
 '''
 
 "nginx.template.conf" = '''
@@ -160,8 +169,8 @@ http {
     log_format   main '$remote_addr - $remote_user [$time_local]  $status '
         '"$request" $body_bytes_sent "$http_referer" '
         '"$http_user_agent" "$http_x_forwarded_for"';
-    access_log /var/log/nginx-access.log;
-    error_log /var/log/nginx-error.log;
+    access_log /dev/stdout;
+    error_log /dev/stderr;
     sendfile     on;
     tcp_nopush   on;
     server_names_hash_bucket_size 128; # this seems to be required for some vhosts
