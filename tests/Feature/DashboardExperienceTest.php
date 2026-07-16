@@ -75,6 +75,37 @@ it('shows tenant scoped operational metrics on the manufacturer dashboard', func
         );
 });
 
+it('shows a Stripe plan on the manufacturer dashboard only with entitlement', function () {
+    $this->withoutVite();
+
+    $plan = Plan::factory()->withStripe()->create(['name' => 'Com assinatura']);
+    $manufacturer = Manufacturer::factory()->create(['current_plan_id' => $plan->id]);
+    $user = User::factory()->create([
+        'user_type' => 'manufacturer_user',
+        'current_manufacturer_id' => $manufacturer->id,
+    ]);
+    $manufacturer->users()->attach($user->id, ['role' => 'owner', 'status' => 'active']);
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('manufacturer.plan_name', null)
+        );
+
+    $manufacturer->subscriptions()->create([
+        'type' => 'default',
+        'stripe_id' => 'sub_dashboard_entitled',
+        'stripe_status' => 'active',
+        'stripe_price' => $plan->stripe_price_id,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('manufacturer.plan_name', 'Com assinatura')
+        );
+});
+
 it('shows platform revenue and recent accounts on the admin dashboard', function () {
     $this->withoutVite();
 
@@ -87,6 +118,9 @@ it('shows platform revenue and recent accounts on the admin dashboard', function
         'stripe_price' => $plan->stripe_price_id,
     ]);
     $inactiveManufacturer = Manufacturer::factory()->inactive()->create();
+    $manufacturerWithoutEntitlement = Manufacturer::factory()->create([
+        'current_plan_id' => $plan->id,
+    ]);
 
     User::factory()->count(2)->create(['user_type' => 'sales_rep']);
     $admin = User::factory()->create(['user_type' => 'superadmin']);
@@ -102,17 +136,21 @@ it('shows platform revenue and recent accounts on the admin dashboard', function
         ->get(route('admin.dashboard'))
         ->assertInertia(fn (Assert $page) => $page
             ->component('admin/dashboard')
-            ->where('stats.active_manufacturers', 1)
-            ->where('stats.total_manufacturers', 2)
+            ->where('stats.active_manufacturers', 2)
+            ->where('stats.total_manufacturers', 3)
             ->where('stats.paying_manufacturers', 1)
             ->where('stats.monthly_recurring_revenue', 129.9)
             ->where('stats.sales_reps', 2)
             ->where('stats.orders_last_30_days', 1)
             ->where('stats.volume_last_30_days', 240)
-            ->has('recentManufacturers', 2)
+            ->has('recentManufacturers', 3)
             ->where('recentManufacturers', fn ($manufacturers) => collect($manufacturers)
                 ->pluck('id')
                 ->contains($inactiveManufacturer->id))
+            ->where('recentManufacturers', fn ($manufacturers) => collect($manufacturers)
+                ->firstWhere('id', $subscriber->id)['plan_name'] === $plan->name)
+            ->where('recentManufacturers', fn ($manufacturers) => collect($manufacturers)
+                ->firstWhere('id', $manufacturerWithoutEntitlement->id)['plan_name'] === null)
         );
 });
 

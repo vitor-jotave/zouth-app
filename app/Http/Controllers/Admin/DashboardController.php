@@ -17,6 +17,8 @@ use Laravel\Cashier\Subscription;
 
 class DashboardController extends Controller
 {
+    public function __construct(private PlanLimitService $planLimitService) {}
+
     /**
      * Display the admin dashboard.
      */
@@ -57,7 +59,7 @@ class DashboardController extends Controller
         return Inertia::render('admin/dashboard', [
             'stats' => $stats,
             'recentManufacturers' => Manufacturer::query()
-                ->with('currentPlan:id,name')
+                ->with('currentPlan:id,name,stripe_price_id')
                 ->withCount(['products', 'orders'])
                 ->latest()
                 ->limit(5)
@@ -66,7 +68,7 @@ class DashboardController extends Controller
                     'id' => $manufacturer->id,
                     'name' => $manufacturer->name,
                     'is_active' => $manufacturer->is_active,
-                    'plan_name' => $manufacturer->currentPlan?->name,
+                    'plan_name' => $this->planLimitService->activePlan($manufacturer)?->name,
                     'products_count' => $manufacturer->products_count,
                     'orders_count' => $manufacturer->orders_count,
                     'created_at' => $manufacturer->created_at->toISOString(),
