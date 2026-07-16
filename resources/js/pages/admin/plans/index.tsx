@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Check, Pencil, X } from 'lucide-react';
+import { Pencil } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -33,7 +33,6 @@ type Plan = {
     max_users: number | null;
     max_data_mb: number | null;
     max_files_gb: number | null;
-    allow_csv_import: boolean;
     stripe_product_id: string | null;
     stripe_price_id: string | null;
     subscribers_count: number;
@@ -83,7 +82,6 @@ export default function PlansIndex({ plans }: { plans: Plan[] }) {
                                 <TableHead>Produtos</TableHead>
                                 <TableHead>Pedidos/mês</TableHead>
                                 <TableHead>Usuários</TableHead>
-                                <TableHead>CSV</TableHead>
                                 <TableHead>Stripe</TableHead>
                                 <TableHead>Assinantes</TableHead>
                                 <TableHead>Status</TableHead>
@@ -96,7 +94,7 @@ export default function PlansIndex({ plans }: { plans: Plan[] }) {
                             {plans.length === 0 ? (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={12}
+                                        colSpan={11}
                                         className="text-center text-muted-foreground"
                                     >
                                         Nenhum plano encontrado. Crie um para
@@ -130,13 +128,6 @@ export default function PlansIndex({ plans }: { plans: Plan[] }) {
                                         </TableCell>
                                         <TableCell>
                                             {formatLimit(plan.max_users)}
-                                        </TableCell>
-                                        <TableCell>
-                                            {plan.allow_csv_import ? (
-                                                <Check className="h-4 w-4 text-green-600" />
-                                            ) : (
-                                                <X className="h-4 w-4 text-muted-foreground" />
-                                            )}
                                         </TableCell>
                                         <TableCell>
                                             {plan.stripe_price_id ? (

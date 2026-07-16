@@ -24,7 +24,6 @@ type PlanData = {
     max_users: number | null;
     max_data_mb: number | null;
     max_files_gb: number | null;
-    allow_csv_import: boolean;
     stripe_product_id: string | null;
     stripe_price_id: string | null;
 };
@@ -50,7 +49,6 @@ export default function PlansEdit({ plan }: { plan: PlanData }) {
         max_data_mb: plan.max_data_mb !== null ? String(plan.max_data_mb) : '',
         max_files_gb:
             plan.max_files_gb !== null ? String(plan.max_files_gb) : '',
-        allow_csv_import: plan.allow_csv_import,
     });
 
     function handleSubmit(e: React.FormEvent) {

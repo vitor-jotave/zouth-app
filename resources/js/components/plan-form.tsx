@@ -18,7 +18,6 @@ export type PlanFormData = {
     max_users: string;
     max_data_mb: string;
     max_files_gb: string;
-    allow_csv_import: boolean;
 };
 
 type PlanFormProps = {
@@ -255,22 +254,9 @@ export default function PlanForm({
                 </div>
             </div>
 
-            {/* Features */}
+            {/* Status */}
             <div className="space-y-4">
-                <h3 className="text-lg font-medium">Recursos</h3>
-
-                <div className="flex items-center gap-2">
-                    <Checkbox
-                        id="allow_csv_import"
-                        checked={data.allow_csv_import}
-                        onCheckedChange={(checked) =>
-                            setData('allow_csv_import', checked === true)
-                        }
-                    />
-                    <Label htmlFor="allow_csv_import">
-                        Permitir Importação CSV
-                    </Label>
-                </div>
+                <h3 className="text-lg font-medium">Status</h3>
 
                 <div className="flex items-center gap-2">
                     <Checkbox

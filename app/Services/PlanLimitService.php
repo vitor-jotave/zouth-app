@@ -236,20 +236,6 @@ class PlanLimitService
     }
 
     /**
-     * Check if the manufacturer can import CSV.
-     */
-    public function canImportCsv(Manufacturer $manufacturer): bool
-    {
-        $plan = $this->activePlan($manufacturer);
-
-        if (! $plan) {
-            return false;
-        }
-
-        return $plan->allow_csv_import;
-    }
-
-    /**
      * Total bytes used by all media files uploaded by a manufacturer.
      */
     public function currentFilesUsageBytes(Manufacturer $manufacturer): int

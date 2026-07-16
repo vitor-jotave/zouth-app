@@ -24,7 +24,6 @@ export default function PlansCreate() {
         max_users: '',
         max_data_mb: '',
         max_files_gb: '',
-        allow_csv_import: false,
     });
 
     function handleSubmit(e: React.FormEvent) {
