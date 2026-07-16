@@ -25,7 +25,6 @@ class PlanSeeder extends Seeder
                 'max_users' => 3,
                 'max_data_mb' => 500,
                 'max_files_gb' => 1,
-                'allow_csv_import' => false,
             ],
             [
                 'name' => 'Intermediário',
@@ -39,7 +38,6 @@ class PlanSeeder extends Seeder
                 'max_users' => 10,
                 'max_data_mb' => 2000,
                 'max_files_gb' => 5,
-                'allow_csv_import' => true,
             ],
             [
                 'name' => 'Premium',
@@ -53,7 +51,6 @@ class PlanSeeder extends Seeder
                 'max_users' => null,
                 'max_data_mb' => null,
                 'max_files_gb' => null,
-                'allow_csv_import' => true,
             ],
         ];
 

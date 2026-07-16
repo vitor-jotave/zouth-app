@@ -53,7 +53,6 @@ class UpdatePlanRequest extends FormRequest
             'max_users' => ['nullable', 'integer', 'min:1'],
             'max_data_mb' => ['nullable', 'integer', 'min:1'],
             'max_files_gb' => ['nullable', 'integer', 'min:1'],
-            'allow_csv_import' => ['boolean'],
         ];
     }
 

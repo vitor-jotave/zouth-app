@@ -39,7 +39,6 @@ class Plan extends Model
         'max_users',
         'max_data_mb',
         'max_files_gb',
-        'allow_csv_import',
         'stripe_product_id',
         'stripe_price_id',
     ];
@@ -62,7 +61,6 @@ class Plan extends Model
             'max_users' => 'integer',
             'max_data_mb' => 'integer',
             'max_files_gb' => 'integer',
-            'allow_csv_import' => 'boolean',
         ];
     }
 

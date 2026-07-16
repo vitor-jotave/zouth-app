@@ -30,7 +30,6 @@ class PlanFactory extends Factory
             'max_users' => fake()->randomElement([3, 10, null]),
             'max_data_mb' => fake()->randomElement([500, 2000, null]),
             'max_files_gb' => fake()->randomElement([1, 5, null]),
-            'allow_csv_import' => false,
             'stripe_product_id' => null,
             'stripe_price_id' => null,
         ];
@@ -52,7 +51,6 @@ class PlanFactory extends Factory
             'max_users' => 3,
             'max_data_mb' => 500,
             'max_files_gb' => 1,
-            'allow_csv_import' => false,
         ]);
     }
 
@@ -72,7 +70,6 @@ class PlanFactory extends Factory
             'max_users' => 10,
             'max_data_mb' => 2000,
             'max_files_gb' => 5,
-            'allow_csv_import' => true,
         ]);
     }
 
@@ -92,7 +89,6 @@ class PlanFactory extends Factory
             'max_users' => null,
             'max_data_mb' => null,
             'max_files_gb' => null,
-            'allow_csv_import' => true,
         ]);
     }
 
