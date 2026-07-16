@@ -6,17 +6,22 @@ use App\Enums\OrderStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Services\PlanLimitService;
 use App\Services\TenantManager;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __construct(private TenantManager $tenantManager) {}
+    public function __construct(
+        private TenantManager $tenantManager,
+        private PlanLimitService $planLimitService,
+    ) {}
 
     public function __invoke(): Response
     {
         $manufacturer = $this->tenantManager->get();
+        $activePlan = $this->planLimitService->activePlan($manufacturer);
         $orders = $manufacturer->orders();
 
         $grossRevenue = OrderItem::query()
@@ -45,7 +50,7 @@ class DashboardController extends Controller
         return Inertia::render('dashboard', [
             'manufacturer' => [
                 'name' => $manufacturer->name,
-                'plan_name' => $manufacturer->currentPlan?->name,
+                'plan_name' => $activePlan?->name,
             ],
             'stats' => [
                 'orders_total' => (clone $orders)->count(),
