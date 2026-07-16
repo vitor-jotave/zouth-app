@@ -76,7 +76,7 @@ class PublicOrderController extends Controller
     public function show(Request $request, string $publicToken): Response
     {
         $order = Order::where('public_token', $publicToken)
-            ->with(['items', 'statusHistory.changedBy', 'manufacturer'])
+            ->with(['items', 'statusHistory', 'manufacturer'])
             ->firstOrFail();
 
         return Inertia::render('public/order-tracking', [
