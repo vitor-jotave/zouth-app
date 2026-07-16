@@ -50,6 +50,19 @@ it('rejects an unsafe production configuration', function () {
         ->assertExitCode(1);
 });
 
+it('rejects Stripe test mode credentials in production', function () {
+    config([
+        ...$this->configuration,
+        'cashier.key' => 'pk_test_example',
+        'cashier.secret' => 'sk_test_example',
+    ]);
+
+    $this->artisan('app:verify-production', ['--skip-connectivity' => true])
+        ->expectsOutputToContain('STRIPE_KEY')
+        ->expectsOutputToContain('STRIPE_SECRET')
+        ->assertExitCode(1);
+});
+
 it('rejects production logs that are only written to local files', function () {
     config([
         ...$this->configuration,

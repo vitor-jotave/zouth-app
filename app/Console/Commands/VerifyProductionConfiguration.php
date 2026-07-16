@@ -71,8 +71,14 @@ class VerifyProductionConfiguration extends Command
             'AWS_BUCKET' => $this->check(filled(config('filesystems.disks.s3.bucket')), 'Configure o bucket do R2/S3.'),
             'AWS_URL' => $this->check($this->isHttpsUrl(config('filesystems.disks.s3.url')), 'Configure a URL publica HTTPS da CDN.'),
             'AWS_ENDPOINT' => $this->check($this->isHttpsUrl(config('filesystems.disks.s3.endpoint')), 'Configure o endpoint HTTPS do R2/S3.'),
-            'STRIPE_KEY' => $this->check(filled(config('cashier.key')), 'Configure STRIPE_KEY.'),
-            'STRIPE_SECRET' => $this->check(filled(config('cashier.secret')), 'Configure STRIPE_SECRET.'),
+            'STRIPE_KEY' => $this->check(
+                $this->isLiveStripeKey(config('cashier.key'), 'pk_live_'),
+                'Configure uma chave publicavel Stripe live (pk_live_).'
+            ),
+            'STRIPE_SECRET' => $this->check(
+                $this->isLiveStripeKey(config('cashier.secret'), 'sk_live_'),
+                'Configure uma chave secreta Stripe live (sk_live_).'
+            ),
             'STRIPE_WEBHOOK_SECRET' => $this->check(filled(config('cashier.webhook.secret')), 'Configure STRIPE_WEBHOOK_SECRET.'),
             'EVOLUTION_API_URL' => $this->check($this->isHttpsUrl($evolutionUrl), 'Configure a URL HTTPS da Evolution API.'),
             'EVOLUTION_API_KEY' => $this->check(filled(config('evolution.api_key')), 'Configure a chave da Evolution API.'),
@@ -125,6 +131,11 @@ class VerifyProductionConfiguration extends Command
     private function isHttpsUrl(mixed $url): bool
     {
         return is_string($url) && str_starts_with($url, 'https://');
+    }
+
+    private function isLiveStripeKey(mixed $key, string $prefix): bool
+    {
+        return is_string($key) && str_starts_with($key, $prefix);
     }
 
     private function logsToStandardError(): bool
