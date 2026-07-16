@@ -48,6 +48,18 @@ test('billing page shows available plans', function () {
     $response->assertOk();
 });
 
+test('billing page does not expose unavailable csv import capability', function () {
+    $this->withoutVite();
+    [$user] = setupBillingUser();
+
+    $this->actingAs($user)
+        ->get(route('manufacturer.billing.index'))
+        ->assertInertia(fn ($page) => $page
+            ->has('plans.0')
+            ->missing('plans.0.allow_csv_import')
+        );
+});
+
 test('billing page shows current plan', function () {
     $this->withoutVite();
     [$user, $manufacturer, $plan] = setupBillingUser();
