@@ -749,9 +749,11 @@ function ProductQuickViewModal({
 
                         <div className="mt-auto grid gap-3 border-t pt-5">
                             <p className="text-xs text-gray-500">
-                                {product.total_stock > 0
+                                {availableStock === null
                                     ? `${product.total_stock} unidade(s) disponíveis`
-                                    : 'Produto sem estoque disponível'}
+                                    : availableStock > 0
+                                      ? `${availableStock} unidade(s) nesta opção`
+                                      : 'Opção sem estoque disponível'}
                             </p>
                             <Button
                                 type="button"
