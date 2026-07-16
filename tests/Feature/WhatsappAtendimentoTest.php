@@ -9,6 +9,8 @@ use App\Services\EvolutionApiService;
 
 beforeEach(function () {
     config()->set('evolution.api_key', 'test-evolution-api-key');
+    config()->set('evolution.webhook_rate_limit', 1000);
+    config()->set('evolution.webhook_invalid_rate_limit', 60);
 });
 
 function createWhatsappTestManufacturer(): array
@@ -278,6 +280,40 @@ test('webhook rejects invalid api key', function () {
     ], [
         'apikey' => 'wrong-key',
     ])->assertUnauthorized();
+});
+
+test('webhook rate limits repeated invalid requests by ip address', function () {
+    config()->set('evolution.webhook_invalid_rate_limit', 2);
+    config()->set('evolution.webhook_rate_limit', 100);
+
+    $instance = WhatsappInstance::factory()->connected()->create();
+    $url = "/webhooks/evolution/{$instance->instance_name}";
+    $payload = ['event' => 'messages.upsert'];
+    $headers = ['apikey' => 'wrong-key'];
+
+    $this->postJson($url, $payload, $headers)->assertUnauthorized();
+    $this->postJson($url, $payload, $headers)->assertUnauthorized();
+    $this->postJson($url, $payload, $headers)->assertTooManyRequests();
+});
+
+test('webhook rate limits traffic independently for each instance', function () {
+    config()->set('evolution.webhook_invalid_rate_limit', 100);
+    config()->set('evolution.webhook_rate_limit', 2);
+
+    $firstInstance = WhatsappInstance::factory()->connected()->create();
+    $secondInstance = WhatsappInstance::factory()->connected()->create();
+    $payload = [
+        'event' => 'connection.update',
+        'data' => ['state' => 'open'],
+    ];
+    $headers = ['apikey' => config('evolution.api_key')];
+    $firstUrl = "/webhooks/evolution/{$firstInstance->instance_name}";
+
+    $this->postJson($firstUrl, $payload, $headers)->assertOk();
+    $this->postJson($firstUrl, $payload, $headers)->assertOk();
+    $this->postJson($firstUrl, $payload, $headers)->assertTooManyRequests();
+
+    $this->postJson("/webhooks/evolution/{$secondInstance->instance_name}", $payload, $headers)->assertOk();
 });
 
 test('webhook rejects requests when the api key is not configured', function () {
