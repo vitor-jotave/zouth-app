@@ -20,6 +20,8 @@ beforeEach(function () {
         'session.encrypt' => true,
         'mail.default' => 'smtp',
         'mail.from.address' => 'contato@zouth.app',
+        'commercial.sales_contact_url' => 'mailto:comercial@zouth.app?subject=Zouth',
+        'commercial.privacy_email' => 'privacidade@zouth.app',
         'filesystems.default' => 's3',
         'filesystems.catalog_media_disk' => 's3',
         'filesystems.disks.s3.key' => 'key',
@@ -62,6 +64,25 @@ it('rejects Stripe test mode credentials in production', function () {
         ->expectsOutputToContain('STRIPE_SECRET')
         ->assertExitCode(1);
 });
+
+it('rejects malformed critical production values', function (array $overrides, string $expectedFailure) {
+    config([...$this->configuration, ...$overrides]);
+
+    $this->artisan('app:verify-production', ['--skip-connectivity' => true])
+        ->expectsOutputToContain($expectedFailure)
+        ->assertExitCode(1);
+})->with([
+    'application URL without a host' => [['app.url' => 'https://'], 'APP_URL'],
+    'invalid mail sender' => [['mail.from.address' => 'not-an-email'], 'MAIL_FROM_ADDRESS'],
+    'invalid commercial URL' => [['commercial.sales_contact_url' => 'javascript:alert(1)'], 'SALES_CONTACT_URL'],
+    'invalid commercial mailto' => [['commercial.sales_contact_url' => 'mailto:not-an-email'], 'SALES_CONTACT_URL'],
+    'invalid privacy email' => [['commercial.privacy_email' => 'not-an-email'], 'PRIVACY_CONTACT_EMAIL'],
+    'invalid CDN URL' => [['filesystems.disks.s3.url' => 'https://'], 'AWS_URL'],
+    'insecure S3 endpoint' => [['filesystems.disks.s3.endpoint' => 'http://storage.example.com'], 'AWS_ENDPOINT'],
+    'Stripe webhook without signature prefix' => [['cashier.webhook.secret' => 'stripe-secret'], 'STRIPE_WEBHOOK_SECRET'],
+    'invalid Evolution API URL' => [['evolution.url' => 'https://'], 'EVOLUTION_API_URL'],
+    'insecure Evolution webhook URL' => [['evolution.webhook_url' => 'http://zouth.app'], 'EVOLUTION_WEBHOOK_URL'],
+]);
 
 it('rejects production logs that are only written to local files', function () {
     config([
