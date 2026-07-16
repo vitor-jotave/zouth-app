@@ -78,7 +78,6 @@ export default [
         ignores: [
             'vendor',
             'node_modules',
-            'nativephp',
             'public',
             'bootstrap/ssr',
             'resources/js/actions',
