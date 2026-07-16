@@ -11,3 +11,4 @@ Artisan::command('inspire', function () {
 Schedule::command('auth:clear-resets')->daily();
 Schedule::command('queue:prune-batches')->daily();
 Schedule::command('queue:prune-failed --hours=168')->daily();
+Schedule::command('app:anonymize-catalog-visits')->daily();
