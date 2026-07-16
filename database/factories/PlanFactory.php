@@ -21,7 +21,7 @@ class PlanFactory extends Factory
             'description' => fake()->sentence(),
             'is_active' => true,
             'sort_order' => fake()->numberBetween(0, 10),
-            'monthly_price_cents' => fake()->randomElement([4990, 9990, 19990]),
+            'monthly_price_cents' => fake()->randomElement([14700, 39700, 89700]),
             'currency' => 'BRL',
             'trial_days' => 0,
             'max_reps' => fake()->randomElement([5, 20, null]),
@@ -42,7 +42,7 @@ class PlanFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'name' => 'Básico',
-            'monthly_price_cents' => 4990,
+            'monthly_price_cents' => 14700,
             'trial_days' => 7,
             'sort_order' => 1,
             'max_reps' => 5,
@@ -61,7 +61,7 @@ class PlanFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'name' => 'Intermediário',
-            'monthly_price_cents' => 9990,
+            'monthly_price_cents' => 39700,
             'trial_days' => 0,
             'sort_order' => 2,
             'max_reps' => 90,
@@ -80,7 +80,7 @@ class PlanFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'name' => 'Premium',
-            'monthly_price_cents' => 19990,
+            'monthly_price_cents' => 89700,
             'trial_days' => 0,
             'sort_order' => 3,
             'max_reps' => null,

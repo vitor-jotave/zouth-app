@@ -248,13 +248,16 @@ test('plan factory states create correct plans', function () {
     $premium = Plan::factory()->premium()->create();
 
     expect($basic->name)->toBe('Básico');
+    expect($basic->monthly_price_cents)->toBe(14700);
     expect($basic->trial_days)->toBe(7);
     expect($basic->max_reps)->toBe(5);
 
     expect($intermediate->name)->toBe('Intermediário');
+    expect($intermediate->monthly_price_cents)->toBe(39700);
     expect($intermediate->max_reps)->toBe(90);
 
     expect($premium->name)->toBe('Premium');
+    expect($premium->monthly_price_cents)->toBe(89700);
     expect($premium->max_reps)->toBeNull();
     expect($premium->max_products)->toBeNull();
 });

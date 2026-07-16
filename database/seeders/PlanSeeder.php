@@ -16,7 +16,7 @@ class PlanSeeder extends Seeder
             [
                 'name' => 'Básico',
                 'description' => 'Ideal para quem está começando. Inclui 7 dias grátis para testar.',
-                'monthly_price_cents' => 4990,
+                'monthly_price_cents' => 14700,
                 'trial_days' => 7,
                 'sort_order' => 1,
                 'max_reps' => 5,
@@ -29,7 +29,7 @@ class PlanSeeder extends Seeder
             [
                 'name' => 'Intermediário',
                 'description' => 'Para fabricantes em crescimento que precisam de mais recursos.',
-                'monthly_price_cents' => 9990,
+                'monthly_price_cents' => 39700,
                 'trial_days' => 0,
                 'sort_order' => 2,
                 'max_reps' => 90,
@@ -42,7 +42,7 @@ class PlanSeeder extends Seeder
             [
                 'name' => 'Premium',
                 'description' => 'Recursos ilimitados para fabricantes de grande porte.',
-                'monthly_price_cents' => 19990,
+                'monthly_price_cents' => 89700,
                 'trial_days' => 0,
                 'sort_order' => 3,
                 'max_reps' => null,
