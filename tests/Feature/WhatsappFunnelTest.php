@@ -13,6 +13,7 @@ use App\Models\WhatsappInstance;
 use App\Services\EvolutionApiService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 
@@ -273,6 +274,7 @@ it('forbids running a funnel or conversation from another manufacturer', functio
 });
 
 it('fails a queued product step that references another manufacturer product', function () {
+    Log::spy();
     [, $manufacturer, , $conversation] = createWhatsappFunnelTestContext();
     $foreignProduct = Product::factory()->create();
     $funnel = WhatsappFunnel::factory()->forManufacturer($manufacturer)->create();
@@ -303,6 +305,14 @@ it('fails a queued product step that references another manufacturer product', f
     expect($run->fresh()->status)->toBe('failed')
         ->and($stepRun->fresh()->status)->toBe('failed')
         ->and($conversation->messages()->count())->toBe(0);
+
+    Log::shouldHaveReceived('critical')
+        ->once()
+        ->withArgs(fn (string $message, array $context): bool => $message === 'WhatsApp funnel step failed.'
+            && $context['funnel_run_id'] === $run->id
+            && $context['funnel_run_step_id'] === $stepRun->id
+            && $context['step_type'] === 'product'
+            && $context['exception'] instanceof Throwable);
 });
 
 it('processes funnel steps in order and sends text audio and product media', function () {
