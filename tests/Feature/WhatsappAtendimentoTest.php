@@ -7,6 +7,10 @@ use App\Models\WhatsappInstance;
 use App\Models\WhatsappMessage;
 use App\Services\EvolutionApiService;
 
+beforeEach(function () {
+    config()->set('evolution.api_key', 'test-evolution-api-key');
+});
+
 function createWhatsappTestManufacturer(): array
 {
     $manufacturer = Manufacturer::factory()->create(['is_active' => true]);
