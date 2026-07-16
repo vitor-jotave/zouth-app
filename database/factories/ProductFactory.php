@@ -25,7 +25,7 @@ class ProductFactory extends Factory
             'manufacturer_id' => Manufacturer::factory(),
             'product_category_id' => ProductCategory::factory(),
             'name' => fake()->words(3, true),
-            'sku' => strtoupper(fake()->bothify('SKU-####')),
+            'sku' => 'SKU-'.strtoupper(fake()->unique()->uuid()),
             'description' => fake()->sentence(),
             'base_quantity' => 20,
             'is_active' => true,

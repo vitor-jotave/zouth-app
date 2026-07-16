@@ -30,7 +30,7 @@ class ProductCategoryController extends Controller
         $categories = ProductCategory::where('manufacturer_id', $manufacturer->id)
             ->withCount('products')
             ->when($request->search, function ($query, $search) {
-                $query->where('name', 'like', '%' . $search . '%');
+                $query->where('name', 'like', '%'.$search.'%');
             })
             ->orderBy('name')
             ->paginate(20)
