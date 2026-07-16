@@ -130,12 +130,60 @@ test('swap requires plan_id', function () {
         ->assertSessionHasErrors('plan_id');
 });
 
+test('swap rejects an inactive plan', function () {
+    [$user] = setupBillingUser();
+    $inactivePlan = Plan::factory()->inactive()->withStripe()->create();
+
+    $this->actingAs($user)
+        ->post(route('manufacturer.billing.swap'), ['plan_id' => $inactivePlan->id])
+        ->assertSessionHasErrors([
+            'plan_id' => 'Este plano não está disponível.',
+        ]);
+});
+
 test('upgrade requires plan_id', function () {
     [$user] = setupBillingUser();
 
     $this->actingAs($user)
         ->post(route('manufacturer.billing.upgrade'), [])
         ->assertSessionHasErrors('plan_id');
+});
+
+test('upgrade rejects an inactive plan', function () {
+    [$user] = setupBillingUser();
+    $inactivePlan = Plan::factory()->inactive()->withStripe()->create();
+
+    $this->actingAs($user)
+        ->post(route('manufacturer.billing.upgrade'), ['plan_id' => $inactivePlan->id])
+        ->assertSessionHasErrors([
+            'plan_id' => 'Este plano não está disponível.',
+        ]);
+});
+
+test('upgrade rejects the current plan or a lower tier', function () {
+    $lowerPlan = Plan::factory()->basic()->withStripe()->create();
+    $currentPlan = Plan::factory()->premium()->withStripe()->create();
+    $manufacturer = Manufacturer::factory()->create([
+        'is_active' => true,
+        'current_plan_id' => $currentPlan->id,
+    ]);
+    $user = User::factory()->create([
+        'user_type' => 'manufacturer_user',
+        'current_manufacturer_id' => $manufacturer->id,
+    ]);
+    $manufacturer->users()->attach($user->id, ['role' => 'owner', 'status' => 'active']);
+    $manufacturer->subscriptions()->create([
+        'type' => 'default',
+        'stripe_id' => 'sub_active_upgrade_guard',
+        'stripe_status' => 'active',
+        'stripe_price' => $currentPlan->stripe_price_id,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('manufacturer.billing.upgrade'), ['plan_id' => $lowerPlan->id])
+        ->assertSessionHasErrors([
+            'plan_id' => 'Selecione um plano superior ao seu plano atual.',
+        ]);
 });
 
 test('upgrade requires active subscription', function () {
