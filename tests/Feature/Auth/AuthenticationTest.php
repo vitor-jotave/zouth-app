@@ -30,6 +30,26 @@ test('users can authenticate using the login screen', function () {
     $response->assertRedirect(route('dashboard', absolute: false));
 });
 
+test('unverified users cannot access protected dashboards', function () {
+    $manufacturer = \App\Models\Manufacturer::factory()->create(['is_active' => true]);
+    $user = User::factory()->unverified()->create([
+        'user_type' => 'manufacturer_user',
+        'current_manufacturer_id' => $manufacturer->id,
+    ]);
+    $manufacturer->users()->attach($user->id, [
+        'role' => 'owner',
+        'status' => 'active',
+    ]);
+
+    $this->post(route('login.store'), [
+        'email' => $user->email,
+        'password' => 'password',
+    ])->assertRedirect(route('dashboard', absolute: false));
+
+    $this->get(route('dashboard'))
+        ->assertRedirect(route('verification.notice'));
+});
+
 test('users with two factor enabled are redirected to two factor challenge', function () {
     if (! Features::canManageTwoFactorAuthentication()) {
         $this->markTestSkipped('Two-factor authentication is not enabled.');
