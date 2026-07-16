@@ -95,6 +95,75 @@ it('validates required fields for each funnel step type', function () {
         ]);
 });
 
+it('requires a new audio upload when creating a funnel', function () {
+    [$user] = createWhatsappFunnelTestContext();
+
+    $this->actingAs($user)
+        ->post('/manufacturer/atendimento/funis', [
+            'name' => 'Áudio externo',
+            'code' => 'AUDIO-EXTERNO',
+            'steps' => [[
+                'type' => 'audio',
+                'media_path' => 'whatsapp-funnels/audio/foreign.mp3',
+            ]],
+        ])
+        ->assertSessionHasErrors('steps.0.audio_file');
+
+    expect(WhatsappFunnel::query()->count())->toBe(0);
+});
+
+it('only reuses audio paths already owned by the funnel being edited', function () {
+    [$user, $manufacturer] = createWhatsappFunnelTestContext();
+    $funnel = WhatsappFunnel::factory()->forManufacturer($manufacturer)->create([
+        'name' => 'Funil próprio',
+        'code' => 'FUNIL-PROPRIO',
+    ]);
+    WhatsappFunnelStep::factory()->forFunnel($funnel)->create([
+        'type' => 'audio',
+        'payload' => [
+            'media_path' => 'whatsapp-funnels/audio/owned.mp3',
+            'file_name' => 'owned.mp3',
+            'mimetype' => 'audio/mpeg',
+        ],
+    ]);
+    $foreignFunnel = WhatsappFunnel::factory()->create();
+    WhatsappFunnelStep::factory()->forFunnel($foreignFunnel)->create([
+        'type' => 'audio',
+        'payload' => [
+            'media_path' => 'whatsapp-funnels/audio/foreign.mp3',
+            'file_name' => 'foreign.mp3',
+            'mimetype' => 'audio/mpeg',
+        ],
+    ]);
+
+    $this->actingAs($user)
+        ->put("/manufacturer/atendimento/funis/{$funnel->id}", [
+            'name' => 'Funil próprio',
+            'code' => 'FUNIL-PROPRIO',
+            'steps' => [[
+                'type' => 'audio',
+                'media_path' => 'whatsapp-funnels/audio/foreign.mp3',
+            ]],
+        ])
+        ->assertSessionHasErrors('steps.0.audio_file');
+
+    $this->actingAs($user)
+        ->put("/manufacturer/atendimento/funis/{$funnel->id}", [
+            'name' => 'Funil próprio',
+            'code' => 'FUNIL-PROPRIO',
+            'steps' => [[
+                'type' => 'audio',
+                'media_path' => 'whatsapp-funnels/audio/owned.mp3',
+                'file_name' => 'owned.mp3',
+                'mimetype' => 'audio/mpeg',
+            ]],
+        ])
+        ->assertRedirect();
+
+    expect($funnel->steps()->sole()->payload['media_path'])
+        ->toBe('whatsapp-funnels/audio/owned.mp3');
+});
+
 it('lists only funnels from the current manufacturer and exposes active funnels in chat order', function () {
     [$user, $manufacturer] = createWhatsappFunnelTestContext();
 
@@ -191,12 +260,49 @@ it('forbids running a funnel or conversation from another manufacturer', functio
         ->postJson("/manufacturer/atendimento/conversations/{$conversation->id}/funnels/{$foreignFunnel->id}/runs")
         ->assertNotFound();
 
+    $this->actingAs($user)
+        ->put("/manufacturer/atendimento/funis/{$foreignFunnel->id}")
+        ->assertForbidden();
+
     $funnel = WhatsappFunnel::factory()->forManufacturer($manufacturer)->create();
     $foreignConversation = WhatsappConversation::factory()->create();
 
     $this->actingAs($user)
         ->postJson("/manufacturer/atendimento/conversations/{$foreignConversation->id}/funnels/{$funnel->id}/runs")
         ->assertForbidden();
+});
+
+it('fails a queued product step that references another manufacturer product', function () {
+    [, $manufacturer, , $conversation] = createWhatsappFunnelTestContext();
+    $foreignProduct = Product::factory()->create();
+    $funnel = WhatsappFunnel::factory()->forManufacturer($manufacturer)->create();
+    $funnelStep = WhatsappFunnelStep::factory()->forFunnel($funnel)->create([
+        'type' => 'product',
+        'payload' => [
+            'product_id' => $foreignProduct->id,
+            'include_photo' => true,
+        ],
+    ]);
+    $run = WhatsappFunnelRun::create([
+        'whatsapp_funnel_id' => $funnel->id,
+        'whatsapp_conversation_id' => $conversation->id,
+        'status' => 'pending',
+    ]);
+    $stepRun = $run->steps()->create([
+        'whatsapp_funnel_step_id' => $funnelStep->id,
+        'type' => 'product',
+        'sort_order' => 1,
+        'payload' => $funnelStep->payload,
+        'status' => 'pending',
+    ]);
+    $evolution = $this->mock(EvolutionApiService::class);
+    $evolution->shouldNotReceive('sendMedia', 'sendText');
+
+    app(ProcessWhatsappFunnelStep::class, ['stepRun' => $stepRun])->handle($evolution);
+
+    expect($run->fresh()->status)->toBe('failed')
+        ->and($stepRun->fresh()->status)->toBe('failed')
+        ->and($conversation->messages()->count())->toBe(0);
 });
 
 it('processes funnel steps in order and sends text audio and product media', function () {

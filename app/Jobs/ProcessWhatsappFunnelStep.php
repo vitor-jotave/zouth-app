@@ -190,7 +190,9 @@ class ProcessWhatsappFunnelStep implements ShouldQueue
     private function sendProductStep(EvolutionApiService $evolution, string $instanceName, string $remoteJid): WhatsappMessage
     {
         $payload = $this->stepRun->payload;
+        $manufacturerId = $this->stepRun->run->conversation->instance->manufacturer_id;
         $product = Product::query()
+            ->where('manufacturer_id', $manufacturerId)
             ->with('media')
             ->findOrFail($payload['product_id']);
 
