@@ -12,6 +12,7 @@ export type User = {
 
 export type Auth = {
     user: User;
+    dashboard_url: string | null;
 };
 
 export type TwoFactorSetupData = {

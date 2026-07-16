@@ -89,7 +89,7 @@ const Navbar = ({
                 <div className="hidden items-center gap-4 md:flex">
                     {auth.user ? (
                         <Link
-                            href={dashboard()}
+                            href={auth.dashboard_url ?? dashboard()}
                             className="rounded-full bg-[#c1554c] px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:bg-[#a84741] hover:shadow-lg"
                         >
                             Dashboard
@@ -161,7 +161,7 @@ const Navbar = ({
                     </a>
                     {auth.user ? (
                         <Link
-                            href={dashboard()}
+                            href={auth.dashboard_url ?? dashboard()}
                             className="rounded-xl bg-[#c1554c] py-3 text-center font-semibold text-white"
                         >
                             Dashboard

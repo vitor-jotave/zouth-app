@@ -34,15 +34,8 @@ import AppLogo from './app-logo';
 
 function useDashboardUrl(): string {
     const { auth } = usePage<SharedData>().props;
-    const user = auth?.user;
 
-    if (user?.user_type === 'superadmin') {
-        return admin.dashboard().url;
-    } else if (user?.user_type === 'sales_rep') {
-        return rep.dashboard().url;
-    }
-
-    return '/dashboard';
+    return auth.dashboard_url ?? '/dashboard';
 }
 
 function useNavItems() {
