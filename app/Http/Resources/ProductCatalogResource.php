@@ -29,6 +29,7 @@ class ProductCatalogResource extends JsonResource
                 $type = $pv->variationType;
                 $typeName = $type->name ?? '';
                 $stockValues = $variantStocks
+                    ->filter(fn ($stock) => (int) $stock->quantity > 0)
                     ->map(fn ($stock) => data_get($stock->variation_key, $typeName))
                     ->map(fn (mixed $value) => (string) $value)
                     ->filter()

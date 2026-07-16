@@ -276,7 +276,7 @@ it('filters public catalog products by dynamic variation values', function () {
     $redProduct = Product::factory()->forManufacturer($this->manufacturer)->withoutCategory()->create(['name' => 'Body Vermelho']);
     Product::factory()->forManufacturer($this->manufacturer)->withoutCategory()->create(['name' => 'Body Sem Variacao']);
 
-    attachCatalogVariation($redProduct, $color, 'Vermelho', 0);
+    attachCatalogVariation($redProduct, $color, 'Vermelho', 10);
 
     $response = $this->get(route('public.catalog.show', [
         'token' => $setting->public_token,
@@ -289,10 +289,10 @@ it('filters public catalog products by dynamic variation values', function () {
         ->toBe(['Body Vermelho']);
     expect($response->inertiaProps("filters.variations.{$color->id}"))->toBe(['Vermelho']);
     expect(collect($response->inertiaProps('filter_options.variation_types.0.values'))->pluck('value')->all())
-        ->toBe(['Azul', 'Vermelho']);
+        ->toBe(['Vermelho']);
 });
 
-it('limits public catalog product card variations to values available on that product', function () {
+it('limits public catalog variations to values with positive stock on that product', function () {
     $setting = createCatalogSettingFor($this->manufacturer);
     $color = VariationType::factory()->colorType()->create([
         'manufacturer_id' => $this->manufacturer->id,
@@ -330,6 +330,11 @@ it('limits public catalog product card variations to values available on that pr
         'variation_key' => ['Cor' => 'Azul', 'Tamanho' => 'P'],
         'quantity' => 4,
     ]);
+    ProductVariantStock::factory()->create([
+        'product_id' => $product->id,
+        'variation_key' => ['Cor' => 'Vermelho', 'Tamanho' => 'M'],
+        'quantity' => 0,
+    ]);
 
     $response = $this->get(route('public.catalog.show', ['token' => $setting->public_token]));
     $productProps = collect($response->inertiaProps('products.data'))->firstWhere('name', 'Body Azul P');
@@ -338,6 +343,44 @@ it('limits public catalog product card variations to values available on that pr
         ->toBe([['value' => 'Azul', 'hex' => '#3b82f6', 'image_url' => null]]);
     expect(collect($productProps['variations'])->firstWhere('type_name', 'Tamanho')['values'])
         ->toBe([['value' => 'P', 'hex' => null, 'image_url' => null]]);
+    expect(collect($response->inertiaProps('filter_options.variation_types'))->firstWhere('name', 'Cor')['values'])
+        ->toBe([['value' => 'Azul', 'hex' => '#3b82f6', 'image_url' => null]]);
+});
+
+it('does not match catalog filters against out of stock variation values', function () {
+    $setting = createCatalogSettingFor($this->manufacturer);
+    $color = VariationType::factory()->colorType()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+    ]);
+
+    foreach (['Azul', 'Vermelho'] as $value) {
+        VariationValue::factory()->create([
+            'variation_type_id' => $color->id,
+            'value' => $value,
+        ]);
+    }
+
+    $product = Product::factory()->forManufacturer($this->manufacturer)->withoutCategory()->create();
+    ProductVariation::create(['product_id' => $product->id, 'variation_type_id' => $color->id]);
+    ProductVariantStock::factory()->create([
+        'product_id' => $product->id,
+        'variation_key' => ['Cor' => 'Azul'],
+        'quantity' => 3,
+    ]);
+    ProductVariantStock::factory()->create([
+        'product_id' => $product->id,
+        'variation_key' => ['Cor' => 'Vermelho'],
+        'quantity' => 0,
+    ]);
+
+    $response = $this->get(route('public.catalog.show', [
+        'token' => $setting->public_token,
+        'variations' => [$color->id => ['Vermelho']],
+    ]));
+
+    expect($response->inertiaProps('products.data'))->toBe([]);
+    expect(collect($response->inertiaProps('filter_options.variation_types.0.values'))->pluck('value')->all())
+        ->toBe(['Azul']);
 });
 
 it('exposes variation image swatches in public catalog products and filters', function () {
