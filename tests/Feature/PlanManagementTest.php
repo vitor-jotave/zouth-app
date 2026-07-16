@@ -51,8 +51,8 @@ test('superadmin can view plans index', function () {
         );
 });
 
-test('plans schema does not keep the unavailable csv entitlement', function () {
-    expect(Schema::hasColumn('plans', 'allow_csv_import'))->toBeFalse();
+test('plans schema keeps the legacy csv column for rollback compatibility', function () {
+    expect(Schema::hasColumn('plans', 'allow_csv_import'))->toBeTrue();
 });
 
 test('plans index counts only subscriptions that grant access', function () {
