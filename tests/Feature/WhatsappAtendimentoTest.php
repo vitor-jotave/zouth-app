@@ -381,6 +381,59 @@ test('webhook increments unread count for incoming messages', function () {
     expect($conversation->fresh()->unread_count)->toBe(3);
 });
 
+test('webhook ignores duplicate incoming message deliveries', function () {
+    $instance = WhatsappInstance::factory()->connected()->create();
+    $conversation = WhatsappConversation::factory()->create([
+        'whatsapp_instance_id' => $instance->id,
+        'remote_jid' => '5511888776655@s.whatsapp.net',
+        'unread_count' => 0,
+    ]);
+    $payload = [
+        'event' => 'messages.upsert',
+        'data' => [
+            'key' => [
+                'id' => 'duplicate-msg-001',
+                'remoteJid' => $conversation->remote_jid,
+                'fromMe' => false,
+            ],
+            'message' => ['conversation' => 'Mensagem entregue duas vezes'],
+            'messageTimestamp' => now()->timestamp,
+        ],
+    ];
+    $headers = ['apikey' => config('evolution.api_key')];
+
+    $this->postJson("/webhooks/evolution/{$instance->instance_name}", $payload, $headers)->assertOk();
+    $this->postJson("/webhooks/evolution/{$instance->instance_name}", $payload, $headers)->assertOk();
+
+    expect($conversation->fresh()->unread_count)->toBe(1)
+        ->and($conversation->messages()->where('message_id', 'duplicate-msg-001')->count())->toBe(1);
+});
+
+test('webhook does not update message status from another instance', function () {
+    $targetInstance = WhatsappInstance::factory()->connected()->create();
+    $foreignInstance = WhatsappInstance::factory()->connected()->create();
+    $foreignConversation = WhatsappConversation::factory()->create([
+        'whatsapp_instance_id' => $foreignInstance->id,
+    ]);
+    $foreignMessage = WhatsappMessage::factory()->fromMe()->create([
+        'whatsapp_conversation_id' => $foreignConversation->id,
+        'message_id' => 'foreign-status-msg-001',
+        'status' => 'sent',
+    ]);
+
+    $this->postJson("/webhooks/evolution/{$targetInstance->instance_name}", [
+        'event' => 'messages.update',
+        'data' => [
+            'key' => ['id' => $foreignMessage->message_id],
+            'status' => 'READ',
+        ],
+    ], [
+        'apikey' => config('evolution.api_key'),
+    ])->assertOk();
+
+    expect($foreignMessage->fresh()->status->value)->toBe('sent');
+});
+
 test('opening a conversation resets unread count', function () {
     $this->withoutVite();
     [$user, $manufacturer] = createWhatsappTestManufacturer();
