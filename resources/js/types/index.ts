@@ -26,6 +26,8 @@ export type SharedData = {
     auth: Auth;
     sidebarOpen: boolean;
     flash?: {
+        status?: string | null;
+        error?: string | null;
         limit_exceeded?: LimitExceededPayload | null;
         upgrade_success?: { plan_name: string } | null;
         downgrade_violations?: DowngradeViolation[] | null;
