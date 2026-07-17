@@ -32,11 +32,13 @@ use Inertia\Inertia;
 use Laravel\Fortify\Features;
 
 Route::get('/', function () {
+    $demoCatalogUrl = config('commercial.demo_catalog_url');
+
     return Inertia::render('homepage', [
         'canRegister' => Features::enabled(Features::registration()),
         'commercial' => [
             'salesContactUrl' => config('commercial.sales_contact_url'),
-            'demoCatalogUrl' => config('commercial.demo_catalog_url'),
+            'demoCatalogUrl' => filled($demoCatalogUrl) ? $demoCatalogUrl : null,
         ],
     ]);
 })->name('home');

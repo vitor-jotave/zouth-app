@@ -221,7 +221,7 @@ const Hero = ({ commercial }: { commercial: CommercialLinks }) => {
                     <div className="flex flex-col gap-4 sm:flex-row">
                         <a
                             href={
-                                commercial.demoCatalogUrl ??
+                                commercial.demoCatalogUrl ||
                                 commercial.salesContactUrl
                             }
                             className="flex items-center justify-center gap-2 rounded-full bg-[#c1554c] px-8 py-4 text-lg font-bold text-white shadow-lg transition-all hover:translate-y-[-2px] hover:bg-[#a84741]"
