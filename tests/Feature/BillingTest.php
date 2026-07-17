@@ -3,6 +3,7 @@
 use App\Models\Manufacturer;
 use App\Models\Plan;
 use App\Models\User;
+use Illuminate\Support\Facades\URL;
 
 function setupBillingUser(): array
 {
@@ -47,6 +48,18 @@ test('billing page shows available plans', function () {
     $response->assertOk();
 });
 
+test('billing page does not expose unavailable csv import capability', function () {
+    $this->withoutVite();
+    [$user] = setupBillingUser();
+
+    $this->actingAs($user)
+        ->get(route('manufacturer.billing.index'))
+        ->assertInertia(fn ($page) => $page
+            ->has('plans.0')
+            ->missing('plans.0.allow_csv_import')
+        );
+});
+
 test('billing page shows current plan', function () {
     $this->withoutVite();
     [$user, $manufacturer, $plan] = setupBillingUser();
@@ -84,15 +97,29 @@ test('checkout rejects plan without stripe_price_id', function () {
         ->assertSessionHasErrors('plan_id');
 });
 
-test('checkout success updates current plan', function () {
-    [$user, $manufacturer] = setupBillingUser();
+test('checkout success waits for the Stripe webhook before updating the plan', function () {
+    [$user, $manufacturer, $currentPlan] = setupBillingUser();
+    $newPlan = Plan::factory()->create();
+
+    $this->actingAs($user)
+        ->get(URL::temporarySignedRoute(
+            'manufacturer.billing.checkout.success',
+            now()->addHour(),
+            ['plan' => $newPlan->id],
+        ))
+        ->assertRedirect(route('manufacturer.billing.index'))
+        ->assertSessionHas('success', fn (string $message) => str_contains($message, 'confirmação do Stripe'));
+
+    expect($manufacturer->fresh()->current_plan_id)->toBe($currentPlan->id);
+});
+
+test('checkout success rejects an unsigned URL', function () {
+    [$user] = setupBillingUser();
     $newPlan = Plan::factory()->create();
 
     $this->actingAs($user)
         ->get(route('manufacturer.billing.checkout.success', $newPlan))
-        ->assertRedirect(route('manufacturer.billing.index'));
-
-    expect($manufacturer->fresh()->current_plan_id)->toBe($newPlan->id);
+        ->assertForbidden();
 });
 
 test('swap requires plan_id', function () {
@@ -103,12 +130,60 @@ test('swap requires plan_id', function () {
         ->assertSessionHasErrors('plan_id');
 });
 
+test('swap rejects an inactive plan', function () {
+    [$user] = setupBillingUser();
+    $inactivePlan = Plan::factory()->inactive()->withStripe()->create();
+
+    $this->actingAs($user)
+        ->post(route('manufacturer.billing.swap'), ['plan_id' => $inactivePlan->id])
+        ->assertSessionHasErrors([
+            'plan_id' => 'Este plano não está disponível.',
+        ]);
+});
+
 test('upgrade requires plan_id', function () {
     [$user] = setupBillingUser();
 
     $this->actingAs($user)
         ->post(route('manufacturer.billing.upgrade'), [])
         ->assertSessionHasErrors('plan_id');
+});
+
+test('upgrade rejects an inactive plan', function () {
+    [$user] = setupBillingUser();
+    $inactivePlan = Plan::factory()->inactive()->withStripe()->create();
+
+    $this->actingAs($user)
+        ->post(route('manufacturer.billing.upgrade'), ['plan_id' => $inactivePlan->id])
+        ->assertSessionHasErrors([
+            'plan_id' => 'Este plano não está disponível.',
+        ]);
+});
+
+test('upgrade rejects the current plan or a lower tier', function () {
+    $lowerPlan = Plan::factory()->basic()->withStripe()->create();
+    $currentPlan = Plan::factory()->premium()->withStripe()->create();
+    $manufacturer = Manufacturer::factory()->create([
+        'is_active' => true,
+        'current_plan_id' => $currentPlan->id,
+    ]);
+    $user = User::factory()->create([
+        'user_type' => 'manufacturer_user',
+        'current_manufacturer_id' => $manufacturer->id,
+    ]);
+    $manufacturer->users()->attach($user->id, ['role' => 'owner', 'status' => 'active']);
+    $manufacturer->subscriptions()->create([
+        'type' => 'default',
+        'stripe_id' => 'sub_active_upgrade_guard',
+        'stripe_status' => 'active',
+        'stripe_price' => $currentPlan->stripe_price_id,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('manufacturer.billing.upgrade'), ['plan_id' => $lowerPlan->id])
+        ->assertSessionHasErrors([
+            'plan_id' => 'Selecione um plano superior ao seu plano atual.',
+        ]);
 });
 
 test('upgrade requires active subscription', function () {
@@ -173,13 +248,16 @@ test('plan factory states create correct plans', function () {
     $premium = Plan::factory()->premium()->create();
 
     expect($basic->name)->toBe('Básico');
+    expect($basic->monthly_price_cents)->toBe(14700);
     expect($basic->trial_days)->toBe(7);
     expect($basic->max_reps)->toBe(5);
 
     expect($intermediate->name)->toBe('Intermediário');
+    expect($intermediate->monthly_price_cents)->toBe(39700);
     expect($intermediate->max_reps)->toBe(90);
 
     expect($premium->name)->toBe('Premium');
+    expect($premium->monthly_price_cents)->toBe(89700);
     expect($premium->max_reps)->toBeNull();
     expect($premium->max_products)->toBeNull();
 });

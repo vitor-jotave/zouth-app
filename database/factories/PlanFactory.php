@@ -21,7 +21,7 @@ class PlanFactory extends Factory
             'description' => fake()->sentence(),
             'is_active' => true,
             'sort_order' => fake()->numberBetween(0, 10),
-            'monthly_price_cents' => fake()->randomElement([4990, 9990, 19990]),
+            'monthly_price_cents' => fake()->randomElement([14700, 39700, 89700]),
             'currency' => 'BRL',
             'trial_days' => 0,
             'max_reps' => fake()->randomElement([5, 20, null]),
@@ -30,7 +30,6 @@ class PlanFactory extends Factory
             'max_users' => fake()->randomElement([3, 10, null]),
             'max_data_mb' => fake()->randomElement([500, 2000, null]),
             'max_files_gb' => fake()->randomElement([1, 5, null]),
-            'allow_csv_import' => false,
             'stripe_product_id' => null,
             'stripe_price_id' => null,
         ];
@@ -43,7 +42,7 @@ class PlanFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'name' => 'Básico',
-            'monthly_price_cents' => 4990,
+            'monthly_price_cents' => 14700,
             'trial_days' => 7,
             'sort_order' => 1,
             'max_reps' => 5,
@@ -52,7 +51,6 @@ class PlanFactory extends Factory
             'max_users' => 3,
             'max_data_mb' => 500,
             'max_files_gb' => 1,
-            'allow_csv_import' => false,
         ]);
     }
 
@@ -63,7 +61,7 @@ class PlanFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'name' => 'Intermediário',
-            'monthly_price_cents' => 9990,
+            'monthly_price_cents' => 39700,
             'trial_days' => 0,
             'sort_order' => 2,
             'max_reps' => 90,
@@ -72,7 +70,6 @@ class PlanFactory extends Factory
             'max_users' => 10,
             'max_data_mb' => 2000,
             'max_files_gb' => 5,
-            'allow_csv_import' => true,
         ]);
     }
 
@@ -83,7 +80,7 @@ class PlanFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'name' => 'Premium',
-            'monthly_price_cents' => 19990,
+            'monthly_price_cents' => 89700,
             'trial_days' => 0,
             'sort_order' => 3,
             'max_reps' => null,
@@ -92,7 +89,6 @@ class PlanFactory extends Factory
             'max_users' => null,
             'max_data_mb' => null,
             'max_files_gb' => null,
-            'allow_csv_import' => true,
         ]);
     }
 

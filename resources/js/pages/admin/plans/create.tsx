@@ -24,7 +24,6 @@ export default function PlansCreate() {
         max_users: '',
         max_data_mb: '',
         max_files_gb: '',
-        allow_csv_import: false,
     });
 
     function handleSubmit(e: React.FormEvent) {
@@ -38,7 +37,9 @@ export default function PlansCreate() {
 
             <div className="space-y-6 p-6">
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight">Novo Plano</h2>
+                    <h2 className="text-2xl font-bold tracking-tight">
+                        Novo Plano
+                    </h2>
                     <p className="text-muted-foreground">
                         Crie um novo plano de assinatura.
                     </p>

@@ -19,6 +19,8 @@ use Inertia\Response;
 
 class PublicOrderController extends Controller
 {
+    private const ORDER_UNAVAILABLE_MESSAGE = 'Este catálogo não está disponível para novos pedidos no momento. Tente novamente mais tarde.';
+
     public function __construct(
         private OrderService $orderService,
         private PlanLimitService $limitService
@@ -30,13 +32,13 @@ class PublicOrderController extends Controller
 
         if ($manufacturer && ! $this->limitService->canCreateOrder($manufacturer)) {
             return redirect()->back()
-                ->withErrors(['limit' => 'Este fabricante atingiu o limite de pedidos do mês.'])
+                ->withErrors(['limit' => self::ORDER_UNAVAILABLE_MESSAGE])
                 ->with('limit_exceeded', $this->limitService->limitExceededPayload($manufacturer, 'orders_this_month'));
         }
 
         if ($manufacturer && ! $this->limitService->canStoreData($manufacturer)) {
             return redirect()->back()
-                ->withErrors(['limit' => 'Este fabricante atingiu o limite de armazenamento de dados.'])
+                ->withErrors(['limit' => self::ORDER_UNAVAILABLE_MESSAGE])
                 ->with('limit_exceeded', $this->limitService->limitExceededPayload($manufacturer, 'data_mb'));
         }
 
@@ -76,7 +78,7 @@ class PublicOrderController extends Controller
     public function show(Request $request, string $publicToken): Response
     {
         $order = Order::where('public_token', $publicToken)
-            ->with(['items', 'statusHistory.changedBy', 'manufacturer'])
+            ->with(['items', 'statusHistory', 'manufacturer'])
             ->firstOrFail();
 
         return Inertia::render('public/order-tracking', [

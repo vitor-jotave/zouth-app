@@ -7,6 +7,12 @@ use App\Models\WhatsappInstance;
 use App\Models\WhatsappMessage;
 use App\Services\EvolutionApiService;
 
+beforeEach(function () {
+    config()->set('evolution.api_key', 'test-evolution-api-key');
+    config()->set('evolution.webhook_rate_limit', 1000);
+    config()->set('evolution.webhook_invalid_rate_limit', 60);
+});
+
 function createWhatsappTestManufacturer(): array
 {
     $manufacturer = Manufacturer::factory()->create(['is_active' => true]);
@@ -276,6 +282,57 @@ test('webhook rejects invalid api key', function () {
     ])->assertUnauthorized();
 });
 
+test('webhook rate limits repeated invalid requests by ip address', function () {
+    config()->set('evolution.webhook_invalid_rate_limit', 2);
+    config()->set('evolution.webhook_rate_limit', 100);
+
+    $instance = WhatsappInstance::factory()->connected()->create();
+    $url = "/webhooks/evolution/{$instance->instance_name}";
+    $payload = ['event' => 'messages.upsert'];
+    $headers = ['apikey' => 'wrong-key'];
+
+    $this->postJson($url, $payload, $headers)->assertUnauthorized();
+    $this->postJson($url, $payload, $headers)->assertUnauthorized();
+    $this->postJson($url, $payload, $headers)->assertTooManyRequests();
+});
+
+test('webhook rate limits traffic independently for each instance', function () {
+    config()->set('evolution.webhook_invalid_rate_limit', 100);
+    config()->set('evolution.webhook_rate_limit', 2);
+
+    $firstInstance = WhatsappInstance::factory()->connected()->create();
+    $secondInstance = WhatsappInstance::factory()->connected()->create();
+    $payload = [
+        'event' => 'connection.update',
+        'data' => ['state' => 'open'],
+    ];
+    $headers = ['apikey' => config('evolution.api_key')];
+    $firstUrl = "/webhooks/evolution/{$firstInstance->instance_name}";
+
+    $this->postJson($firstUrl, $payload, $headers)->assertOk();
+    $this->postJson($firstUrl, $payload, $headers)->assertOk();
+    $this->postJson($firstUrl, $payload, $headers)->assertTooManyRequests();
+
+    $this->postJson("/webhooks/evolution/{$secondInstance->instance_name}", $payload, $headers)->assertOk();
+});
+
+test('webhook rejects requests when the api key is not configured', function () {
+    $configuredApiKey = config('evolution.api_key');
+
+    try {
+        config()->set('evolution.api_key');
+
+        $instance = WhatsappInstance::factory()->create();
+
+        $this->postJson("/webhooks/evolution/{$instance->instance_name}", [
+            'event' => 'CONNECTION_UPDATE',
+            'data' => ['state' => 'open'],
+        ])->assertUnauthorized();
+    } finally {
+        config()->set('evolution.api_key', $configuredApiKey);
+    }
+});
+
 test('webhook updates connection status', function () {
     $instance = WhatsappInstance::factory()->create(['status' => 'connecting']);
 
@@ -358,6 +415,59 @@ test('webhook increments unread count for incoming messages', function () {
     ])->assertOk();
 
     expect($conversation->fresh()->unread_count)->toBe(3);
+});
+
+test('webhook ignores duplicate incoming message deliveries', function () {
+    $instance = WhatsappInstance::factory()->connected()->create();
+    $conversation = WhatsappConversation::factory()->create([
+        'whatsapp_instance_id' => $instance->id,
+        'remote_jid' => '5511888776655@s.whatsapp.net',
+        'unread_count' => 0,
+    ]);
+    $payload = [
+        'event' => 'messages.upsert',
+        'data' => [
+            'key' => [
+                'id' => 'duplicate-msg-001',
+                'remoteJid' => $conversation->remote_jid,
+                'fromMe' => false,
+            ],
+            'message' => ['conversation' => 'Mensagem entregue duas vezes'],
+            'messageTimestamp' => now()->timestamp,
+        ],
+    ];
+    $headers = ['apikey' => config('evolution.api_key')];
+
+    $this->postJson("/webhooks/evolution/{$instance->instance_name}", $payload, $headers)->assertOk();
+    $this->postJson("/webhooks/evolution/{$instance->instance_name}", $payload, $headers)->assertOk();
+
+    expect($conversation->fresh()->unread_count)->toBe(1)
+        ->and($conversation->messages()->where('message_id', 'duplicate-msg-001')->count())->toBe(1);
+});
+
+test('webhook does not update message status from another instance', function () {
+    $targetInstance = WhatsappInstance::factory()->connected()->create();
+    $foreignInstance = WhatsappInstance::factory()->connected()->create();
+    $foreignConversation = WhatsappConversation::factory()->create([
+        'whatsapp_instance_id' => $foreignInstance->id,
+    ]);
+    $foreignMessage = WhatsappMessage::factory()->fromMe()->create([
+        'whatsapp_conversation_id' => $foreignConversation->id,
+        'message_id' => 'foreign-status-msg-001',
+        'status' => 'sent',
+    ]);
+
+    $this->postJson("/webhooks/evolution/{$targetInstance->instance_name}", [
+        'event' => 'messages.update',
+        'data' => [
+            'key' => ['id' => $foreignMessage->message_id],
+            'status' => 'READ',
+        ],
+    ], [
+        'apikey' => config('evolution.api_key'),
+    ])->assertOk();
+
+    expect($foreignMessage->fresh()->status->value)->toBe('sent');
 });
 
 test('opening a conversation resets unread count', function () {

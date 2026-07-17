@@ -65,7 +65,10 @@ export const GRADIENTS: Record<string, string> = {
     peach: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
 };
 
-export const PRESET_LABELS: Record<string, { label: string; description: string }> = {
+export const PRESET_LABELS: Record<
+    string,
+    { label: string; description: string }
+> = {
     minimal: {
         label: 'Minimal',
         description: 'Clean, foco em grid, tipografia discreta',

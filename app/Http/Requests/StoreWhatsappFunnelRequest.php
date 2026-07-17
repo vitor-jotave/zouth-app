@@ -72,11 +72,28 @@ class StoreWhatsappFunnelRequest extends FormRequest
         }
     }
 
-    private function requireAudioFile(Validator $validator, int $index): void
+    protected function requireAudioFile(Validator $validator, int $index): void
     {
-        if (! $this->hasFile("steps.{$index}.audio_file") && blank($this->input("steps.{$index}.media_path"))) {
-            $validator->errors()->add("steps.{$index}.audio_file", 'Envie um arquivo de áudio.');
+        if ($this->hasFile("steps.{$index}.audio_file")) {
+            return;
         }
+
+        $mediaPath = (string) $this->input("steps.{$index}.media_path", '');
+
+        if ($mediaPath === '') {
+            $validator->errors()->add("steps.{$index}.audio_file", 'Envie um arquivo de áudio.');
+
+            return;
+        }
+
+        if (! $this->acceptsExistingAudioPath($mediaPath)) {
+            $validator->errors()->add("steps.{$index}.audio_file", 'O áudio informado não pertence a este funil.');
+        }
+    }
+
+    protected function acceptsExistingAudioPath(string $mediaPath): bool
+    {
+        return false;
     }
 
     /**

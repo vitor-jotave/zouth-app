@@ -32,6 +32,8 @@ it('shows the plan selection page with a valid signed URL', function () {
         ->component('plan-selection/index')
         ->has('manufacturer')
         ->has('plans')
+        ->has('plans.0')
+        ->missing('plans.0.allow_csv_import')
         ->has('checkoutUrls')
     );
 });
@@ -87,18 +89,30 @@ it('returns 403 for checkout route without a valid signature', function () {
     $response->assertForbidden();
 });
 
-it('sets current plan on manufacturer after successful checkout', function () {
+it('does not grant a plan from the checkout success URL', function () {
     $manufacturer = Manufacturer::factory()->create(['current_plan_id' => null]);
     $plan = Plan::factory()->create();
 
-    $response = $this->get(route('plan-selection.checkout.success', [
+    $response = $this->get(URL::temporarySignedRoute(
+        'plan-selection.checkout.success',
+        now()->addHour(),
+        ['manufacturer' => $manufacturer->id, 'plan' => $plan->id],
+    ));
+
+    $response->assertRedirect(route('login'))
+        ->assertSessionHas('status', fn (string $message) => str_contains($message, 'sendo confirmada'));
+
+    expect($manufacturer->fresh()->current_plan_id)->toBeNull();
+});
+
+it('rejects an unsigned checkout success URL', function () {
+    $manufacturer = Manufacturer::factory()->create(['current_plan_id' => null]);
+    $plan = Plan::factory()->create();
+
+    $this->get(route('plan-selection.checkout.success', [
         'manufacturer' => $manufacturer->id,
         'plan' => $plan->id,
-    ]));
-
-    $response->assertRedirect(route('login'));
-
-    expect($manufacturer->fresh()->current_plan_id)->toBe($plan->id);
+    ]))->assertForbidden();
 });
 
 it('sends a plan selection invite email after manufacturer creation', function () {

@@ -36,4 +36,8 @@ return [
 
     'webhook_url' => env('EVOLUTION_WEBHOOK_URL', env('APP_URL')),
 
+    'webhook_rate_limit' => env('EVOLUTION_WEBHOOK_RATE_LIMIT', 1000),
+
+    'webhook_invalid_rate_limit' => env('EVOLUTION_WEBHOOK_INVALID_RATE_LIMIT', 60),
+
 ];

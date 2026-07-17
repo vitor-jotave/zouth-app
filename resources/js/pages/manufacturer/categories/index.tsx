@@ -36,7 +36,9 @@ interface Category {
 interface Paginated<T> {
     data: T[];
     links?: Array<{ url: string | null; label: string; active: boolean }>;
-    meta?: { links?: Array<{ url: string | null; label: string; active: boolean }> };
+    meta?: {
+        links?: Array<{ url: string | null; label: string; active: boolean }>;
+    };
 }
 
 interface Props {
@@ -53,7 +55,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function CategoriesIndex({ categories, filters }: Props) {
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+    const [editingCategory, setEditingCategory] = useState<Category | null>(
+        null,
+    );
 
     const createForm = useForm({ name: '' });
     const editForm = useForm({ name: '' });
@@ -128,7 +132,8 @@ export default function CategoriesIndex({ categories, filters }: Props) {
                             <DialogHeader>
                                 <DialogTitle>Nova categoria</DialogTitle>
                                 <DialogDescription>
-                                    Crie uma nova categoria para organizar os produtos.
+                                    Crie uma nova categoria para organizar os
+                                    produtos.
                                 </DialogDescription>
                             </DialogHeader>
                             <form onSubmit={handleCreate} className="space-y-4">
@@ -138,10 +143,15 @@ export default function CategoriesIndex({ categories, filters }: Props) {
                                         id="category-name"
                                         value={createForm.data.name}
                                         onChange={(event) =>
-                                            createForm.setData('name', event.target.value)
+                                            createForm.setData(
+                                                'name',
+                                                event.target.value,
+                                            )
                                         }
                                     />
-                                    <InputError message={createForm.errors.name} />
+                                    <InputError
+                                        message={createForm.errors.name}
+                                    />
                                 </div>
                                 <div className="flex justify-end gap-2">
                                     <Button
@@ -151,7 +161,10 @@ export default function CategoriesIndex({ categories, filters }: Props) {
                                     >
                                         Cancelar
                                     </Button>
-                                    <Button type="submit" disabled={createForm.processing}>
+                                    <Button
+                                        type="submit"
+                                        disabled={createForm.processing}
+                                    >
                                         Criar categoria
                                     </Button>
                                 </div>
@@ -162,10 +175,12 @@ export default function CategoriesIndex({ categories, filters }: Props) {
 
                 <div className="rounded-lg border p-4">
                     <div className="relative">
-                        <Tags className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Tags className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
                             defaultValue={filters.search ?? ''}
-                            onChange={(event) => handleSearch(event.target.value)}
+                            onChange={(event) =>
+                                handleSearch(event.target.value)
+                            }
                             placeholder="Buscar categoria"
                             className="pl-9"
                         />
@@ -179,13 +194,18 @@ export default function CategoriesIndex({ categories, filters }: Props) {
                                 <TableHead>Nome</TableHead>
                                 <TableHead>Slug</TableHead>
                                 <TableHead>Produtos</TableHead>
-                                <TableHead className="text-right">Acoes</TableHead>
+                                <TableHead className="text-right">
+                                    Acoes
+                                </TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {categories.data.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="py-10 text-center">
+                                    <TableCell
+                                        colSpan={4}
+                                        className="py-10 text-center"
+                                    >
                                         Nenhuma categoria encontrada.
                                     </TableCell>
                                 </TableRow>
@@ -207,8 +227,13 @@ export default function CategoriesIndex({ categories, filters }: Props) {
                                                 variant="outline"
                                                 size="sm"
                                                 onClick={() => {
-                                                    setEditingCategory(category);
-                                                    editForm.setData('name', category.name);
+                                                    setEditingCategory(
+                                                        category,
+                                                    );
+                                                    editForm.setData(
+                                                        'name',
+                                                        category.name,
+                                                    );
                                                 }}
                                             >
                                                 Editar
@@ -216,7 +241,9 @@ export default function CategoriesIndex({ categories, filters }: Props) {
                                             <Button
                                                 variant="destructive"
                                                 size="sm"
-                                                onClick={() => handleDelete(category.id)}
+                                                onClick={() =>
+                                                    handleDelete(category.id)
+                                                }
                                             >
                                                 <Trash2 className="mr-1 h-4 w-4" />
                                                 Excluir
@@ -229,7 +256,9 @@ export default function CategoriesIndex({ categories, filters }: Props) {
                     </Table>
                 </div>
 
-                <Pagination links={categories.meta?.links ?? categories.links} />
+                <Pagination
+                    links={categories.meta?.links ?? categories.links}
+                />
             </div>
 
             <Dialog
@@ -267,7 +296,10 @@ export default function CategoriesIndex({ categories, filters }: Props) {
                             >
                                 Cancelar
                             </Button>
-                            <Button type="submit" disabled={editForm.processing}>
+                            <Button
+                                type="submit"
+                                disabled={editForm.processing}
+                            >
                                 Salvar
                             </Button>
                         </div>

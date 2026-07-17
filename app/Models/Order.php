@@ -43,12 +43,16 @@ class Order extends Model
         'utm_campaign',
         'utm_content',
         'utm_term',
+        'inventory_reserved_at',
+        'inventory_released_at',
     ];
 
     protected function casts(): array
     {
         return [
             'status' => OrderStatus::class,
+            'inventory_reserved_at' => 'datetime',
+            'inventory_released_at' => 'datetime',
         ];
     }
 

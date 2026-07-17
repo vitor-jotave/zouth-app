@@ -35,7 +35,6 @@ class PlanSelectionController extends Controller
                 'max_users' => $plan->max_users,
                 'max_data_mb' => $plan->max_data_mb,
                 'max_files_gb' => $plan->max_files_gb,
-                'allow_csv_import' => $plan->allow_csv_import,
                 'has_stripe' => $plan->stripe_price_id !== null,
             ]);
 
@@ -85,10 +84,11 @@ class PlanSelectionController extends Controller
         }
 
         return $subscriptionBuilder->checkout([
-            'success_url' => route('plan-selection.checkout.success', [
-                'manufacturer' => $manufacturer->id,
-                'plan' => $plan->id,
-            ]),
+            'success_url' => URL::temporarySignedRoute(
+                'plan-selection.checkout.success',
+                now()->addHour(),
+                ['manufacturer' => $manufacturer->id, 'plan' => $plan->id],
+            ),
             'cancel_url' => URL::temporarySignedRoute(
                 'plan-selection.show',
                 now()->addDays(3),
@@ -97,14 +97,11 @@ class PlanSelectionController extends Controller
         ])->redirect();
     }
 
-    /**
-     * Handle successful Stripe Checkout and set the manufacturer's current plan.
-     */
-    public function checkoutSuccess(Manufacturer $manufacturer, Plan $plan): RedirectResponse
+    public function checkoutSuccess(Request $request, Manufacturer $manufacturer, Plan $plan): RedirectResponse
     {
-        $manufacturer->update(['current_plan_id' => $plan->id]);
+        abort_unless($request->hasValidSignature(), 403);
 
         return redirect()->route('login')
-            ->with('status', 'Assinatura realizada com sucesso! Bem-vindo ao plano '.$plan->name.'. Faça login para acessar sua conta.');
+            ->with('status', 'Recebemos seu checkout do plano '.$plan->name.'. A assinatura está sendo confirmada pelo Stripe e será liberada automaticamente.');
     }
 }

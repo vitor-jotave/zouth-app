@@ -39,9 +39,13 @@ const actionConfig: Record<
         variant: 'default',
         disabled: false,
         action: (m) =>
-            router.post(`/rep/manufacturers/${m.id}/affiliate`, {}, {
-                preserveScroll: true,
-            }),
+            router.post(
+                `/rep/manufacturers/${m.id}/affiliate`,
+                {},
+                {
+                    preserveScroll: true,
+                },
+            ),
     },
     pending: {
         label: 'Aguardando aprovação',
@@ -60,18 +64,26 @@ const actionConfig: Record<
         variant: 'outline',
         disabled: false,
         action: (m) =>
-            router.post(`/rep/manufacturers/${m.id}/affiliate`, {}, {
-                preserveScroll: true,
-            }),
+            router.post(
+                `/rep/manufacturers/${m.id}/affiliate`,
+                {},
+                {
+                    preserveScroll: true,
+                },
+            ),
     },
     revoked: {
         label: 'Solicitar novamente',
         variant: 'outline',
         disabled: false,
         action: (m) =>
-            router.post(`/rep/manufacturers/${m.id}/affiliate`, {}, {
-                preserveScroll: true,
-            }),
+            router.post(
+                `/rep/manufacturers/${m.id}/affiliate`,
+                {},
+                {
+                    preserveScroll: true,
+                },
+            ),
     },
 };
 

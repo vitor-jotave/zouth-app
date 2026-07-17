@@ -129,20 +129,6 @@ test('canCreateUser returns true when under limit', function () {
     expect($service->canCreateUser($manufacturer))->toBeTrue();
 });
 
-test('canImportCsv returns false when not allowed', function () {
-    [$manufacturer] = setupManufacturerWithPlan(['allow_csv_import' => false]);
-
-    $service = app(PlanLimitService::class);
-    expect($service->canImportCsv($manufacturer))->toBeFalse();
-});
-
-test('canImportCsv returns true when allowed', function () {
-    [$manufacturer] = setupManufacturerWithPlan(['allow_csv_import' => true]);
-
-    $service = app(PlanLimitService::class);
-    expect($service->canImportCsv($manufacturer))->toBeTrue();
-});
-
 test('usage returns empty array without plan', function () {
     $manufacturer = Manufacturer::factory()->create([
         'is_active' => true,

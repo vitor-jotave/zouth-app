@@ -6,21 +6,23 @@ on:
       - develop
       - main
       - master
+      - feature/v1-production-ready
       - workos
+
   pull_request:
     branches:
       - develop
       - main
       - master
+      - feature/v1-production-ready
       - workos
+
+permissions:
+  contents: read
 
 jobs:
   ci:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        php-version: ['8.4', '8.5']
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -28,17 +30,19 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: ${{ matrix.php-version }}
+          php-version: '8.4'
           tools: composer:v2
-          coverage: xdebug
+          coverage: none
+          ini-values: memory_limit=512M
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
 
       - name: Install Node Dependencies
-        run: npm i
+        run: npm ci
 
       - name: Install Dependencies
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
@@ -52,5 +56,8 @@ jobs:
       - name: Build Assets
         run: npm run build
 
+      - name: Check TypeScript
+        run: npm run types
+
       - name: Tests
-        run: ./vendor/bin/pest
+        run: php artisan test --compact

@@ -226,7 +226,6 @@ export function ImageCropDialog({
                             onChange={(_, percentCrop) => setCrop(percentCrop)}
                             onComplete={(c) => setCompletedCrop(c)}
                             aspect={aspectRatio ?? undefined}
-                            scale={scale}
                         >
                             <img
                                 ref={imgRef}

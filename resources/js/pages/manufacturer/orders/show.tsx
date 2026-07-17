@@ -3,7 +3,6 @@ import { ArrowLeft, Check, Clock, Package, Truck, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import {
     Table,
     TableBody,
@@ -24,6 +23,7 @@ interface OrderItem {
     quantity: number;
     size: string | null;
     color: string | null;
+    selected_variations: Record<string, string> | null;
     combo_components: Array<{
         product_id: number;
         product_name: string | null;
@@ -280,8 +280,7 @@ export default function OrderShow({ order }: Props) {
                                     <TableRow>
                                         <TableHead>Produto</TableHead>
                                         <TableHead>SKU</TableHead>
-                                        <TableHead>Tam.</TableHead>
-                                        <TableHead>Cor</TableHead>
+                                        <TableHead>Opcoes</TableHead>
                                         <TableHead className="text-right">
                                             Preco
                                         </TableHead>
@@ -344,10 +343,13 @@ export default function OrderShow({ order }: Props) {
                                                     {item.product_sku ?? '-'}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {item.size ?? '-'}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {item.color ?? '-'}
+                                                    {variationSummary(
+                                                        item.selected_variations,
+                                                    ) ??
+                                                        ([item.size, item.color]
+                                                            .filter(Boolean)
+                                                            .join(' / ') ||
+                                                            '-')}
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     {item.unit_price != null

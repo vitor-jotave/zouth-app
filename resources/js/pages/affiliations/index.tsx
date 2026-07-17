@@ -50,7 +50,8 @@ export default function Index({ affiliations, filters }: Props) {
     const counts = {
         pending: affiliations.data.filter((a) => a.status === 'pending').length,
         active: affiliations.data.filter((a) => a.status === 'active').length,
-        rejected: affiliations.data.filter((a) => a.status === 'rejected').length,
+        rejected: affiliations.data.filter((a) => a.status === 'rejected')
+            .length,
         revoked: affiliations.data.filter((a) => a.status === 'revoked').length,
     };
 
@@ -62,9 +63,12 @@ export default function Index({ affiliations, filters }: Props) {
                 <div className="mx-auto max-w-7xl space-y-6 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between">
                         <div>
-                            <h2 className="text-2xl font-semibold">Afiliações</h2>
+                            <h2 className="text-2xl font-semibold">
+                                Afiliações
+                            </h2>
                             <p className="text-sm text-muted-foreground">
-                                Gerencie solicitações de representantes comerciais
+                                Gerencie solicitações de representantes
+                                comerciais
                             </p>
                         </div>
 

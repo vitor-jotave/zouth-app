@@ -71,8 +71,8 @@ return [
             'url' => env('AWS_URL'),
             'endpoint' => env('AWS_ENDPOINT'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
-            'throw' => false,
-            'report' => false,
+            'throw' => env('FILESYSTEM_THROW', false),
+            'report' => env('FILESYSTEM_REPORT', true),
         ],
 
     ],

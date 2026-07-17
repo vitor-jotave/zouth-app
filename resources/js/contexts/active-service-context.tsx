@@ -1,7 +1,7 @@
 import { usePage } from '@inertiajs/react';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 
-export type ServiceKey = 'catalogo' | 'atendimento' | 'membros';
+export type ServiceKey = 'catalogo' | 'atendimento';
 
 const STORAGE_KEY = 'zouth_active_service';
 
@@ -22,7 +22,9 @@ function initialService(): ServiceKey {
     if (typeof window === 'undefined') return 'catalogo';
     const fromUrl = serviceFromPath(window.location.pathname);
     if (fromUrl) return fromUrl;
-    return (localStorage.getItem(STORAGE_KEY) as ServiceKey | null) ?? 'catalogo';
+    return (
+        (localStorage.getItem(STORAGE_KEY) as ServiceKey | null) ?? 'catalogo'
+    );
 }
 
 interface ActiveServiceContextValue {
@@ -35,25 +37,28 @@ const ActiveServiceContext = createContext<ActiveServiceContextValue>({
     setActiveService: () => {},
 });
 
-export function ActiveServiceProvider({ children }: { children: React.ReactNode }) {
+export function ActiveServiceProvider({
+    children,
+}: {
+    children: React.ReactNode;
+}) {
     const { url } = usePage();
-    const [activeService, setActiveServiceState] = useState<ServiceKey>(initialService);
-
-    // React to Inertia soft-navigations: keep the service in sync with the URL
-    useEffect(() => {
-        const fromUrl = serviceFromPath(url);
-        if (fromUrl) {
-            setActiveServiceState(fromUrl);
-            localStorage.setItem(STORAGE_KEY, fromUrl);
-        }
-    }, [url]);
+    const [selectedService, setSelectedService] =
+        useState<ServiceKey>(initialService);
+    const activeService = serviceFromPath(url) ?? selectedService;
 
     function setActiveService(service: ServiceKey) {
-        setActiveServiceState(service);
+        setSelectedService(service);
         localStorage.setItem(STORAGE_KEY, service);
     }
 
-    return <ActiveServiceContext.Provider value={{ activeService, setActiveService }}>{children}</ActiveServiceContext.Provider>;
+    return (
+        <ActiveServiceContext.Provider
+            value={{ activeService, setActiveService }}
+        >
+            {children}
+        </ActiveServiceContext.Provider>
+    );
 }
 
 export function useActiveService() {

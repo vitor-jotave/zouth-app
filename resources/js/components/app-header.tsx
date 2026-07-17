@@ -50,8 +50,7 @@ const mainNavItems: NavItem[] = [
 
 const rightNavItems: NavItem[] = [];
 
-const activeItemStyles =
-    'text-neutral-900';
+const activeItemStyles = 'text-neutral-900';
 
 export function AppHeader({ breadcrumbs = [] }: Props) {
     const page = usePage<SharedData>();

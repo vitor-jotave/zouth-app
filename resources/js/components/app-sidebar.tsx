@@ -1,11 +1,8 @@
-import { useGSAP } from '@gsap/react';
 import { usePage } from '@inertiajs/react';
-import gsap from 'gsap';
 import {
     BookOpen,
     Building2,
     CreditCard,
-    Folder,
     LayoutGrid,
     Layers,
     MessageSquare,
@@ -17,7 +14,6 @@ import {
     UserCheck,
     Users,
 } from 'lucide-react';
-import { useRef } from 'react';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -30,25 +26,20 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { useActiveService } from '@/contexts/active-service-context';
+import admin from '@/routes/admin';
 import manufacturer from '@/routes/manufacturer';
-import type { NavItem } from '@/types';
+import rep from '@/routes/rep';
+import type { NavItem, SharedData } from '@/types';
 import AppLogo from './app-logo';
 
 function useDashboardUrl(): string {
-    const { auth } = usePage().props as any;
-    const user = auth?.user;
+    const { auth } = usePage<SharedData>().props;
 
-    if (user?.user_type === 'superadmin') {
-        return '/admin/dashboard';
-    } else if (user?.user_type === 'sales_rep') {
-        return '/rep/dashboard';
-    }
-
-    return '/dashboard';
+    return auth.dashboard_url ?? '/dashboard';
 }
 
 function useNavItems() {
-    const { auth } = usePage().props as any;
+    const { auth } = usePage<SharedData>().props;
     const user = auth?.user;
     const dashboardUrl = useDashboardUrl();
 
@@ -66,10 +57,14 @@ function useNavItems() {
                 ...common,
                 {
                     title: 'Fabricantes',
-                    href: '/admin/manufacturers',
+                    href: admin.manufacturers.index(),
                     icon: Building2,
                 },
-                { title: 'Planos', href: '/admin/plans', icon: CreditCard },
+                {
+                    title: 'Planos',
+                    href: admin.plans.index(),
+                    icon: CreditCard,
+                },
             ],
             catalogo: [] as NavItem[],
             atendimento: [] as NavItem[],
@@ -82,10 +77,14 @@ function useNavItems() {
                 ...common,
                 {
                     title: 'Fabricantes',
-                    href: '/rep/manufacturers',
+                    href: rep.manufacturers.index(),
                     icon: Building2,
                 },
-                { title: 'Pedidos', href: '/rep/orders', icon: ShoppingCart },
+                {
+                    title: 'Pedidos',
+                    href: rep.orders.index(),
+                    icon: ShoppingCart,
+                },
             ],
             catalogo: [] as NavItem[],
             atendimento: [] as NavItem[],
@@ -159,78 +158,8 @@ const footerNavItems: NavItem[] = [];
 export function AppSidebar() {
     const { common, catalogo, atendimento } = useNavItems();
     const { activeService } = useActiveService();
-    const catalogoRef = useRef<HTMLDivElement>(null);
-    const atendimentoRef = useRef<HTMLDivElement>(null);
-    const prevServiceRef = useRef<string>(activeService);
-    const isInitialRenderRef = useRef(true);
 
     const isManufacturerUser = catalogo.length > 0;
-
-    useGSAP(
-        () => {
-            if (!isManufacturerUser) return;
-
-            // On every mount: set correct visibility instantly, no animation
-            if (isInitialRenderRef.current) {
-                isInitialRenderRef.current = false;
-                gsap.set(catalogoRef.current, {
-                    display: activeService === 'atendimento' ? 'none' : 'block',
-                });
-                gsap.set(atendimentoRef.current, {
-                    display: activeService === 'atendimento' ? 'block' : 'none',
-                });
-                return;
-            }
-
-            // Service actually changed — animate
-            const prev = prevServiceRef.current;
-            if (prev === activeService) return;
-
-            const outRef =
-                prev === 'atendimento' ? atendimentoRef : catalogoRef;
-            const inRef =
-                activeService === 'atendimento' ? atendimentoRef : catalogoRef;
-            const outItems = outRef.current
-                ? Array.from(outRef.current.querySelectorAll('li'))
-                : [];
-            const inEl = inRef.current;
-
-            const revealIn = () => {
-                if (!inEl) return;
-                gsap.set(inEl, { display: 'block' });
-                gsap.fromTo(
-                    Array.from(inEl.querySelectorAll('li')),
-                    { x: 14, opacity: 0 },
-                    {
-                        x: 0,
-                        opacity: 1,
-                        stagger: 0.05,
-                        duration: 0.22,
-                        ease: 'power2.out',
-                    },
-                );
-                prevServiceRef.current = activeService;
-            };
-
-            if (outItems.length > 0) {
-                gsap.to(outItems, {
-                    x: -14,
-                    opacity: 0,
-                    stagger: 0.03,
-                    duration: 0.16,
-                    ease: 'power2.in',
-                    onComplete: () => {
-                        gsap.set(outRef.current, { display: 'none' });
-                        revealIn();
-                    },
-                });
-            } else {
-                gsap.set(outRef.current, { display: 'none' });
-                revealIn();
-            }
-        },
-        { dependencies: [activeService] },
-    );
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -248,14 +177,13 @@ export function AppSidebar() {
                 <NavMain items={common} />
 
                 {isManufacturerUser && (
-                    <>
-                        <div ref={catalogoRef}>
-                            <NavMain items={catalogo} />
-                        </div>
-                        <div ref={atendimentoRef} style={{ display: 'none' }}>
-                            <NavMain items={atendimento} />
-                        </div>
-                    </>
+                    <NavMain
+                        items={
+                            activeService === 'atendimento'
+                                ? atendimento
+                                : catalogo
+                        }
+                    />
                 )}
             </SidebarContent>
 

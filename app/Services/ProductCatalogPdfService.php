@@ -42,8 +42,11 @@ class ProductCatalogPdfService
         $pdfContent = $this->buildPdfFromJpegs($pagePaths);
         $fileName = 'catalogo-produtos-'.Str::slug($brandName).'-'.now()->format('Ymd-His').'-'.Str::lower(Str::random(6)).'.pdf';
         $path = 'whatsapp-product-catalogs/'.$fileName;
+        $disk = $this->catalogMediaDisk();
 
-        Storage::disk('public')->put($path, $pdfContent);
+        Storage::disk($disk)->put($path, $pdfContent, [
+            'ContentType' => 'application/pdf',
+        ]);
 
         foreach ($pagePaths as $pagePath) {
             @unlink($pagePath);
@@ -51,7 +54,7 @@ class ProductCatalogPdfService
 
         return [
             'path' => $path,
-            'url' => Storage::disk('public')->url($path),
+            'url' => Storage::disk($disk)->url($path),
             'file_name' => $fileName,
         ];
     }

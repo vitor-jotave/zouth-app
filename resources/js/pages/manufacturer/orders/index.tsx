@@ -23,12 +23,6 @@ import {
 import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem } from '@/types';
 
-interface OrderItem {
-    id: number;
-    product_name: string;
-    quantity: number;
-}
-
 interface Order {
     id: number;
     public_token: string;
@@ -46,7 +40,12 @@ interface Order {
 interface Paginated<T> {
     data: T[];
     links?: Array<{ url: string | null; label: string; active: boolean }>;
-    meta?: { total: number; current_page: number; last_page: number; links?: Array<{ url: string | null; label: string; active: boolean }> };
+    meta?: {
+        total: number;
+        current_page: number;
+        last_page: number;
+        links?: Array<{ url: string | null; label: string; active: boolean }>;
+    };
 }
 
 interface Props {
@@ -58,7 +57,10 @@ interface Props {
     statuses: Array<{ value: string; label: string }>;
 }
 
-const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+const statusVariant: Record<
+    string,
+    'default' | 'secondary' | 'destructive' | 'outline'
+> = {
     new: 'default',
     confirmed: 'secondary',
     preparing: 'outline',
@@ -95,7 +97,9 @@ export default function OrdersIndex({ orders, filters, statuses }: Props) {
             <div className="flex h-full flex-1 flex-col gap-4 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold tracking-tight">Pedidos</h1>
+                        <h1 className="text-2xl font-bold tracking-tight">
+                            Pedidos
+                        </h1>
                         <p className="text-sm text-muted-foreground">
                             Gerencie os pedidos recebidos
                         </p>
@@ -104,10 +108,10 @@ export default function OrdersIndex({ orders, filters, statuses }: Props) {
 
                 <div className="flex flex-col gap-3 rounded-lg border p-4">
                     <div className="relative">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
                             value={search}
-                            onChange={e => handleSearchChange(e.target.value)}
+                            onChange={(e) => handleSearchChange(e.target.value)}
                             placeholder="Buscar por nome, telefone, email ou numero"
                             className="pl-9"
                         />
@@ -115,14 +119,18 @@ export default function OrdersIndex({ orders, filters, statuses }: Props) {
                     <div className="flex flex-wrap gap-2">
                         <Select
                             value={filters.status || 'all'}
-                            onValueChange={v => updateFilters({ status: v === 'all' ? '' : v })}
+                            onValueChange={(v) =>
+                                updateFilters({ status: v === 'all' ? '' : v })
+                            }
                         >
                             <SelectTrigger className="w-[200px]">
                                 <SelectValue placeholder="Status" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="all">Todos os status</SelectItem>
-                                {statuses.map(s => (
+                                <SelectItem value="all">
+                                    Todos os status
+                                </SelectItem>
+                                {statuses.map((s) => (
                                     <SelectItem key={s.value} value={s.value}>
                                         {s.label}
                                     </SelectItem>
@@ -142,48 +150,69 @@ export default function OrdersIndex({ orders, filters, statuses }: Props) {
                                 <TableHead>Itens</TableHead>
                                 <TableHead>Ref</TableHead>
                                 <TableHead>Data</TableHead>
-                                <TableHead className="text-right">Acoes</TableHead>
+                                <TableHead className="text-right">
+                                    Acoes
+                                </TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {orders.data.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={7} className="py-10 text-center">
+                                    <TableCell
+                                        colSpan={7}
+                                        className="py-10 text-center"
+                                    >
                                         <div className="flex flex-col items-center gap-2">
                                             <Package className="h-8 w-8 text-muted-foreground" />
-                                            <p className="text-muted-foreground">Nenhum pedido encontrado.</p>
+                                            <p className="text-muted-foreground">
+                                                Nenhum pedido encontrado.
+                                            </p>
                                         </div>
                                     </TableCell>
                                 </TableRow>
                             )}
-                            {orders.data.map(order => (
+                            {orders.data.map((order) => (
                                 <TableRow key={order.id}>
                                     <TableCell className="font-mono text-xs">
                                         #{order.id}
                                     </TableCell>
                                     <TableCell>
                                         <div>
-                                            <p className="font-medium">{order.customer_name}</p>
+                                            <p className="font-medium">
+                                                {order.customer_name}
+                                            </p>
                                             <p className="text-xs text-muted-foreground">
-                                                {order.customer_phone ?? order.customer_email}
+                                                {order.customer_phone ??
+                                                    order.customer_email}
                                             </p>
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant={statusVariant[order.status] ?? 'outline'}>
+                                        <Badge
+                                            variant={
+                                                statusVariant[order.status] ??
+                                                'outline'
+                                            }
+                                        >
                                             {order.status_label}
                                         </Badge>
                                     </TableCell>
                                     <TableCell>{order.total_items}</TableCell>
                                     <TableCell>
                                         {order.tracking_ref ? (
-                                            <span className="text-xs text-muted-foreground">{order.tracking_ref}</span>
+                                            <span className="text-xs text-muted-foreground">
+                                                {order.tracking_ref}
+                                            </span>
                                         ) : (
-                                            <span className="text-xs text-muted-foreground">-</span>
+                                            <span className="text-xs text-muted-foreground">
+                                                -
+                                            </span>
                                         )}
                                     </TableCell>
                                     <TableCell className="text-xs text-muted-foreground">
-                                        {new Date(order.created_at).toLocaleDateString('pt-BR', {
+                                        {new Date(
+                                            order.created_at,
+                                        ).toLocaleDateString('pt-BR', {
                                             day: '2-digit',
                                             month: 'short',
                                             hour: '2-digit',
@@ -191,7 +220,9 @@ export default function OrdersIndex({ orders, filters, statuses }: Props) {
                                         })}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Link href={`/manufacturer/orders/${order.id}`}>
+                                        <Link
+                                            href={`/manufacturer/orders/${order.id}`}
+                                        >
                                             <Button variant="outline" size="sm">
                                                 Ver
                                             </Button>

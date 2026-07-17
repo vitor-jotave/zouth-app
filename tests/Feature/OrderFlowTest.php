@@ -10,7 +10,10 @@ use App\Models\OrderItem;
 use App\Models\OrderStatusHistory;
 use App\Models\Plan;
 use App\Models\Product;
+use App\Models\ProductVariantStock;
+use App\Models\ProductVariation;
 use App\Models\User;
+use App\Models\VariationType;
 
 // ──────────────────────────────────────────────
 // Setup
@@ -115,8 +118,123 @@ it('creates an order via the public catalog endpoint', function () {
 
     // Should have initial status history entry
     expect(OrderStatusHistory::where('order_id', $order->id)->count())->toBe(1);
+    expect($order->inventory_reserved_at)->not->toBeNull();
+    expect($this->product1->fresh()->base_quantity)->toBe(18);
+    expect($this->product2->fresh()->base_quantity)->toBe(19);
 
     $response->assertRedirect(route('public.order.show', $order->public_token));
+});
+
+it('reserves the selected variant stock and snapshots its price and options', function () {
+    $variationType = VariationType::factory()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'name' => 'Estampa',
+    ]);
+    ProductVariation::create([
+        'product_id' => $this->product1->id,
+        'variation_type_id' => $variationType->id,
+    ]);
+    $this->product1->update(['base_quantity' => 0, 'price_cents' => 1290]);
+    $variantStock = ProductVariantStock::factory()->create([
+        'product_id' => $this->product1->id,
+        'variation_key' => ['Estampa' => 'Bolinhas'],
+        'quantity' => 3,
+        'price_cents' => 1590,
+    ]);
+
+    $this->post(
+        "/catalog/{$this->catalogSetting->public_token}/orders",
+        ($this->validCustomerData)([
+            'items' => [[
+                'product_id' => $this->product1->id,
+                'quantity' => 2,
+                'selected_variations' => ['Estampa' => 'Bolinhas'],
+            ]],
+        ]),
+    )->assertRedirect();
+
+    $item = OrderItem::first();
+
+    expect($variantStock->fresh()->quantity)->toBe(1)
+        ->and($item->product_variant_stock_id)->toBe($variantStock->id)
+        ->and($item->selected_variations)->toBe(['Estampa' => 'Bolinhas'])
+        ->and((float) $item->unit_price)->toBe(15.90);
+});
+
+it('rejects an order when the requested stock is unavailable', function () {
+    $this->product1->update(['base_quantity' => 1]);
+
+    $this->post(
+        "/catalog/{$this->catalogSetting->public_token}/orders",
+        ($this->validCustomerData)([
+            'items' => [['product_id' => $this->product1->id, 'quantity' => 2]],
+        ]),
+    )->assertSessionHasErrors('items');
+
+    expect(Order::count())->toBe(0)
+        ->and($this->product1->fresh()->base_quantity)->toBe(1);
+});
+
+it('returns reserved stock when an order is cancelled', function () {
+    $this->post(
+        "/catalog/{$this->catalogSetting->public_token}/orders",
+        ($this->validCustomerData)([
+            'items' => [['product_id' => $this->product1->id, 'quantity' => 4]],
+        ]),
+    )->assertRedirect();
+
+    $order = Order::firstOrFail();
+    expect($this->product1->fresh()->base_quantity)->toBe(16);
+
+    $this->actingAs($this->owner)
+        ->post("/manufacturer/orders/{$order->id}/status", ['status' => 'cancelled'])
+        ->assertRedirect();
+
+    expect($this->product1->fresh()->base_quantity)->toBe(20)
+        ->and($order->fresh()->inventory_released_at)->not->toBeNull();
+});
+
+it('restores a recreated variation stock without changing base stock', function () {
+    $variationType = VariationType::factory()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'name' => 'Estampa',
+    ]);
+    ProductVariation::create([
+        'product_id' => $this->product1->id,
+        'variation_type_id' => $variationType->id,
+    ]);
+    $this->product1->update(['base_quantity' => 0]);
+    $originalStock = ProductVariantStock::factory()->create([
+        'product_id' => $this->product1->id,
+        'variation_key' => ['Estampa' => 'Bolinhas'],
+        'quantity' => 3,
+    ]);
+
+    $this->post(
+        "/catalog/{$this->catalogSetting->public_token}/orders",
+        ($this->validCustomerData)([
+            'items' => [[
+                'product_id' => $this->product1->id,
+                'quantity' => 2,
+                'selected_variations' => ['Estampa' => 'Bolinhas'],
+            ]],
+        ]),
+    )->assertRedirect();
+
+    $order = Order::firstOrFail();
+    $originalStock->delete();
+    $replacementStock = ProductVariantStock::factory()->create([
+        'product_id' => $this->product1->id,
+        'variation_key' => ['Estampa' => 'Bolinhas'],
+        'quantity' => 5,
+    ]);
+
+    $this->actingAs($this->owner)
+        ->post("/manufacturer/orders/{$order->id}/status", ['status' => 'cancelled'])
+        ->assertRedirect();
+
+    expect($replacementStock->fresh()->quantity)->toBe(7)
+        ->and($this->product1->fresh()->base_quantity)->toBe(0);
 });
 
 it('creates a public order for a juridical person with cnpj', function () {
@@ -189,6 +307,24 @@ it('requires at least phone or email', function () {
     ]));
 
     $response->assertSessionHasErrors(['customer_phone', 'customer_email']);
+});
+
+it('returns a visible limit error when the manufacturer has no active subscription', function () {
+    $this->manufacturer->currentPlan->update([
+        'stripe_price_id' => 'price_requires_active_subscription',
+    ]);
+
+    $response = $this->post(
+        "/catalog/{$this->catalogSetting->public_token}/orders",
+        ($this->validCustomerData)([
+            'items' => [['product_id' => $this->product1->id, 'quantity' => 1]],
+        ]),
+    );
+
+    $response->assertSessionHasErrors([
+        'limit' => 'Este catálogo não está disponível para novos pedidos no momento. Tente novamente mais tarde.',
+    ]);
+    expect(Order::count())->toBe(0);
 });
 
 it('accepts order with email only (no phone)', function () {
@@ -277,6 +413,12 @@ it('associates sales rep when ref query param matches an active affiliation', fu
 
 it('shows order tracking page for a valid token', function () {
     $order = Order::factory()->forManufacturer($this->manufacturer)->create();
+    OrderStatusHistory::create([
+        'order_id' => $order->id,
+        'from_status' => OrderStatus::New,
+        'to_status' => OrderStatus::Confirmed,
+        'changed_by_user_id' => $this->owner->id,
+    ]);
     OrderItem::factory()->create([
         'order_id' => $order->id,
         'unit_price' => '129.90',
@@ -297,6 +439,8 @@ it('shows order tracking page for a valid token', function () {
         ->where('order.public_token', $order->public_token)
         ->where('order.total_items', 5)
         ->where('order.total_amount', '499.50')
+        ->has('order.status_history', 1)
+        ->missing('order.status_history.0.changed_by')
     );
 });
 
@@ -352,6 +496,12 @@ it('searches orders by customer name', function () {
 
 it('shows a specific order belonging to the manufacturer', function () {
     $order = Order::factory()->forManufacturer($this->manufacturer)->create();
+    OrderStatusHistory::create([
+        'order_id' => $order->id,
+        'from_status' => OrderStatus::New,
+        'to_status' => OrderStatus::Confirmed,
+        'changed_by_user_id' => $this->owner->id,
+    ]);
     OrderItem::factory()->create([
         'order_id' => $order->id,
         'unit_price' => '129.90',
@@ -372,6 +522,7 @@ it('shows a specific order belonging to the manufacturer', function () {
         ->where('order.id', $order->id)
         ->where('order.total_items', 5)
         ->where('order.total_amount', '499.50')
+        ->where('order.status_history.0.changed_by', $this->owner->name)
     );
 });
 

@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Manufacturer;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ChangeSubscriptionPlanRequest;
 use App\Models\Plan;
 use App\Services\PlanLimitService;
 use App\Services\TenantManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\URL;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -45,12 +47,11 @@ class BillingController extends Controller
                 'max_users' => $plan->max_users,
                 'max_data_mb' => $plan->max_data_mb,
                 'max_files_gb' => $plan->max_files_gb,
-                'allow_csv_import' => $plan->allow_csv_import,
                 'has_stripe' => $plan->stripe_price_id !== null,
             ]);
 
         $subscription = $manufacturer->subscription('default');
-        $currentPlan = $manufacturer->currentPlan;
+        $currentPlan = $this->limitService->activePlan($manufacturer);
 
         return Inertia::render('manufacturer/billing/index', [
             'plans' => $plans,
@@ -62,7 +63,7 @@ class BillingController extends Controller
                 'ends_at' => $subscription->ends_at?->toDateTimeString(),
                 'on_grace_period' => $subscription->onGracePeriod(),
                 'cancelled' => $subscription->canceled(),
-                'active' => $subscription->active(),
+                'active' => $this->limitService->subscriptionGrantsAccess($subscription),
             ] : null,
             'usage' => $this->limitService->usage($manufacturer),
         ]);
@@ -102,7 +103,11 @@ class BillingController extends Controller
         }
 
         return $subscriptionBuilder->checkout([
-            'success_url' => route('manufacturer.billing.checkout.success', $plan),
+            'success_url' => URL::temporarySignedRoute(
+                'manufacturer.billing.checkout.success',
+                now()->addHour(),
+                ['plan' => $plan->id],
+            ),
             'cancel_url' => route('manufacturer.billing.index'),
         ])->redirect();
     }
@@ -110,36 +115,32 @@ class BillingController extends Controller
     /**
      * Handle the return from a successful Stripe Checkout session.
      */
-    public function checkoutSuccess(Plan $plan): RedirectResponse
+    public function checkoutSuccess(Request $request, Plan $plan): RedirectResponse
     {
+        abort_unless($request->hasValidSignature(), 403);
+
         $manufacturer = $this->tenantManager->get();
 
         if (! $manufacturer) {
             abort(403);
         }
 
-        $manufacturer->update(['current_plan_id' => $plan->id]);
-
         return redirect()->route('manufacturer.billing.index')
-            ->with('success', 'Assinatura realizada com sucesso! Bem-vindo ao plano '.$plan->name.'.');
+            ->with('success', 'Checkout recebido. O plano '.$plan->name.' será liberado automaticamente após a confirmação do Stripe.');
     }
 
     /**
      * Swap to a different plan.
      */
-    public function swap(Request $request): RedirectResponse
+    public function swap(ChangeSubscriptionPlanRequest $request): RedirectResponse
     {
-        $request->validate([
-            'plan_id' => ['required', 'exists:plans,id'],
-        ]);
-
         $manufacturer = $this->tenantManager->get();
 
         if (! $manufacturer) {
             abort(403);
         }
 
-        $plan = Plan::findOrFail($request->plan_id);
+        $plan = Plan::query()->findOrFail($request->integer('plan_id'));
 
         if (! $plan->stripe_price_id) {
             return back()->withErrors(['plan_id' => 'Este plano ainda não está configurado para assinaturas.']);
@@ -147,7 +148,7 @@ class BillingController extends Controller
 
         $subscription = $manufacturer->subscription('default');
 
-        if (! $subscription || ! $subscription->active()) {
+        if (! $this->limitService->subscriptionGrantsAccess($subscription)) {
             return back()->withErrors(['plan_id' => 'Você não possui uma assinatura ativa.']);
         }
 
@@ -161,28 +162,22 @@ class BillingController extends Controller
 
         $subscription->swap($plan->stripe_price_id);
 
-        $manufacturer->update(['current_plan_id' => $plan->id]);
-
         return redirect()->route('manufacturer.billing.index')
-            ->with('success', 'Plano alterado com sucesso!');
+            ->with('success', 'Alteração enviada ao Stripe. O novo plano será liberado após a confirmação.');
     }
 
     /**
      * Upgrade to a higher plan and redirect back to continue the user's action.
      */
-    public function upgrade(Request $request): RedirectResponse
+    public function upgrade(ChangeSubscriptionPlanRequest $request): RedirectResponse
     {
-        $request->validate([
-            'plan_id' => ['required', 'exists:plans,id'],
-        ]);
-
         $manufacturer = $this->tenantManager->get();
 
         if (! $manufacturer) {
             abort(403);
         }
 
-        $plan = Plan::findOrFail($request->plan_id);
+        $plan = Plan::query()->findOrFail($request->integer('plan_id'));
 
         if (! $plan->stripe_price_id) {
             return back()->withErrors(['plan_id' => 'Este plano ainda não está configurado para assinaturas.']);
@@ -190,15 +185,22 @@ class BillingController extends Controller
 
         $subscription = $manufacturer->subscription('default');
 
-        if (! $subscription || ! $subscription->active()) {
+        if (! $this->limitService->subscriptionGrantsAccess($subscription)) {
             return back()->withErrors(['plan_id' => 'Você não possui uma assinatura ativa.']);
+        }
+
+        $currentPlan = $this->limitService->activePlan($manufacturer);
+
+        if (! $currentPlan || $plan->sort_order <= $currentPlan->sort_order) {
+            return back()->withErrors(['plan_id' => 'Selecione um plano superior ao seu plano atual.']);
         }
 
         $subscription->swap($plan->stripe_price_id);
 
-        $manufacturer->update(['current_plan_id' => $plan->id]);
-
-        return back()->with('upgrade_success', ['plan_name' => $plan->name]);
+        return back()->with('upgrade_success', [
+            'plan_name' => $plan->name,
+            'pending_confirmation' => true,
+        ]);
     }
 
     /**

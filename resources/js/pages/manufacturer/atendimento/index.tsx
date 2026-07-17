@@ -84,7 +84,7 @@ interface WhatsappFunnelStep {
     id: number;
     type: 'wait' | 'text' | 'audio' | 'product';
     sort_order: number;
-    payload: Record<string, any>;
+    payload: Record<string, string | number | boolean | null | undefined>;
 }
 
 interface WhatsappFunnel {
@@ -223,9 +223,9 @@ function funnelStepLabel(step: WhatsappFunnelStep): string {
         case 'wait':
             return `Aguardar ${step.payload.seconds ?? 1}s`;
         case 'text':
-            return step.payload.body ?? 'Mensagem de texto';
+            return String(step.payload.body ?? 'Mensagem de texto');
         case 'audio':
-            return step.payload.file_name ?? 'Enviar áudio';
+            return String(step.payload.file_name ?? 'Enviar áudio');
         case 'product':
             return 'Enviar produto';
         default:

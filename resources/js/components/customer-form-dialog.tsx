@@ -67,16 +67,17 @@ const onlyDigits = (value: string) => value.replace(/\D/g, '');
 export function CustomerFormDialog({ open, onOpenChange, customer }: Props) {
     const isEditing = Boolean(customer);
     const form = useForm(emptyForm);
+    const { clearErrors, setData } = form;
 
     useEffect(() => {
         if (!open) {
             return;
         }
 
-        form.clearErrors();
+        clearErrors();
 
         if (customer) {
-            form.setData({
+            setData({
                 name: customer.name,
                 phone: customer.phone ?? '',
                 email: customer.email ?? '',
@@ -92,9 +93,9 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: Props) {
                 address_reference: customer.address_reference ?? '',
             });
         } else {
-            form.setData(emptyForm);
+            setData(emptyForm);
         }
-    }, [open, customer]);
+    }, [clearErrors, customer, open, setData]);
 
     const submit = (event: FormEvent) => {
         event.preventDefault();

@@ -3,6 +3,8 @@
 use App\Models\Manufacturer;
 use App\Models\Plan;
 use App\Models\User;
+use Illuminate\Support\Facades\Schema;
+use Inertia\Testing\AssertableInertia as Assert;
 
 function createSuperadmin(): User
 {
@@ -43,7 +45,48 @@ test('superadmin can view plans index', function () {
 
     $this->actingAs(createSuperadmin())
         ->get(route('admin.plans.index'))
-        ->assertOk();
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('plans', 3)
+            ->missing('plans.0.allow_csv_import')
+        );
+});
+
+test('plans schema keeps the legacy csv column for rollback compatibility', function () {
+    expect(Schema::hasColumn('plans', 'allow_csv_import'))->toBeTrue();
+});
+
+test('plans index counts only subscriptions that grant access', function () {
+    $this->withoutVite();
+
+    $plan = Plan::factory()->withStripe()->create(['sort_order' => 1]);
+    $otherPlan = Plan::factory()->withStripe()->create(['sort_order' => 2]);
+
+    $activeManufacturer = Manufacturer::factory()->create(['current_plan_id' => $plan->id]);
+    $trialingManufacturer = Manufacturer::factory()->create(['current_plan_id' => $plan->id]);
+    $pastDueManufacturer = Manufacturer::factory()->create(['current_plan_id' => $plan->id]);
+    Manufacturer::factory()->create(['current_plan_id' => $plan->id]);
+
+    foreach ([
+        [$activeManufacturer, 'active'],
+        [$trialingManufacturer, 'trialing'],
+        [$pastDueManufacturer, 'past_due'],
+    ] as [$manufacturer, $status]) {
+        $manufacturer->subscriptions()->create([
+            'type' => 'default',
+            'stripe_id' => 'sub_'.strtolower($status),
+            'stripe_status' => $status,
+            'stripe_price' => $plan->stripe_price_id,
+        ]);
+    }
+
+    $this->actingAs(createSuperadmin())
+        ->get(route('admin.plans.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('plans.0.id', $plan->id)
+            ->where('plans.0.subscribers_count', 2)
+            ->where('plans.1.id', $otherPlan->id)
+            ->where('plans.1.subscribers_count', 0)
+        );
 });
 
 test('superadmin can view create plan page', function () {
@@ -69,7 +112,6 @@ test('superadmin can create a plan', function () {
             'max_users' => 3,
             'max_data_mb' => 500,
             'max_files_gb' => 1,
-            'allow_csv_import' => false,
         ])
         ->assertRedirect(route('admin.plans.index'));
 
@@ -79,7 +121,6 @@ test('superadmin can create a plan', function () {
     expect($plan->trial_days)->toBe(7);
     expect($plan->max_reps)->toBe(5);
     expect($plan->max_products)->toBe(50);
-    expect($plan->allow_csv_import)->toBeFalse();
 });
 
 test('superadmin can create a plan with decimal dot price', function () {
@@ -90,13 +131,11 @@ test('superadmin can create a plan with decimal dot price', function () {
             'is_active' => true,
             'sort_order' => 0,
             'trial_days' => 0,
-            'allow_csv_import' => true,
         ])
         ->assertRedirect(route('admin.plans.index'));
 
     $plan = Plan::where('name', 'Dot Plan')->first();
     expect($plan->monthly_price_cents)->toBe(9990);
-    expect($plan->allow_csv_import)->toBeTrue();
 });
 
 test('superadmin can create a plan with unlimited limits', function () {
@@ -107,7 +146,6 @@ test('superadmin can create a plan with unlimited limits', function () {
             'is_active' => true,
             'sort_order' => 0,
             'trial_days' => 0,
-            'allow_csv_import' => true,
             'max_reps' => null,
             'max_products' => null,
             'max_orders_per_month' => null,
@@ -129,7 +167,6 @@ test('plan creation requires a name', function () {
             'is_active' => true,
             'sort_order' => 0,
             'trial_days' => 0,
-            'allow_csv_import' => false,
         ])
         ->assertSessionHasErrors('name');
 });
@@ -141,7 +178,6 @@ test('plan creation requires a price', function () {
             'is_active' => true,
             'sort_order' => 0,
             'trial_days' => 0,
-            'allow_csv_import' => false,
         ])
         ->assertSessionHasErrors('monthly_price');
 });
@@ -153,7 +189,10 @@ test('superadmin can view edit plan page', function () {
 
     $this->actingAs(createSuperadmin())
         ->get(route('admin.plans.edit', $plan))
-        ->assertOk();
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('plan.id', $plan->id)
+            ->missing('plan.allow_csv_import')
+        );
 });
 
 test('superadmin can update a plan', function () {
@@ -171,7 +210,6 @@ test('superadmin can update a plan', function () {
             'trial_days' => 14,
             'max_reps' => 10,
             'max_products' => 100,
-            'allow_csv_import' => true,
         ])
         ->assertRedirect(route('admin.plans.index'));
 
@@ -180,7 +218,6 @@ test('superadmin can update a plan', function () {
     expect($plan->monthly_price_cents)->toBe(7990);
     expect($plan->trial_days)->toBe(14);
     expect($plan->max_reps)->toBe(10);
-    expect($plan->allow_csv_import)->toBeTrue();
 });
 
 test('superadmin can toggle plan active status', function () {
@@ -209,7 +246,6 @@ test('manufacturer user cannot create a plan', function () {
             'is_active' => true,
             'sort_order' => 0,
             'trial_days' => 0,
-            'allow_csv_import' => false,
         ])
         ->assertForbidden();
 });

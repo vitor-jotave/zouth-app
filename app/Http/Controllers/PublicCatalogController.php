@@ -8,6 +8,7 @@ use App\Models\CatalogSetting;
 use App\Models\CatalogVisit;
 use App\Models\Product;
 use App\Models\ProductCategory;
+use App\Models\ProductVariantStock;
 use App\Models\VariationType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -92,18 +93,12 @@ class PublicCatalogController extends Controller
                         continue;
                     }
 
-                    $query->where(function ($variationQuery) use ($typeId, $typeName, $values) {
-                        $variationQuery
-                            ->whereHas('variantStocks', function ($stockQuery) use ($typeName, $values) {
-                                $stockQuery->whereIn("variation_key->{$typeName}", $values);
-                            })
-                            ->orWhereHas('productVariations', function ($productVariationQuery) use ($typeId, $values) {
-                                $productVariationQuery
-                                    ->where('variation_type_id', $typeId)
-                                    ->whereHas('variationType.values', function ($valueQuery) use ($values) {
-                                        $valueQuery->whereIn('value', $values);
-                                    });
-                            });
+                    $query->where(function ($variationQuery) use ($typeName, $values) {
+                        $variationQuery->whereHas('variantStocks', function ($stockQuery) use ($typeName, $values) {
+                            $stockQuery
+                                ->where('quantity', '>', 0)
+                                ->whereIn("variation_key->{$typeName}", $values);
+                        });
                     });
                 }
             })
@@ -230,6 +225,15 @@ class PublicCatalogController extends Controller
      */
     private function buildFilterOptions(CatalogSetting $setting): array
     {
+        $activeVariantStocks = ProductVariantStock::query()
+            ->where('quantity', '>', 0)
+            ->whereHas('product', function ($query) use ($setting) {
+                $query->where('manufacturer_id', $setting->manufacturer_id)
+                    ->where('is_active', true)
+                    ->where('product_type', 'product');
+            })
+            ->get(['variation_key']);
+
         $categories = ProductCategory::query()
             ->where('manufacturer_id', $setting->manufacturer_id)
             ->whereHas('products', function ($query) use ($setting) {
@@ -255,8 +259,15 @@ class PublicCatalogController extends Controller
             ->orderBy('display_order')
             ->orderBy('name')
             ->get()
-            ->map(function (VariationType $type) {
+            ->map(function (VariationType $type) use ($activeVariantStocks) {
+                $usedValues = $activeVariantStocks
+                    ->map(fn (ProductVariantStock $stock) => data_get($stock->variation_key, $type->name))
+                    ->filter()
+                    ->map(fn (mixed $value) => (string) $value)
+                    ->unique();
+
                 $values = $type->values
+                    ->filter(fn ($value) => $usedValues->contains($value->value))
                     ->sortBy([
                         ['display_order', 'asc'],
                         ['value', 'asc'],

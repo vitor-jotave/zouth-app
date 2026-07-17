@@ -45,6 +45,8 @@ class StorePublicOrderRequest extends FormRequest
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:9999'],
             'items.*.size' => ['nullable', 'string', 'max:10'],
             'items.*.color' => ['nullable', 'string', 'max:50'],
+            'items.*.selected_variations' => ['nullable', 'array', 'max:20'],
+            'items.*.selected_variations.*' => ['required', 'string', 'max:100'],
         ];
     }
 

@@ -171,6 +171,7 @@ it('falls back to a text message when photo is not selected or unavailable', fun
 });
 
 it('sends multiple selected products as a formatted pdf document', function () {
+    config(['filesystems.catalog_media_disk' => 's3']);
     Storage::fake('public');
     Storage::fake('s3');
     [$user, $manufacturer, $instance, $conversation] = createWhatsappProductTestContext();
@@ -245,7 +246,8 @@ it('sends multiple selected products as a formatted pdf document', function () {
 
     expect($message->body)->toContain('2 produtos selecionados');
     expect($message->media_file_name)->toEndWith('.pdf');
-    expect(Storage::disk('public')->exists('whatsapp-product-catalogs/'.$message->media_file_name))->toBeTrue();
+    expect(Storage::disk('s3')->exists('whatsapp-product-catalogs/'.$message->media_file_name))->toBeTrue();
+    expect(Storage::disk('public')->exists('whatsapp-product-catalogs/'.$message->media_file_name))->toBeFalse();
 });
 
 it('returns a controlled error when the product pdf cannot be generated', function () {

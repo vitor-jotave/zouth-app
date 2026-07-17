@@ -1,10 +1,8 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { Edit, Search, UserPlus, Users } from 'lucide-react';
 import { useState } from 'react';
-import {
-    CustomerFormData,
-    CustomerFormDialog,
-} from '@/components/customer-form-dialog';
+import type { CustomerFormData } from '@/components/customer-form-dialog';
+import { CustomerFormDialog } from '@/components/customer-form-dialog';
 import { Pagination } from '@/components/pagination';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

@@ -72,7 +72,9 @@ export default function Profile({
                                 </div>
 
                                 <div className="grid gap-2">
-                                    <Label htmlFor="email">Endereço de email</Label>
+                                    <Label htmlFor="email">
+                                        Endereço de email
+                                    </Label>
 
                                     <Input
                                         id="email"
@@ -95,7 +97,8 @@ export default function Profile({
                                     auth.user.email_verified_at === null && (
                                         <div>
                                             <p className="-mt-4 text-sm text-muted-foreground">
-                                                Seu endereço de email não está verificado.{' '}
+                                                Seu endereço de email não está
+                                                verificado.{' '}
                                                 <Link
                                                     href={send()}
                                                     as="button"
@@ -109,8 +112,9 @@ export default function Profile({
                                             {status ===
                                                 'verification-link-sent' && (
                                                 <div className="mt-2 text-sm font-medium text-green-600">
-                                                    Um novo link de verificação foi
-                                                    enviado para seu endereço de email.
+                                                    Um novo link de verificação
+                                                    foi enviado para seu
+                                                    endereço de email.
                                                 </div>
                                             )}
                                         </div>

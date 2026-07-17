@@ -18,8 +18,12 @@ class EvolutionWebhookController extends Controller
     public function handle(Request $request, string $instanceName): JsonResponse
     {
         $apiKey = $request->header('apikey');
+        $configuredApiKey = config('evolution.api_key');
 
-        if ($apiKey !== config('evolution.api_key')) {
+        if (! is_string($configuredApiKey)
+            || $configuredApiKey === ''
+            || ! is_string($apiKey)
+            || ! hash_equals($configuredApiKey, $apiKey)) {
             Log::warning('Evolution webhook: invalid API key', ['instance' => $instanceName]);
 
             return response()->json(['error' => 'Unauthorized'], 401);
@@ -133,6 +137,17 @@ class EvolutionWebhookController extends Controller
             ]
         );
 
+        if (! $message->wasRecentlyCreated) {
+            if ($message->whatsapp_conversation_id !== $conversation->id) {
+                Log::warning('Evolution webhook: message ID already belongs to another conversation', [
+                    'instance' => $instance->instance_name,
+                    'message_id' => $messageId,
+                ]);
+            }
+
+            return;
+        }
+
         // Update conversation's last message
         $conversation->update([
             'last_message_body' => $body,
@@ -171,7 +186,10 @@ class EvolutionWebhookController extends Controller
             return;
         }
 
-        WhatsappMessage::where('message_id', $messageId)->update(['status' => $newStatus]);
+        WhatsappMessage::query()
+            ->where('message_id', $messageId)
+            ->whereHas('conversation', fn ($query) => $query->where('whatsapp_instance_id', $instance->id))
+            ->update(['status' => $newStatus]);
     }
 
     /**

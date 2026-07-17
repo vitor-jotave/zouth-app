@@ -26,7 +26,11 @@ interface Props {
     processing?: boolean;
 }
 
-export default function Index({ manufacturers, filters, processing = false }: Props) {
+export default function Index({
+    manufacturers,
+    filters,
+    processing = false,
+}: Props) {
     const hasManufacturers = manufacturers.data.length > 0;
     const hasActiveFilters =
         filters.search ||
@@ -73,7 +77,8 @@ export default function Index({ manufacturers, filters, processing = false }: Pr
                                 <Button
                                     variant="outline"
                                     onClick={() => {
-                                        window.location.href = '/rep/manufacturers';
+                                        window.location.href =
+                                            '/rep/manufacturers';
                                     }}
                                 >
                                     Limpar filtros

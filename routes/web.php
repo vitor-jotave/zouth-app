@@ -6,8 +6,11 @@ use App\Http\Controllers\Admin\PlanController;
 use App\Http\Controllers\AffiliationController;
 use App\Http\Controllers\CatalogSettingsController;
 use App\Http\Controllers\EvolutionWebhookController;
+use App\Http\Controllers\Health\ReadinessController;
+use App\Http\Controllers\LegalController;
 use App\Http\Controllers\Manufacturer\BillingController;
 use App\Http\Controllers\Manufacturer\CustomerController as ManufacturerCustomerController;
+use App\Http\Controllers\Manufacturer\DashboardController as ManufacturerDashboardController;
 use App\Http\Controllers\Manufacturer\OrderController as ManufacturerOrderController;
 use App\Http\Controllers\Manufacturer\ProductComboController;
 use App\Http\Controllers\Manufacturer\UserController as ManufacturerUserController;
@@ -31,8 +34,23 @@ use Laravel\Fortify\Features;
 Route::get('/', function () {
     return Inertia::render('homepage', [
         'canRegister' => Features::enabled(Features::registration()),
+        'commercial' => [
+            'salesContactUrl' => config('commercial.sales_contact_url'),
+            'demoCatalogUrl' => config('commercial.demo_catalog_url'),
+        ],
     ]);
 })->name('home');
+
+Route::get('health/live', fn () => response()->json(['status' => 'ok']))
+    ->name('health.live');
+Route::get('health/ready', ReadinessController::class)
+    ->name('health.ready');
+
+Route::controller(LegalController::class)->prefix('legal')->name('legal.')->group(function () {
+    Route::get('termos', 'terms')->name('terms');
+    Route::get('privacidade', 'privacy')->name('privacy');
+    Route::get('lgpd', 'lgpd')->name('lgpd');
+});
 
 Route::get('catalog/{token}', [PublicCatalogController::class, 'show'])
     ->middleware('throttle:60,1')
@@ -47,6 +65,7 @@ Route::get('o/{publicToken}', [PublicOrderController::class, 'show'])
     ->name('public.order.show');
 
 Route::post('webhooks/evolution/{instanceName}', [EvolutionWebhookController::class, 'handle'])
+    ->middleware('throttle:evolution-webhook')
     ->name('webhooks.evolution');
 
 // Public plan selection routes (secured via signed URLs)
@@ -61,9 +80,7 @@ Route::controller(PlanSelectionController::class)
 
 // Manufacturer User Routes (tenant via session)
 Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function () {
-    Route::get('dashboard', function () {
-        return Inertia::render('dashboard');
-    })->name('dashboard');
+    Route::get('dashboard', ManufacturerDashboardController::class)->name('dashboard');
 
     Route::controller(ManufacturerUserController::class)->prefix('users')->name('users.')->group(function () {
         Route::get('/', 'index')->name('index');
