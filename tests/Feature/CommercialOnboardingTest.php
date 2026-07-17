@@ -18,6 +18,19 @@ test('homepage exposes configured commercial links', function () {
         );
 });
 
+test('homepage falls back to the sales contact when demo catalog url is blank', function () {
+    config()->set('commercial.sales_contact_url', 'mailto:comercial@example.com');
+    config()->set('commercial.demo_catalog_url', '');
+
+    $this->get('/')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('homepage')
+            ->where('commercial.salesContactUrl', 'mailto:comercial@example.com')
+            ->where('commercial.demoCatalogUrl', null)
+        );
+});
+
 test('homepage exposes the dashboard URL for each authenticated profile', function (string $userType, string $routeName) {
     $this->withoutVite();
 
