@@ -64,13 +64,60 @@ test('manufacturer user can create an instance', function () {
         ->post('/manufacturer/atendimento/instances', [
             'instance_name' => 'test-instance',
         ])
-        ->assertRedirect();
+        ->assertRedirect()
+        ->assertSessionHas('status', 'Instância criada. Escaneie o QR Code com seu WhatsApp.');
 
     $this->assertDatabaseHas('whatsapp_instances', [
         'manufacturer_id' => $manufacturer->id,
         'instance_name' => 'test-instance',
         'status' => 'connecting',
     ]);
+});
+
+test('instance creation reports a remote name conflict', function () {
+    [$user, $manufacturer] = createWhatsappTestManufacturer();
+
+    $mock = $this->mock(EvolutionApiService::class);
+    $mock->shouldReceive('createInstance')
+        ->once()
+        ->andReturn(new \Illuminate\Http\Client\Response(
+            new \GuzzleHttp\Psr7\Response(403, [], json_encode([
+                'response' => [
+                    'message' => ['This name "test-instance" is already in use.'],
+                ],
+            ]))
+        ));
+
+    $this->actingAs($user)
+        ->post('/manufacturer/atendimento/instances', [
+            'instance_name' => 'test-instance',
+        ])
+        ->assertRedirect()
+        ->assertSessionHas(
+            'error',
+            'Esse nome de instância já está em uso. Escolha outro nome e tente novamente.',
+        );
+
+    $this->assertDatabaseMissing('whatsapp_instances', [
+        'manufacturer_id' => $manufacturer->id,
+        'instance_name' => 'test-instance',
+    ]);
+});
+
+test('setup page shares standard flash feedback', function () {
+    $this->withoutVite();
+    [$user] = createWhatsappTestManufacturer();
+
+    $this->actingAs($user)
+        ->withSession([
+            'status' => 'Conexão criada.',
+            'error' => 'Não foi possível criar a conexão.',
+        ])
+        ->get('/manufacturer/atendimento/setup')
+        ->assertInertia(fn ($page) => $page
+            ->where('flash.status', 'Conexão criada.')
+            ->where('flash.error', 'Não foi possível criar a conexão.')
+        );
 });
 
 test('cannot create duplicate instance for same manufacturer', function () {
@@ -127,6 +174,56 @@ test('user cannot delete another manufacturer instance', function () {
     $this->actingAs($user)
         ->delete("/manufacturer/atendimento/instances/{$instance->id}")
         ->assertForbidden();
+});
+
+test('connection status stores profile data returned by Evolution API v2', function () {
+    [$user, $manufacturer] = createWhatsappTestManufacturer();
+    $instance = WhatsappInstance::factory()->create([
+        'manufacturer_id' => $manufacturer->id,
+        'status' => 'connecting',
+    ]);
+
+    $mock = $this->mock(EvolutionApiService::class);
+    $mock->shouldReceive('connectionState')
+        ->once()
+        ->with($instance->instance_name)
+        ->andReturn(new \Illuminate\Http\Client\Response(
+            new \GuzzleHttp\Psr7\Response(200, [], json_encode([
+                'instance' => ['state' => 'open'],
+            ]))
+        ));
+    $mock->shouldReceive('fetchInstance')
+        ->once()
+        ->with($instance->instance_name)
+        ->andReturn(new \Illuminate\Http\Client\Response(
+            new \GuzzleHttp\Psr7\Response(200, [], json_encode([[
+                'id' => 'evolution-instance-id',
+                'name' => $instance->instance_name,
+                'connectionStatus' => 'open',
+                'number' => null,
+                'ownerJid' => '5511999999999@s.whatsapp.net',
+                'profileName' => 'Atendimento Zouth',
+                'profilePicUrl' => 'https://example.com/profile.jpg',
+            ]]))
+        ));
+
+    $this->actingAs($user)
+        ->getJson("/manufacturer/atendimento/instances/{$instance->id}/status")
+        ->assertOk()
+        ->assertJson([
+            'status' => 'connected',
+            'phone_number' => '5511999999999',
+            'profile_name' => 'Atendimento Zouth',
+            'profile_picture_url' => 'https://example.com/profile.jpg',
+        ]);
+
+    $this->assertDatabaseHas('whatsapp_instances', [
+        'id' => $instance->id,
+        'status' => 'connected',
+        'phone_number' => '5511999999999',
+        'profile_name' => 'Atendimento Zouth',
+        'profile_picture_url' => 'https://example.com/profile.jpg',
+    ]);
 });
 
 // ─── Chat Interface ──────────────────────────────────────────────
