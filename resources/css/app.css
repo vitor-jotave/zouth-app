@@ -5,11 +5,40 @@
 @source '../views';
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 
+@font-face {
+    font-family: 'Zouth Sora';
+    src: url('/brand/zouth/assets/sora-variable.ttf') format('truetype');
+    font-style: normal;
+    font-weight: 100 800;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Zouth Manrope';
+    src: url('/brand/zouth/assets/manrope-variable.ttf') format('truetype');
+    font-style: normal;
+    font-weight: 200 800;
+    font-display: swap;
+}
+
 @theme {
     --font-sans:
         'Instrument Sans', ui-sans-serif, system-ui, sans-serif,
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
         'Noto Color Emoji';
+    --font-zouth-display:
+        'Zouth Sora', 'Sora', ui-sans-serif, system-ui, sans-serif;
+    --font-zouth-body:
+        'Zouth Manrope', 'Manrope', ui-sans-serif, system-ui, sans-serif;
+
+    --color-zouth-charcoal: #18181f;
+    --color-zouth-ivory: #f6f4f0;
+    --color-zouth-sand: #e7e3dc;
+    --color-zouth-stone: #cac4ba;
+    --color-zouth-warm-gray: #98968d;
+    --color-zouth-coral: #ff4d3d;
+    --color-zouth-plum: #5a2a4f;
+    --color-zouth-mineral: #2e705a;
 
     --radius-lg: var(--radius);
     --radius-md: calc(var(--radius) - 2px);
@@ -102,5 +131,139 @@
 
     body {
         @apply bg-background text-foreground;
+    }
+}
+
+/*
+ * Authenticated product shell.
+ *
+ * The body selector deliberately scopes semantic tokens to authenticated
+ * screens while still allowing portalled menus and dialogs to inherit them.
+ * Landing pages, public catalogs and authentication screens keep their own
+ * visual language.
+ */
+body:has(.zouth-app) {
+    --background: #f6f4f0;
+    --foreground: #18181f;
+    --card: #f6f4f0;
+    --card-foreground: #18181f;
+    --popover: #f6f4f0;
+    --popover-foreground: #18181f;
+    --primary: #ff4d3d;
+    --primary-foreground: #18181f;
+    --secondary: #e7e3dc;
+    --secondary-foreground: #18181f;
+    --muted: #e7e3dc;
+    --muted-foreground: #6f6c65;
+    --accent: #e7e3dc;
+    --accent-foreground: #18181f;
+    --destructive: #b42318;
+    --destructive-foreground: #b42318;
+    --border: #cac4ba;
+    --input: #cac4ba;
+    --ring: #ff4d3d;
+    --chart-1: #ff4d3d;
+    --chart-2: #5a2a4f;
+    --chart-3: #2e705a;
+    --chart-4: #98968d;
+    --chart-5: #18181f;
+    --radius: 0.125rem;
+    --sidebar: #18181f;
+    --sidebar-foreground: #f6f4f0;
+    --sidebar-primary: #ff4d3d;
+    --sidebar-primary-foreground: #18181f;
+    --sidebar-accent: rgb(246 244 240 / 0.07);
+    --sidebar-accent-foreground: #f6f4f0;
+    --sidebar-border: rgb(246 244 240 / 0.16);
+    --sidebar-ring: #ff4d3d;
+
+    background: #f6f4f0;
+    color: #18181f;
+    font-family:
+        'Zouth Manrope', 'Manrope', ui-sans-serif, system-ui, sans-serif;
+}
+
+.zouth-app {
+    min-width: 0;
+    width: 100%;
+    background: #f6f4f0;
+    color: #18181f;
+    font-family:
+        'Zouth Manrope', 'Manrope', ui-sans-serif, system-ui, sans-serif;
+}
+
+.zouth-app :where(h1, h2, h3, h4, h5, h6) {
+    font-family: 'Zouth Sora', 'Sora', ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: -0.035em;
+}
+
+.zouth-app :where(button, a, input, textarea, select) {
+    transition-duration: 180ms;
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.zouth-app [data-slot='sidebar-inset'] {
+    min-width: 0;
+    overflow-x: clip;
+    background: #f6f4f0;
+}
+
+body:has(.zouth-app) [data-sidebar='sidebar'] {
+    border-color: rgb(246 244 240 / 0.16);
+    background: #18181f;
+    color: #f6f4f0;
+    box-shadow: none;
+}
+
+body:has(.zouth-app) [data-sidebar='content'] {
+    scrollbar-color: rgb(246 244 240 / 0.22) transparent;
+    scrollbar-width: thin;
+}
+
+.zouth-app-header [data-slot='breadcrumb-list'] {
+    flex-wrap: nowrap;
+    overflow: hidden;
+    color: #6f6c65;
+    font-family:
+        'Zouth Manrope', 'Manrope', ui-sans-serif, system-ui, sans-serif;
+}
+
+.zouth-app-header [data-slot='breadcrumb-page'] {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #18181f;
+    font-family: 'Zouth Sora', 'Sora', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+
+body:has(.zouth-app) [data-slot='dropdown-menu-content'] {
+    border-color: #cac4ba;
+    border-radius: 2px;
+    background: #f6f4f0;
+    color: #18181f;
+    box-shadow: none;
+    font-family:
+        'Zouth Manrope', 'Manrope', ui-sans-serif, system-ui, sans-serif;
+}
+
+@media (max-width: 47.999rem) {
+    .zouth-app [data-slot='sidebar-inset'] {
+        width: 100%;
+        min-width: 0;
+        flex-basis: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .zouth-app *,
+    .zouth-app *::before,
+    .zouth-app *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
     }
 }

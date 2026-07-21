@@ -1,5 +1,5 @@
 import { usePage } from '@inertiajs/react';
-import { ChevronsUpDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -16,30 +16,51 @@ import { UserMenuContent } from '@/components/user-menu-content';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { SharedData } from '@/types';
 
-export function NavUser() {
+export function NavUser({
+    variant = 'sidebar',
+}: {
+    variant?: 'sidebar' | 'header';
+}) {
     const { auth } = usePage<SharedData>().props;
     const { state } = useSidebar();
     const isMobile = useIsMobile();
 
+    const trigger =
+        variant === 'header' ? (
+            <button
+                type="button"
+                aria-label={`Abrir menu de ${auth.user.name}`}
+                className="flex min-h-11 items-center gap-2 rounded-[2px] px-1.5 text-zouth-charcoal outline-none hover:bg-zouth-sand/70 focus-visible:ring-2 focus-visible:ring-zouth-coral [&_[data-slot=avatar-fallback]]:bg-zouth-sand [&_[data-slot=avatar-fallback]]:font-zouth-display [&_[data-slot=avatar-fallback]]:font-semibold [&>div]:hidden sm:[&>div]:grid"
+            >
+                <UserInfo user={auth.user} />
+                <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
+            </button>
+        ) : (
+            <SidebarMenuButton
+                size="lg"
+                className="group min-h-12 rounded-[2px] text-zouth-ivory group-data-[collapsible=icon]:size-10! hover:bg-white/[0.06] hover:text-zouth-ivory focus-visible:ring-zouth-coral data-[state=open]:bg-white/[0.06] data-[state=open]:text-zouth-ivory [&_[data-slot=avatar-fallback]]:bg-zouth-ivory [&_[data-slot=avatar-fallback]]:font-zouth-display [&_[data-slot=avatar-fallback]]:font-semibold [&_[data-slot=avatar-fallback]]:text-zouth-charcoal"
+                data-test="sidebar-menu-button"
+                aria-label={`Abrir menu de ${auth.user.name}`}
+            >
+                <UserInfo user={auth.user} />
+                <ChevronDown
+                    className="ml-auto size-4 shrink-0 opacity-70"
+                    aria-hidden="true"
+                />
+            </SidebarMenuButton>
+        );
+
     return (
-        <SidebarMenu>
+        <SidebarMenu className={variant === 'header' ? 'w-auto' : undefined}>
             <SidebarMenuItem>
                 <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <SidebarMenuButton
-                            size="lg"
-                            className="group text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent"
-                            data-test="sidebar-menu-button"
-                        >
-                            <UserInfo user={auth.user} />
-                            <ChevronsUpDown className="ml-auto size-4" />
-                        </SidebarMenuButton>
-                    </DropdownMenuTrigger>
+                    <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
                     <DropdownMenuContent
-                        className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+                        className="w-(--radix-dropdown-menu-trigger-width) min-w-60 rounded-[2px] border-zouth-stone p-2"
                         align="end"
+                        sideOffset={8}
                         side={
-                            isMobile
+                            variant === 'header' || isMobile
                                 ? 'bottom'
                                 : state === 'collapsed'
                                   ? 'left'
