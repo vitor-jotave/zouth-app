@@ -52,11 +52,15 @@ class CatalogSettingUpdateRequest extends FormRequest
             'secondary_color' => ['required', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'accent_color' => ['required', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'background_color' => ['required', 'regex:/^#[0-9A-Fa-f]{6}$/'],
-            'font_family' => ['required', 'in:space-grotesk,fraunces,ibm-plex'],
+            'font_family' => ['required', 'in:sora,manrope,space-grotesk,fraunces,ibm-plex'],
+            'heading_font_family' => ['sometimes', 'nullable', 'in:sora,manrope,space-grotesk,fraunces,ibm-plex'],
+            'body_font_family' => ['sometimes', 'nullable', 'in:sora,manrope,space-grotesk,fraunces,ibm-plex'],
+            'cover_image_focal_x' => ['sometimes', 'integer', 'min:0', 'max:100'],
+            'cover_image_focal_y' => ['sometimes', 'integer', 'min:0', 'max:100'],
             'public_link_active' => ['required', 'boolean'],
 
             // Premium customization
-            'layout_preset' => ['sometimes', 'in:minimal,playful,boutique'],
+            'layout_preset' => ['sometimes', 'in:minimal'],
             'layout_density' => ['sometimes', 'in:comfortable,compact'],
             'card_style' => ['sometimes', 'in:flat,soft'],
             'background_mode' => ['sometimes', 'in:solid,image,pattern,gradient'],
@@ -87,6 +91,8 @@ class CatalogSettingUpdateRequest extends FormRequest
             'accent_color.regex' => 'A cor de destaque deve estar no formato #RRGGBB.',
             'background_color.regex' => 'A cor de fundo deve estar no formato #RRGGBB.',
             'font_family.in' => 'A fonte selecionada e invalida.',
+            'heading_font_family.in' => 'A fonte de titulos selecionada e invalida.',
+            'body_font_family.in' => 'A fonte de corpo selecionada e invalida.',
         ];
     }
 }

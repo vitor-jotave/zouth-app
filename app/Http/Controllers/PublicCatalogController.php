@@ -114,7 +114,7 @@ class PublicCatalogController extends Controller
                 ->where('is_active', true)
                 ->where('product_type', 'combo')
         )
-            ->with(['category', 'media', 'comboItems.componentProduct', 'comboItems.componentVariantStock'])
+            ->with(['category', 'media', 'comboItems.componentProduct.media', 'comboItems.componentVariantStock'])
             ->orderBy('sort_order')
             ->orderBy('name')
             ->get();
@@ -275,7 +275,9 @@ class PublicCatalogController extends Controller
                     ->map(fn ($value) => [
                         'value' => $value->value,
                         'hex' => $value->hex,
-                        'image_url' => $value->image_path ? Storage::disk('s3')->url($value->image_path) : null,
+                        'image_url' => ($value->thumbnail_path ?: $value->image_path)
+                            ? Storage::disk('s3')->url($value->thumbnail_path ?: $value->image_path)
+                            : null,
                     ])
                     ->values()
                     ->all();

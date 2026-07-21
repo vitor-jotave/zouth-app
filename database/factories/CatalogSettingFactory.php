@@ -22,6 +22,8 @@ class CatalogSettingFactory extends Factory
     {
         return [
             'manufacturer_id' => Manufacturer::factory(),
+            'cover_image_path' => null,
+            'cover_thumbnail_path' => null,
             ...CatalogSetting::defaults(fake()->company()),
         ];
     }

@@ -16,10 +16,13 @@ class ProductCatalogResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $media = $this->media ?? collect();
+        $media = $this->displayMedia();
         $images = $media->filter(fn ($item) => ($item->type instanceof ProductMediaType)
             ? $item->type === ProductMediaType::Image
             : $item->type === ProductMediaType::Image->value);
+        $videos = $media->filter(fn ($item) => ($item->type instanceof ProductMediaType)
+            ? $item->type === ProductMediaType::Video
+            : $item->type === ProductMediaType::Video->value);
         $primaryImage = $images->first();
 
         $variantStocks = $this->variantStocks ?? collect();
@@ -41,7 +44,9 @@ class ProductCatalogResource extends JsonResource
                     ->map(fn ($value) => [
                         'value' => $value->value,
                         'hex' => $value->hex,
-                        'image_url' => $value->image_path ? Storage::disk('s3')->url($value->image_path) : null,
+                        'image_url' => ($value->thumbnail_path ?: $value->image_path)
+                            ? Storage::disk('s3')->url($value->thumbnail_path ?: $value->image_path)
+                            : null,
                     ])
                     ->values()
                     ->all();
@@ -64,7 +69,14 @@ class ProductCatalogResource extends JsonResource
             'description' => $this->description,
             'category' => $this->category?->name,
             'primary_image' => $primaryImage ? Storage::disk('s3')->url($primaryImage->path) : null,
+            'primary_thumbnail' => $primaryImage
+                ? Storage::disk('s3')->url($primaryImage->thumbnail_path ?: $primaryImage->path)
+                : null,
             'images' => $images->map(fn ($item) => Storage::disk('s3')->url($item->path))->values(),
+            'thumbnails' => $images
+                ->map(fn ($item) => Storage::disk('s3')->url($item->thumbnail_path ?: $item->path))
+                ->values(),
+            'videos' => $videos->map(fn ($item) => Storage::disk('s3')->url($item->path))->values(),
             'variations' => $variations,
             'variant_stocks' => $this->variantStocks?->map(fn ($stock) => [
                 'variation_key' => $stock->variation_key,

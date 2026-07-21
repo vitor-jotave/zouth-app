@@ -123,6 +123,8 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
                 Route::delete('logo', 'destroyLogo')->name('logo.destroy');
                 Route::post('background', 'uploadBackground')->name('background');
                 Route::delete('background', 'destroyBackground')->name('background.destroy');
+                Route::post('cover', 'uploadCover')->name('cover');
+                Route::delete('cover', 'destroyCover')->name('cover.destroy');
                 Route::post('rotate-link', 'rotateLink')->name('rotate-link');
                 Route::post('reset-defaults', 'resetDefaults')->name('reset-defaults');
             });

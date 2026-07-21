@@ -66,7 +66,7 @@ it('returns saved settings in page props without data wrapping', function () {
         'secondary_color' => '#112233',
         'accent_color' => '#445566',
         'background_color' => '#778899',
-        'font_family' => 'fraunces',
+        'font_family' => 'sora',
         'public_link_active' => true,
     ]);
 
@@ -81,7 +81,7 @@ it('returns saved settings in page props without data wrapping', function () {
             ->where('catalog_settings.show_brand_name', true)
             ->where('catalog_settings.show_logo', false)
             ->where('catalog_settings.primary_color', '#AABBCC')
-            ->where('catalog_settings.font_family', 'fraunces')
+            ->where('catalog_settings.font_family', 'sora')
             ->missing('catalog_settings.data')
         );
 });
@@ -97,7 +97,7 @@ it('updates catalog branding settings', function () {
         'secondary_color' => '#222222',
         'accent_color' => '#333333',
         'background_color' => '#f4f4f4',
-        'font_family' => 'fraunces',
+        'font_family' => 'sora',
         'public_link_active' => true,
     ];
 
@@ -112,7 +112,7 @@ it('updates catalog branding settings', function () {
         'show_brand_name' => true,
         'show_logo' => false,
         'primary_color' => '#111111',
-        'font_family' => 'fraunces',
+        'font_family' => 'sora',
     ]);
 });
 
@@ -395,6 +395,7 @@ it('exposes variation image swatches in public catalog products and filters', fu
         'value' => 'Bolinhas',
         'hex' => null,
         'image_path' => 'variation-values/bolinhas.png',
+        'thumbnail_path' => 'variation-values/thumbnails/bolinhas.webp',
     ]);
 
     $product = Product::factory()->create([
@@ -410,8 +411,40 @@ it('exposes variation image swatches in public catalog products and filters', fu
     $productColor = collect($productProps['variations'])->firstWhere('type_name', 'Cor');
     $filterColor = collect($response->inertiaProps('filter_options.variation_types'))->firstWhere('name', 'Cor');
 
-    expect($productColor['values'][0]['image_url'])->toContain('variation-values/bolinhas.png');
-    expect($filterColor['values'][0]['image_url'])->toContain('variation-values/bolinhas.png');
+    expect($productColor['values'][0]['image_url'])->toContain('variation-values/thumbnails/bolinhas.webp');
+    expect($filterColor['values'][0]['image_url'])->toContain('variation-values/thumbnails/bolinhas.webp');
+});
+
+it('keeps legacy variation texture swatches available without a thumbnail', function () {
+    $setting = createCatalogSettingFor($this->manufacturer);
+    $color = VariationType::factory()->colorType()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'name' => 'Cor',
+    ]);
+
+    VariationValue::factory()->create([
+        'variation_type_id' => $color->id,
+        'value' => 'Xadrez',
+        'hex' => null,
+        'image_path' => 'variation-values/xadrez-legado.png',
+        'thumbnail_path' => null,
+    ]);
+
+    $product = Product::factory()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'name' => 'Body Xadrez',
+        'is_active' => true,
+    ]);
+
+    attachCatalogVariation($product, $color, 'Xadrez');
+
+    $response = $this->get(route('public.catalog.show', ['token' => $setting->public_token]));
+    $productProps = collect($response->inertiaProps('products.data'))->firstWhere('name', 'Body Xadrez');
+    $productColor = collect($productProps['variations'])->firstWhere('type_name', 'Cor');
+    $filterColor = collect($response->inertiaProps('filter_options.variation_types'))->firstWhere('name', 'Cor');
+
+    expect($productColor['values'][0]['image_url'])->toContain('variation-values/xadrez-legado.png');
+    expect($filterColor['values'][0]['image_url'])->toContain('variation-values/xadrez-legado.png');
 });
 
 it('combines search category and variation filters in the public catalog', function () {
@@ -607,7 +640,7 @@ it('resets catalog settings to defaults', function () {
         'secondary_color' => '#222222',
         'accent_color' => '#333333',
         'background_color' => '#f4f4f4',
-        'font_family' => 'fraunces',
+        'font_family' => 'sora',
         'public_link_active' => true,
     ]);
 
