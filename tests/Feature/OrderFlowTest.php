@@ -10,6 +10,7 @@ use App\Models\OrderItem;
 use App\Models\OrderStatusHistory;
 use App\Models\Plan;
 use App\Models\Product;
+use App\Models\ProductMedia;
 use App\Models\ProductVariantStock;
 use App\Models\ProductVariation;
 use App\Models\User;
@@ -455,11 +456,21 @@ it('returns 404 for an invalid tracking token', function () {
 // ──────────────────────────────────────────────
 
 it('lists orders for the current manufacturer', function () {
-    Order::factory()->forManufacturer($this->manufacturer)->count(3)->create();
+    $orders = Order::factory()->forManufacturer($this->manufacturer)->count(3)->create();
+    OrderItem::factory()->create([
+        'order_id' => $orders->first()->id,
+        'unit_price' => '129.90',
+        'quantity' => 2,
+    ]);
 
     // Other manufacturer's order should not appear
     $other = Manufacturer::factory()->create(['is_active' => true]);
-    Order::factory()->forManufacturer($other)->create();
+    $otherOrder = Order::factory()->forManufacturer($other)->create();
+    OrderItem::factory()->create([
+        'order_id' => $otherOrder->id,
+        'unit_price' => '999.90',
+        'quantity' => 1,
+    ]);
 
     $response = $this->actingAs($this->owner)->get('/manufacturer/orders');
 
@@ -467,6 +478,14 @@ it('lists orders for the current manufacturer', function () {
     $response->assertInertia(fn ($page) => $page
         ->component('manufacturer/orders/index')
         ->has('orders.data', 3)
+        ->has('board_stages', 5)
+        ->where('board_stages.0.value', OrderStatus::New->value)
+        ->has('board_stages.0.orders', 3)
+        ->where('order_summary.total_orders', 3)
+        ->where('order_summary.in_progress', 3)
+        ->where('order_summary.awaiting_confirmation', 3)
+        ->where('order_summary.total_amount', '259.80')
+        ->where('filters.view', 'board')
     );
 });
 
@@ -479,6 +498,24 @@ it('filters orders by status', function () {
     $response->assertOk();
     $response->assertInertia(fn ($page) => $page
         ->has('orders.data', 2)
+        ->has('board_stages', 1)
+        ->where('board_stages.0.value', OrderStatus::New->value)
+    );
+});
+
+it('supports the list view without changing the filtered order set', function () {
+    Order::factory()->forManufacturer($this->manufacturer)->status(OrderStatus::Delivered)->count(2)->create();
+    Order::factory()->forManufacturer($this->manufacturer)->status(OrderStatus::New)->create();
+
+    $response = $this->actingAs($this->owner)->get('/manufacturer/orders?view=list&status=delivered');
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page
+        ->has('orders.data', 2)
+        ->where('filters.view', 'list')
+        ->where('filters.status', OrderStatus::Delivered->value)
+        ->has('board_stages', 1)
+        ->where('board_stages.0.value', OrderStatus::Delivered->value)
     );
 });
 
@@ -495,6 +532,8 @@ it('searches orders by customer name', function () {
 });
 
 it('shows a specific order belonging to the manufacturer', function () {
+    config(['filesystems.disks.s3.url' => 'https://cdn.zouth.app']);
+
     $order = Order::factory()->forManufacturer($this->manufacturer)->create();
     OrderStatusHistory::create([
         'order_id' => $order->id,
@@ -502,8 +541,14 @@ it('shows a specific order belonging to the manufacturer', function () {
         'to_status' => OrderStatus::Confirmed,
         'changed_by_user_id' => $this->owner->id,
     ]);
+    ProductMedia::factory()->create([
+        'product_id' => $this->product1->id,
+        'path' => 'products/order-product.jpg',
+        'thumbnail_path' => 'products/thumbnails/order-product.jpg',
+    ]);
     OrderItem::factory()->create([
         'order_id' => $order->id,
+        'product_id' => $this->product1->id,
         'unit_price' => '129.90',
         'quantity' => 3,
     ]);
@@ -522,6 +567,7 @@ it('shows a specific order belonging to the manufacturer', function () {
         ->where('order.id', $order->id)
         ->where('order.total_items', 5)
         ->where('order.total_amount', '499.50')
+        ->where('order.items.0.image_urls.0', 'https://cdn.zouth.app/products/thumbnails/order-product.jpg')
         ->where('order.status_history.0.changed_by', $this->owner->name)
     );
 });

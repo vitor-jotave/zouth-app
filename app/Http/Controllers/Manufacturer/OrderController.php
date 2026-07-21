@@ -7,10 +7,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateOrderStatusRequest;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Services\OrderService;
 use App\Services\TenantManager;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -26,32 +29,63 @@ class OrderController extends Controller
         $this->authorize('viewAny', Order::class);
 
         $manufacturer = $this->tenantManager->get();
+        $search = trim($request->string('search')->toString());
+        $status = OrderStatus::tryFrom($request->string('status')->toString());
+        $view = $request->string('view')->toString() === 'list' ? 'list' : 'board';
 
-        $query = Order::where('manufacturer_id', $manufacturer->id)
+        $query = Order::query()
+            ->where('manufacturer_id', $manufacturer->id)
             ->with(['items', 'salesRep'])
             ->latest();
 
-        if ($request->filled('status') && $request->status !== 'all') {
-            $query->where('status', $request->status);
+        if ($status) {
+            $query->where('status', $status);
         }
 
-        if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('customer_name', 'like', "%{$search}%")
-                    ->orWhere('customer_phone', 'like', "%{$search}%")
-                    ->orWhere('customer_email', 'like', "%{$search}%")
-                    ->orWhere('id', $search);
-            });
-        }
+        $this->applySearch($query, $search);
 
         $orders = $query->paginate(15)->withQueryString();
+        $boardStatuses = $status
+            ? collect([$status])
+            : collect(OrderStatus::cases())->reject(
+                fn (OrderStatus $orderStatus): bool => $orderStatus === OrderStatus::Cancelled,
+            );
+        $statusCounts = Order::query()
+            ->where('manufacturer_id', $manufacturer->id)
+            ->selectRaw('status, COUNT(*) as aggregate')
+            ->groupBy('status')
+            ->pluck('aggregate', 'status');
+        $totalAmount = $this->orderItemsTotal(
+            $manufacturer->id,
+            excludedStatus: OrderStatus::Cancelled,
+        );
+        $inProgressStatuses = [
+            OrderStatus::New,
+            OrderStatus::Confirmed,
+            OrderStatus::Preparing,
+            OrderStatus::Shipped,
+        ];
 
         return Inertia::render('manufacturer/orders/index', [
             'orders' => OrderResource::collection($orders),
+            'board_stages' => $this->boardStages(
+                $request,
+                $manufacturer->id,
+                $boardStatuses,
+                $search,
+            ),
+            'order_summary' => [
+                'total_orders' => (int) $statusCounts->sum(),
+                'in_progress' => collect($inProgressStatuses)->sum(
+                    fn (OrderStatus $orderStatus): int => (int) ($statusCounts[$orderStatus->value] ?? 0),
+                ),
+                'total_amount' => number_format($totalAmount, 2, '.', ''),
+                'awaiting_confirmation' => (int) ($statusCounts[OrderStatus::New->value] ?? 0),
+            ],
             'filters' => [
-                'status' => $request->status ?? '',
-                'search' => $request->search ?? '',
+                'status' => $status?->value ?? '',
+                'search' => $search,
+                'view' => $view,
             ],
             'statuses' => collect(OrderStatus::cases())->map(fn (OrderStatus $s) => [
                 'value' => $s->value,
@@ -60,11 +94,102 @@ class OrderController extends Controller
         ]);
     }
 
+    /**
+     * @param  Collection<int, OrderStatus>  $statuses
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function boardStages(
+        Request $request,
+        int $manufacturerId,
+        Collection $statuses,
+        string $search,
+    ): Collection {
+        return $statuses->map(function (OrderStatus $status) use ($request, $manufacturerId, $search): array {
+            $query = Order::query()
+                ->where('manufacturer_id', $manufacturerId)
+                ->where('status', $status)
+                ->with(['items', 'salesRep'])
+                ->latest();
+
+            $this->applySearch($query, $search);
+
+            $count = (clone $query)->count();
+            $orders = $query->limit(12)->get();
+
+            return [
+                'value' => $status->value,
+                'label' => $status->label(),
+                'count' => $count,
+                'total_amount' => number_format(
+                    $this->orderItemsTotal($manufacturerId, $status, search: $search),
+                    2,
+                    '.',
+                    '',
+                ),
+                'has_more' => $count > $orders->count(),
+                'orders' => OrderResource::collection($orders)->resolve($request),
+            ];
+        })->values();
+    }
+
+    private function applySearch(Builder $query, string $search): void
+    {
+        if ($search === '') {
+            return;
+        }
+
+        $query->where(function (Builder $query) use ($search): void {
+            $query->where('customer_name', 'like', "%{$search}%")
+                ->orWhere('customer_phone', 'like', "%{$search}%")
+                ->orWhere('customer_email', 'like', "%{$search}%");
+
+            if (ctype_digit($search)) {
+                $query->orWhere('id', (int) $search);
+            }
+        });
+    }
+
+    private function orderItemsTotal(
+        int $manufacturerId,
+        ?OrderStatus $status = null,
+        ?OrderStatus $excludedStatus = null,
+        string $search = '',
+    ): float {
+        $aggregate = OrderItem::query()
+            ->whereHas('order', function (Builder $query) use (
+                $manufacturerId,
+                $status,
+                $excludedStatus,
+                $search,
+            ): void {
+                $query->where('manufacturer_id', $manufacturerId);
+
+                if ($status) {
+                    $query->where('status', $status);
+                }
+
+                if ($excludedStatus) {
+                    $query->where('status', '!=', $excludedStatus);
+                }
+
+                $this->applySearch($query, $search);
+            })
+            ->selectRaw('COALESCE(SUM(COALESCE(unit_price, 0) * quantity), 0) as aggregate')
+            ->value('aggregate');
+
+        return round((float) $aggregate, 2);
+    }
+
     public function show(Request $request, Order $order): Response
     {
         $this->authorize('view', $order);
 
-        $order->load(['items', 'salesRep', 'statusHistory.changedBy']);
+        $order->load([
+            'items.product.media',
+            'items.product.comboItems.componentProduct.media',
+            'salesRep',
+            'statusHistory.changedBy',
+        ]);
 
         return Inertia::render('manufacturer/orders/show', [
             'order' => (new OrderResource($order))->resolve($request),
