@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\ProductMediaType;
 use App\Enums\UserType;
 use App\Models\CatalogSetting;
 use App\Models\Manufacturer;
@@ -7,11 +8,14 @@ use App\Models\Order;
 use App\Models\Plan;
 use App\Models\Product;
 use App\Models\ProductCategory;
+use App\Models\ProductMedia;
 use App\Models\ProductVariantStock;
 use App\Models\ProductVariation;
 use App\Models\User;
 use App\Models\VariationType;
 use App\Models\VariationValue;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 beforeEach(function () {
     $this->withoutVite();
@@ -104,6 +108,25 @@ it('creates a sellable combo with component products', function () {
         'combo_product_id' => $combo->id,
         'component_product_id' => $body->id,
         'quantity' => 2,
+    ]);
+});
+
+it('rejects media uploads because a combo inherits the presentation of its pieces', function () {
+    $component = Product::factory()->forManufacturer($this->manufacturer)->create([
+        'is_active' => true,
+    ]);
+
+    $this->post('/manufacturer/products/combos', comboPayload([
+        'combo_items' => [
+            ['component_product_id' => $component->id, 'quantity' => 1],
+        ],
+        'images' => [UploadedFile::fake()->image('combo.jpg')],
+        'video' => UploadedFile::fake()->create('combo.mp4', 512, 'video/mp4'),
+    ]))->assertSessionHasErrors(['images', 'video']);
+
+    $this->assertDatabaseMissing('products', [
+        'manufacturer_id' => $this->manufacturer->id,
+        'sku' => 'COMBO-001',
     ]);
 });
 
@@ -252,6 +275,18 @@ it('lists combos in the product index and public catalog', function () {
         'component_product_id' => $component->id,
         'quantity' => 3,
     ]);
+    $componentImage = ProductMedia::create([
+        'product_id' => $component->id,
+        'type' => ProductMediaType::Image->value,
+        'path' => 'product-media/body-avulso.jpg',
+        'sort_order' => 0,
+    ]);
+    $componentVideo = ProductMedia::create([
+        'product_id' => $component->id,
+        'type' => ProductMediaType::Video->value,
+        'path' => 'product-media/body-avulso.mp4',
+        'sort_order' => 1,
+    ]);
     $catalogSetting = CatalogSetting::create([
         'manufacturer_id' => $this->manufacturer->id,
         ...CatalogSetting::defaults($this->manufacturer->name),
@@ -276,6 +311,19 @@ it('lists combos in the product index and public catalog', function () {
             ->has('products.data', 1)
             ->where('products.data.0.product_type', 'combo')
             ->where('products.data.0.sku', 'COMBO-CAT')
+            ->has('products.data.0.media', 2)
+            ->where('products.data.0.media.0.id', $componentImage->id)
+            ->where('products.data.0.media.1.id', $componentVideo->id)
+        );
+
+    $this->get("/manufacturer/products/{$combo->id}/combo/edit")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('product.media', 2)
+            ->where('product.media.0.id', $componentImage->id)
+            ->has('component_products', 1)
+            ->has('component_products.0.media', 2)
+            ->where('component_products.0.media.0.id', $componentImage->id)
         );
 
     $this->get("/catalog/{$catalogSetting->public_token}")
@@ -288,6 +336,9 @@ it('lists combos in the product index and public catalog', function () {
             ->where('combos.0.product_type', 'combo')
             ->where('combos.0.combo_items.0.product_name', 'Body Avulso')
             ->where('combos.0.total_stock', 3)
+            ->where('combos.0.primary_image', Storage::disk('s3')->url($componentImage->path))
+            ->where('combos.0.images.0', Storage::disk('s3')->url($componentImage->path))
+            ->where('combos.0.videos.0', Storage::disk('s3')->url($componentVideo->path))
         );
 });
 

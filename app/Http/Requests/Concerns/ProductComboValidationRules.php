@@ -6,7 +6,6 @@ use App\Models\Product;
 use App\Models\ProductVariantStock;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\File;
 
 trait ProductComboValidationRules
 {
@@ -68,9 +67,8 @@ trait ProductComboValidationRules
             'combo_items.*.component_product_id' => ['required', 'integer', 'exists:products,id'],
             'combo_items.*.component_variant_stock_id' => ['nullable', 'integer', 'exists:product_variant_stocks,id'],
             'combo_items.*.quantity' => ['required', 'integer', 'min:1', 'max:9999'],
-            'images' => ['nullable', 'array', 'max:10'],
-            'images.*' => [File::image()->max(5120)],
-            'video' => ['nullable', File::types(['mp4', 'mov', 'webm'])->max(51200)],
+            'images' => ['prohibited'],
+            'video' => ['prohibited'],
         ];
     }
 
@@ -92,6 +90,8 @@ trait ProductComboValidationRules
             'combo_items.*.component_product_id.required' => 'Selecione um produto.',
             'combo_items.*.quantity.required' => 'Informe a quantidade do produto no combo.',
             'combo_items.*.quantity.min' => 'A quantidade minima e 1.',
+            'images.prohibited' => 'As imagens do combo sao herdadas dos produtos selecionados.',
+            'video.prohibited' => 'Os videos do combo sao herdados dos produtos selecionados.',
         ];
     }
 

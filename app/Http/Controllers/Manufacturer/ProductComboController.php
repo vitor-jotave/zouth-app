@@ -2,16 +2,15 @@
 
 namespace App\Http\Controllers\Manufacturer;
 
-use App\Enums\ProductMediaType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreProductComboRequest;
 use App\Http\Requests\UpdateProductComboRequest;
+use App\Http\Resources\ProductMediaResource;
 use App\Http\Resources\ProductResource;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Services\PlanLimitService;
 use App\Services\ProductComboService;
-use App\Services\ProductUpsertService;
 use App\Services\TenantManager;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
@@ -23,7 +22,6 @@ class ProductComboController extends Controller
         private TenantManager $tenantManager,
         private PlanLimitService $limitService,
         private ProductComboService $comboService,
-        private ProductUpsertService $upsertService,
     ) {}
 
     public function create(): Response
@@ -62,14 +60,6 @@ class ProductComboController extends Controller
             'manufacturer_id' => $request->user()->current_manufacturer_id,
         ]));
 
-        foreach ($request->file('images', []) as $image) {
-            $this->upsertService->storeMedia($combo, $image, ProductMediaType::Image);
-        }
-
-        if ($request->hasFile('video')) {
-            $this->upsertService->storeMedia($combo, $request->file('video'), ProductMediaType::Video);
-        }
-
         return redirect()
             ->route('manufacturer.products.index')
             ->with('success', 'Combo criado com sucesso.');
@@ -89,7 +79,7 @@ class ProductComboController extends Controller
             abort(403);
         }
 
-        $product->load(['media', 'category', 'comboItems.componentProduct', 'comboItems.componentVariantStock']);
+        $product->load(['category', 'comboItems.componentProduct.media', 'comboItems.componentVariantStock']);
 
         return Inertia::render('manufacturer/products/combos/edit', [
             'product' => (new ProductResource($product))->resolve(),
@@ -129,7 +119,7 @@ class ProductComboController extends Controller
             ->where('manufacturer_id', $manufacturerId)
             ->where('product_type', 'product')
             ->where('is_active', true)
-            ->with(['variantStocks', 'productVariations.variationType.values'])
+            ->with(['category', 'media', 'variantStocks', 'productVariations.variationType.values'])
             ->orderBy('name')
             ->get()
             ->map(fn (Product $product) => [
@@ -138,6 +128,8 @@ class ProductComboController extends Controller
                 'sku' => $product->sku,
                 'price_cents' => $product->price_cents,
                 'base_quantity' => $product->base_quantity,
+                'category_name' => $product->category?->name,
+                'media' => ProductMediaResource::collection($product->media)->resolve(),
                 'has_variations' => $product->productVariations->isNotEmpty(),
                 'variant_stocks' => $product->variantStocks->map(fn ($stock) => [
                     'id' => $stock->id,

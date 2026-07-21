@@ -1,40 +1,29 @@
 import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft } from 'lucide-react';
-import { ProductComboForm } from '@/components/product-combo-form';
+import { ArrowLeft, Save } from 'lucide-react';
+import { AppPageHeader } from '@/components/app-page-header';
+import {
+    PRODUCT_COMBO_EDITOR_FORM_ID,
+    ProductComboForm,
+} from '@/components/product-combo-form';
+import type {
+    ComboCategoryOption,
+    ComboComponentProductOption,
+} from '@/components/product-editor/combo-types';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/app-layout';
+import { dashboard } from '@/routes';
+import manufacturer from '@/routes/manufacturer';
 import type { BreadcrumbItem } from '@/types';
 
-interface Category {
-    id: number;
-    name: string;
-}
-
-interface ComponentProduct {
-    id: number;
-    name: string;
-    sku: string;
-    price_cents: number | null;
-    base_quantity: number;
-    has_variations: boolean;
-    variant_stocks: Array<{
-        id: number;
-        variation_key: Record<string, string>;
-        quantity: number;
-        price_cents?: number | null;
-        sku_variant?: string | null;
-    }>;
-}
-
 interface Props {
-    categories: Category[];
-    component_products: ComponentProduct[];
+    categories: ComboCategoryOption[];
+    component_products: ComboComponentProductOption[];
 }
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Dashboard', href: '/dashboard' },
-    { title: 'Produtos', href: '/manufacturer/products' },
-    { title: 'Novo combo', href: '/manufacturer/products/combos/create' },
+    { title: 'Visão geral', href: dashboard().url },
+    { title: 'Produtos', href: manufacturer.products.index().url },
+    { title: 'Novo combo', href: manufacturer.products.combos.create().url },
 ];
 
 export default function ProductCombosCreate({
@@ -45,23 +34,42 @@ export default function ProductCombosCreate({
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Novo combo" />
 
-            <div className="flex h-full flex-1 flex-col gap-4 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div>
-                        <h1 className="text-2xl font-bold tracking-tight">
-                            Novo combo
-                        </h1>
-                        <p className="text-sm text-muted-foreground">
-                            Monte um combo vendável usando produtos cadastrados
-                        </p>
-                    </div>
-                    <Link href="/manufacturer/products">
-                        <Button variant="outline">
-                            <ArrowLeft className="mr-2 size-4" />
-                            Voltar
-                        </Button>
-                    </Link>
-                </div>
+            <div className="mx-auto flex w-full max-w-[1560px] flex-1 flex-col px-5 py-8 sm:px-7 md:px-9 lg:pt-8 lg:pb-12 xl:px-12 2xl:px-14">
+                <AppPageHeader
+                    eyebrow="Novo combo"
+                    title={
+                        <>
+                            Monte uma combinação que vende junto
+                            <span className="text-[#ff4d3d]">.</span>
+                        </>
+                    }
+                    description="Escolha as peças, defina o que entra em cada pedido e deixe a própria coleção construir a vitrine do conjunto."
+                    aside={
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                            <Button
+                                type="submit"
+                                form={PRODUCT_COMBO_EDITOR_FORM_ID}
+                                className="min-h-12 rounded-[2px] bg-[#ff4d3d] text-[#18181f] shadow-none hover:-translate-y-px hover:bg-[#ff4d3d]"
+                            >
+                                <Save className="size-4" aria-hidden="true" />
+                                Criar combo
+                            </Button>
+                            <Button
+                                asChild
+                                variant="outline"
+                                className="min-h-12 rounded-[2px] border-[#18181f] bg-transparent shadow-none hover:bg-[#e7e3dc]"
+                            >
+                                <Link href={manufacturer.products.index().url}>
+                                    <ArrowLeft
+                                        className="size-4"
+                                        aria-hidden="true"
+                                    />
+                                    Voltar para produtos
+                                </Link>
+                            </Button>
+                        </div>
+                    }
+                />
 
                 <ProductComboForm
                     mode="create"
