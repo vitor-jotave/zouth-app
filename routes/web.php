@@ -33,12 +33,22 @@ use Laravel\Fortify\Features;
 
 Route::get('/', function () {
     $demoCatalogUrl = config('commercial.demo_catalog_url');
+    $demoCatalogScheme = is_string($demoCatalogUrl)
+        ? parse_url($demoCatalogUrl, PHP_URL_SCHEME)
+        : null;
+    $hasSafeDemoCatalogUrl = filled($demoCatalogUrl)
+        && filter_var($demoCatalogUrl, FILTER_VALIDATE_URL)
+        && in_array($demoCatalogScheme, ['http', 'https'], true);
 
-    return Inertia::render('homepage', [
+    return Inertia::render('landing/index', [
         'canRegister' => Features::enabled(Features::registration()),
         'commercial' => [
             'salesContactUrl' => config('commercial.sales_contact_url'),
-            'demoCatalogUrl' => filled($demoCatalogUrl) ? $demoCatalogUrl : null,
+            'demoCatalogUrl' => $hasSafeDemoCatalogUrl ? $demoCatalogUrl : null,
+        ],
+        'seo' => [
+            'canonicalUrl' => url('/'),
+            'shareImageUrl' => url('/brand/zouth/landing/collection-in-motion.webp'),
         ],
     ]);
 })->name('home');
