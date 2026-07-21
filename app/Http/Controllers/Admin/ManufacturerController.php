@@ -109,6 +109,10 @@ class ManufacturerController extends Controller
                 'status' => 'active',
             ]);
 
+            $manufacturer->update([
+                'primary_owner_user_id' => $owner->id,
+            ]);
+
             Password::sendResetLink(['email' => $owner->email]);
         });
 

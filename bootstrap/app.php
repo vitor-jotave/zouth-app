@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Middleware\AddSecurityHeaders;
+use App\Http\Middleware\EnsureManufacturerCapability;
+use App\Http\Middleware\EnsureManufacturerOwner;
 use App\Http\Middleware\EnsureManufacturerTenant;
 use App\Http\Middleware\EnsureSalesRep;
 use App\Http\Middleware\EnsureSuperadmin;
@@ -48,6 +50,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'superadmin' => EnsureSuperadmin::class,
             'manufacturer.tenant' => EnsureManufacturerTenant::class,
+            'manufacturer.capability' => EnsureManufacturerCapability::class,
+            'manufacturer.owner' => EnsureManufacturerOwner::class,
             'sales.rep' => EnsureSalesRep::class,
             'resolve.manufacturer' => ResolveManufacturerFromRoute::class,
         ]);

@@ -48,6 +48,12 @@ class ProfileController extends Controller
     {
         $user = $request->user();
 
+        if ($user->isPrimaryManufacturerOwner()) {
+            return back()->withErrors([
+                'password' => 'Transfira a propriedade da fabricante antes de excluir sua conta.',
+            ]);
+        }
+
         Auth::logout();
 
         $user->delete();

@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\UserType;
+use App\Models\Manufacturer;
 use App\Models\User;
 
 test('profile page is displayed', function () {
@@ -82,4 +84,28 @@ test('correct password must be provided to delete account', function () {
         ->assertRedirect(route('profile.edit'));
 
     expect($user->fresh())->not->toBeNull();
+});
+
+test('primary owner must transfer ownership before deleting their account', function () {
+    $manufacturer = Manufacturer::factory()->create();
+    $owner = User::factory()->create([
+        'user_type' => UserType::ManufacturerUser,
+        'current_manufacturer_id' => $manufacturer->id,
+    ]);
+    $manufacturer->users()->attach($owner->id, [
+        'role' => 'owner',
+        'status' => 'active',
+    ]);
+    $manufacturer->update(['primary_owner_user_id' => $owner->id]);
+
+    $this->actingAs($owner)
+        ->from(route('profile.edit'))
+        ->delete(route('profile.destroy'), [
+            'password' => 'password',
+        ])
+        ->assertSessionHasErrors('password')
+        ->assertRedirect(route('profile.edit'));
+
+    $this->assertAuthenticatedAs($owner);
+    expect($owner->fresh())->not->toBeNull();
 });

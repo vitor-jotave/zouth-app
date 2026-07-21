@@ -25,6 +25,7 @@ class Manufacturer extends Model
     protected $fillable = [
         'name',
         'slug',
+        'primary_owner_user_id',
         'is_active',
         'current_plan_id',
         'cnpj',
@@ -73,8 +74,19 @@ class Manufacturer extends Model
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'manufacturer_user')
-            ->withPivot('role', 'status')
+            ->using(ManufacturerUser::class)
+            ->withPivot('role', 'status', 'capabilities')
             ->withTimestamps();
+    }
+
+    public function primaryOwner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'primary_owner_user_id');
+    }
+
+    public function isPrimaryOwner(User $user): bool
+    {
+        return $this->primary_owner_user_id === $user->id;
     }
 
     public function productCategories(): HasMany
@@ -130,6 +142,18 @@ class Manufacturer extends Model
      */
     public function owner(): ?User
     {
+        if ($this->primary_owner_user_id) {
+            $primaryOwner = $this->users()
+                ->whereKey($this->primary_owner_user_id)
+                ->wherePivot('role', 'owner')
+                ->wherePivot('status', 'active')
+                ->first();
+
+            if ($primaryOwner) {
+                return $primaryOwner;
+            }
+        }
+
         return $this->users()
             ->wherePivot('role', 'owner')
             ->wherePivot('status', 'active')

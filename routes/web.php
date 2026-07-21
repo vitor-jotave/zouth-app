@@ -94,14 +94,17 @@ Route::controller(PlanSelectionController::class)
 Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function () {
     Route::get('dashboard', ManufacturerDashboardController::class)->name('dashboard');
 
-    Route::controller(ManufacturerUserController::class)->prefix('users')->name('users.')->group(function () {
+    Route::controller(ManufacturerUserController::class)->prefix('users')->name('users.')->middleware('manufacturer.owner')->group(function () {
         Route::get('/', 'index')->name('index');
         Route::post('/', 'store')->name('store');
         Route::post('{user}/status', 'updateStatus')->name('update-status');
         Route::post('{user}/role', 'updateRole')->name('update-role');
+        Route::post('{user}/transfer-ownership', 'transferOwnership')
+            ->middleware('throttle:6,1')
+            ->name('transfer-ownership');
     });
 
-    Route::controller(AffiliationController::class)->prefix('affiliations')->name('affiliations.')->group(function () {
+    Route::controller(AffiliationController::class)->prefix('affiliations')->name('affiliations.')->middleware('manufacturer.capability:affiliations.manage')->group(function () {
         Route::get('/', 'index')->name('index');
         Route::post('{affiliation}/approve', 'approve')->name('approve');
         Route::post('{affiliation}/reject', 'reject')->name('reject');
@@ -112,6 +115,7 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
         Route::controller(CatalogSettingsController::class)
             ->prefix('catalog-settings')
             ->name('catalog-settings.')
+            ->middleware('manufacturer.capability:catalog.manage')
             ->group(function () {
                 Route::get('/', 'index')->name('index');
                 Route::put('/', 'update')->name('update');
@@ -123,21 +127,21 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
                 Route::post('reset-defaults', 'resetDefaults')->name('reset-defaults');
             });
 
-        Route::controller(ProductCategoryController::class)->prefix('categories')->name('categories.')->group(function () {
+        Route::controller(ProductCategoryController::class)->prefix('categories')->name('categories.')->middleware('manufacturer.capability:collection.manage')->group(function () {
             Route::get('/', 'index')->name('index');
             Route::post('/', 'store')->name('store');
             Route::put('{category}', 'update')->name('update');
             Route::delete('{category}', 'destroy')->name('destroy');
         });
 
-        Route::controller(VariationTypeController::class)->prefix('variation-types')->name('variation-types.')->group(function () {
+        Route::controller(VariationTypeController::class)->prefix('variation-types')->name('variation-types.')->middleware('manufacturer.capability:collection.manage')->group(function () {
             Route::get('/', 'index')->name('index');
             Route::post('/', 'store')->name('store');
             Route::put('{variation_type}', 'update')->name('update');
             Route::delete('{variation_type}', 'destroy')->name('destroy');
         });
 
-        Route::controller(ProductController::class)->prefix('products')->name('products.')->group(function () {
+        Route::controller(ProductController::class)->prefix('products')->name('products.')->middleware('manufacturer.capability:collection.manage')->group(function () {
             Route::get('/', 'index')->name('index');
             Route::get('create', 'create')->name('create');
             Route::post('/', 'store')->name('store');
@@ -153,27 +157,28 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
         Route::scopeBindings()->controller(ProductMediaController::class)
             ->prefix('products/{product}/media')
             ->name('products.media.')
+            ->middleware('manufacturer.capability:collection.manage')
             ->group(function () {
                 Route::post('/', 'store')->name('store');
                 Route::put('order', 'reorder')->name('order');
                 Route::delete('{media}', 'destroy')->name('destroy');
             });
 
-        Route::controller(ManufacturerOrderController::class)->prefix('orders')->name('orders.')->group(function () {
+        Route::controller(ManufacturerOrderController::class)->prefix('orders')->name('orders.')->middleware('manufacturer.capability:orders.manage')->group(function () {
             Route::get('/', 'index')->name('index');
             Route::get('{order}', 'show')->name('show');
             Route::post('{order}/status', 'updateStatus')->name('update-status');
             Route::put('{order}/notes', 'updateNotes')->name('update-notes');
         });
 
-        Route::controller(ManufacturerCustomerController::class)->prefix('customers')->name('customers.')->group(function () {
+        Route::controller(ManufacturerCustomerController::class)->prefix('customers')->name('customers.')->middleware('manufacturer.capability:customers.manage')->group(function () {
             Route::get('/', 'index')->name('index');
             Route::post('/', 'store')->name('store');
             Route::get('{customer}', 'show')->name('show');
             Route::put('{customer}', 'update')->name('update');
         });
 
-        Route::prefix('atendimento')->name('atendimento.')->group(function () {
+        Route::prefix('atendimento')->name('atendimento.')->middleware('manufacturer.capability:whatsapp.manage')->group(function () {
             Route::get('setup', [WhatsappInstanceController::class, 'setup'])->name('setup');
             Route::post('instances', [WhatsappInstanceController::class, 'store'])->name('instances.store');
             Route::get('instances/{instance}/qr', [WhatsappInstanceController::class, 'qrCode'])->name('instances.qr');
@@ -200,7 +205,7 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
             });
         });
 
-        Route::controller(BillingController::class)->prefix('billing')->name('billing.')->group(function () {
+        Route::controller(BillingController::class)->prefix('billing')->name('billing.')->middleware('manufacturer.owner')->group(function () {
             Route::get('/', 'index')->name('index');
             Route::get('checkout/{plan}', 'checkout')->name('checkout');
             Route::get('checkout/{plan}/success', 'checkoutSuccess')->name('checkout.success');
