@@ -31,7 +31,7 @@ class VariationTypeStoreRequest extends FormRequest
             'values' => ['array'],
             'values.*.value' => ['required', 'string', 'max:100'],
             'values.*.hex' => ['nullable', 'string', 'max:7'],
-            'values.*.image' => ['nullable', File::image()->max(2048)],
+            'values.*.image' => ['nullable', File::image()->max(5120)],
         ];
     }
 

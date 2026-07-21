@@ -8,6 +8,7 @@ use App\Models\ProductVariation;
 use App\Models\User;
 use App\Models\VariationType;
 use App\Models\VariationValue;
+use App\Services\VariationTextureOptimizer;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -41,6 +42,13 @@ it('lists variation types for the current manufacturer', function () {
         'variation_type_id' => $type->id,
         'value' => 'P',
     ]);
+    $product = Product::factory()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+    ]);
+    ProductVariation::create([
+        'product_id' => $product->id,
+        'variation_type_id' => $type->id,
+    ]);
 
     $response = $this->get('/manufacturer/variation-types');
 
@@ -49,6 +57,7 @@ it('lists variation types for the current manufacturer', function () {
         ->component('manufacturer/variation-types/index')
         ->has('variation_types', 1)
         ->where('variation_types.0.name', 'Tamanho')
+        ->where('variation_types.0.products_count', 1)
         ->has('variation_types.0.values', 1)
         ->where('variation_types.0.values.0.value', 'P')
     );
@@ -122,7 +131,7 @@ it('creates a color type variation with image values', function () {
             [
                 'value' => 'Bolinhas',
                 'hex' => null,
-                'image' => UploadedFile::fake()->image('bolinhas.png', 80, 80),
+                'image' => UploadedFile::fake()->image('bolinhas.png', 1600, 900),
             ],
         ],
     ]);
@@ -134,8 +143,23 @@ it('creates a color type variation with image values', function () {
 
     expect($value->hex)->toBeNull();
     expect($value->image_path)->not->toBeNull();
-    expect(str_starts_with($value->image_path, 'variation-values/'))->toBeTrue();
-    Storage::disk('s3')->assertExists($value->image_path);
+    expect($value->thumbnail_path)->not->toBeNull();
+    expect(str_ends_with($value->image_path, '.webp'))->toBeTrue();
+    expect(str_starts_with($value->thumbnail_path, 'variation-values/thumbnails/'))->toBeTrue();
+    Storage::disk('s3')->assertExists([
+        $value->image_path,
+        $value->thumbnail_path,
+    ]);
+
+    $masterContents = Storage::disk('s3')->get($value->image_path);
+    $thumbnailContents = Storage::disk('s3')->get($value->thumbnail_path);
+    $masterDimensions = getimagesizefromstring($masterContents);
+    $thumbnailDimensions = getimagesizefromstring($thumbnailContents);
+
+    expect([$masterDimensions[0], $masterDimensions[1]])->toBe([512, 512])
+        ->and(strlen($masterContents))->toBeLessThanOrEqual(VariationTextureOptimizer::MAX_MASTER_BYTES)
+        ->and([$thumbnailDimensions[0], $thumbnailDimensions[1]])->toBe([128, 128])
+        ->and(strlen($thumbnailContents))->toBeLessThanOrEqual(VariationTextureOptimizer::MAX_THUMBNAIL_BYTES);
 });
 
 it('requires a name to create a variation type', function () {
@@ -214,6 +238,10 @@ it('updates a variation type name and syncs values', function () {
 });
 
 it('removes values not included in update', function () {
+    Storage::fake('s3');
+    Storage::disk('s3')->put('variation-values/removed.webp', 'removed');
+    Storage::disk('s3')->put('variation-values/thumbnails/removed.webp', 'removed-thumbnail');
+
     $type = VariationType::factory()->create([
         'manufacturer_id' => $this->manufacturer->id,
     ]);
@@ -224,6 +252,8 @@ it('removes values not included in update', function () {
     $removed = VariationValue::factory()->create([
         'variation_type_id' => $type->id,
         'value' => 'Removed',
+        'image_path' => 'variation-values/removed.webp',
+        'thumbnail_path' => 'variation-values/thumbnails/removed.webp',
     ]);
 
     $this->put("/manufacturer/variation-types/{$type->id}", [
@@ -235,11 +265,16 @@ it('removes values not included in update', function () {
 
     expect(VariationValue::find($removed->id))->toBeNull();
     expect(VariationValue::find($kept->id))->not->toBeNull();
+    Storage::disk('s3')->assertMissing([
+        'variation-values/removed.webp',
+        'variation-values/thumbnails/removed.webp',
+    ]);
 });
 
 it('replaces a variation value image on update', function () {
     Storage::fake('s3');
     Storage::disk('s3')->put('variation-values/old.png', 'old');
+    Storage::disk('s3')->put('variation-values/thumbnails/old.png', 'old-thumbnail');
 
     $type = VariationType::factory()->colorType()->create([
         'manufacturer_id' => $this->manufacturer->id,
@@ -249,6 +284,7 @@ it('replaces a variation value image on update', function () {
         'variation_type_id' => $type->id,
         'value' => 'Bolinhas',
         'image_path' => 'variation-values/old.png',
+        'thumbnail_path' => 'variation-values/thumbnails/old.png',
     ]);
 
     $response = $this->post("/manufacturer/variation-types/{$type->id}", [
@@ -260,7 +296,7 @@ it('replaces a variation value image on update', function () {
                 'id' => $value->id,
                 'value' => 'Bolinhas',
                 'hex' => null,
-                'image' => UploadedFile::fake()->image('bolinhas-nova.png', 80, 80),
+                'image' => UploadedFile::fake()->image('bolinhas-nova.png', 1200, 1800),
             ],
         ],
     ]);
@@ -270,22 +306,39 @@ it('replaces a variation value image on update', function () {
     $value->refresh();
 
     expect($value->image_path)->not->toBe('variation-values/old.png');
+    expect($value->thumbnail_path)->not->toBe('variation-values/thumbnails/old.png');
     Storage::disk('s3')->assertMissing('variation-values/old.png');
-    Storage::disk('s3')->assertExists($value->image_path);
+    Storage::disk('s3')->assertMissing('variation-values/thumbnails/old.png');
+    Storage::disk('s3')->assertExists([
+        $value->image_path,
+        $value->thumbnail_path,
+    ]);
 });
 
 // --- Destroy ---
 
 it('deletes a variation type not in use', function () {
+    Storage::fake('s3');
+    Storage::disk('s3')->put('variation-values/deleted.webp', 'deleted');
+    Storage::disk('s3')->put('variation-values/thumbnails/deleted.webp', 'deleted-thumbnail');
+
     $type = VariationType::factory()->create([
         'manufacturer_id' => $this->manufacturer->id,
     ]);
-    VariationValue::factory()->create(['variation_type_id' => $type->id]);
+    VariationValue::factory()->create([
+        'variation_type_id' => $type->id,
+        'image_path' => 'variation-values/deleted.webp',
+        'thumbnail_path' => 'variation-values/thumbnails/deleted.webp',
+    ]);
 
     $response = $this->delete("/manufacturer/variation-types/{$type->id}");
 
     $response->assertRedirect();
     expect(VariationType::find($type->id))->toBeNull();
+    Storage::disk('s3')->assertMissing([
+        'variation-values/deleted.webp',
+        'variation-values/thumbnails/deleted.webp',
+    ]);
 });
 
 it('prevents deleting a variation type used by products', function () {

@@ -25,6 +25,7 @@ class VariationValueFactory extends Factory
             'value' => fake()->word(),
             'hex' => null,
             'image_path' => null,
+            'thumbnail_path' => null,
             'display_order' => 0,
         ];
     }
