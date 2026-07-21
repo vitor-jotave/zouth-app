@@ -253,6 +253,7 @@ test('user store is blocked when user limit is reached', function () {
             'name' => 'Novo Usuário',
             'email' => 'novo@example.com',
             'role' => 'staff',
+            'capabilities' => ['orders.manage'],
         ])
         ->assertSessionHasErrors('limit');
 });
@@ -265,6 +266,7 @@ test('user store succeeds when under user limit', function () {
             'name' => 'Novo Usuário',
             'email' => 'novo+'.uniqid().'@example.com',
             'role' => 'staff',
+            'capabilities' => ['orders.manage'],
         ])
         ->assertSessionMissing('errors');
 });

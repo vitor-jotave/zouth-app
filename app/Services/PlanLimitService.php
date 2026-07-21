@@ -310,9 +310,9 @@ class PlanLimitService
      *
      * @return array<string, array{current: int, limit: int|null, percentage: int|null}>
      */
-    public function usage(Manufacturer $manufacturer): array
+    public function usage(Manufacturer $manufacturer, ?Plan $plan = null): array
     {
-        $plan = $this->activePlan($manufacturer);
+        $plan ??= $this->activePlan($manufacturer);
 
         if (! $plan) {
             return [];

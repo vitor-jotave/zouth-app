@@ -33,11 +33,26 @@ class BillingController extends Controller
 
         $plans = Plan::where('is_active', true)
             ->orderBy('sort_order')
-            ->get()
-            ->map(fn (Plan $plan) => [
+            ->get();
+
+        $subscription = $manufacturer->subscription('default');
+        $currentPlan = $this->limitService->activePlan($manufacturer);
+        $displayPlan = $currentPlan;
+
+        if (
+            ! $displayPlan
+            && $subscription?->stripe_price
+            && $this->limitService->subscriptionGrantsAccess($subscription)
+        ) {
+            $displayPlan = $plans->firstWhere('stripe_price_id', $subscription->stripe_price);
+        }
+
+        return Inertia::render('manufacturer/billing/index', [
+            'plans' => $plans->map(fn (Plan $plan) => [
                 'id' => $plan->id,
                 'name' => $plan->name,
                 'description' => $plan->description,
+                'sort_order' => $plan->sort_order,
                 'monthly_price_cents' => $plan->monthly_price_cents,
                 'formatted_price' => $plan->formatted_price,
                 'trial_days' => $plan->trial_days,
@@ -48,14 +63,8 @@ class BillingController extends Controller
                 'max_data_mb' => $plan->max_data_mb,
                 'max_files_gb' => $plan->max_files_gb,
                 'has_stripe' => $plan->stripe_price_id !== null,
-            ]);
-
-        $subscription = $manufacturer->subscription('default');
-        $currentPlan = $this->limitService->activePlan($manufacturer);
-
-        return Inertia::render('manufacturer/billing/index', [
-            'plans' => $plans,
-            'currentPlanId' => $currentPlan?->id,
+            ]),
+            'currentPlanId' => $displayPlan?->id,
             'subscription' => $subscription ? [
                 'stripe_status' => $subscription->stripe_status,
                 'on_trial' => $subscription->onTrial(),
@@ -65,7 +74,9 @@ class BillingController extends Controller
                 'cancelled' => $subscription->canceled(),
                 'active' => $this->limitService->subscriptionGrantsAccess($subscription),
             ] : null,
-            'usage' => $this->limitService->usage($manufacturer),
+            'usage' => $displayPlan
+                ? $this->limitService->usage($manufacturer, $displayPlan)
+                : [],
         ]);
     }
 
