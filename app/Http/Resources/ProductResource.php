@@ -29,7 +29,10 @@ class ProductResource extends JsonResource
             'price_cents' => $this->price_cents,
             'total_stock' => $this->getTotalStock(),
             'category' => $this->whenLoaded('category', fn () => new ProductCategoryResource($this->category)),
-            'media' => $this->whenLoaded('media', fn () => ProductMediaResource::collection($this->media)->resolve()),
+            'media' => $this->when(
+                $this->isCombo() ? $this->relationLoaded('comboItems') : $this->relationLoaded('media'),
+                fn () => ProductMediaResource::collection($this->displayMedia())->resolve(),
+            ),
             'variations' => $this->whenLoaded('productVariations', fn () => $this->productVariations->map(fn ($pv) => [
                 'id' => $pv->id,
                 'variation_type_id' => $pv->variation_type_id,
@@ -42,7 +45,9 @@ class ProductResource extends JsonResource
                             'id' => $val->id,
                             'value' => $val->value,
                             'hex' => $val->hex,
-                            'image_url' => $val->image_path ? Storage::disk('s3')->url($val->image_path) : null,
+                            'image_url' => ($val->thumbnail_path ?: $val->image_path)
+                                ? Storage::disk('s3')->url($val->thumbnail_path ?: $val->image_path)
+                                : null,
                         ])->values()->all()
                         : [],
                 ] : null,

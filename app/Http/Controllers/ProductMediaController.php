@@ -86,7 +86,10 @@ class ProductMediaController extends Controller
             abort(404);
         }
 
-        Storage::disk('s3')->delete($media->path);
+        Storage::disk('s3')->delete(array_values(array_filter([
+            $media->path,
+            $media->thumbnail_path,
+        ])));
         $media->delete();
 
         return redirect()

@@ -19,6 +19,7 @@ export function ImageDropzone({
 }: ImageDropzoneProps) {
     const [isDragOver, setIsDragOver] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
+    const dragDepthRef = useRef(0);
     const remaining = maxFiles - currentCount;
 
     const handleFiles = useCallback(
@@ -41,22 +42,47 @@ export function ImageDropzone({
         [disabled, remaining, onFilesSelected],
     );
 
+    const handleDragEnter = useCallback(
+        (e: React.DragEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (disabled) return;
+
+            dragDepthRef.current += 1;
+            setIsDragOver(true);
+        },
+        [disabled],
+    );
+
     const handleDragOver = useCallback(
         (e: React.DragEvent) => {
             e.preventDefault();
-            if (!disabled) setIsDragOver(true);
+            e.stopPropagation();
+
+            if (!disabled) {
+                e.dataTransfer.dropEffect = 'copy';
+            }
         },
         [disabled],
     );
 
     const handleDragLeave = useCallback((e: React.DragEvent) => {
         e.preventDefault();
-        setIsDragOver(false);
+        e.stopPropagation();
+
+        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+
+        if (dragDepthRef.current === 0) {
+            setIsDragOver(false);
+        }
     }, []);
 
     const handleDrop = useCallback(
         (e: React.DragEvent) => {
             e.preventDefault();
+            e.stopPropagation();
+            dragDepthRef.current = 0;
             setIsDragOver(false);
             handleFiles(e.dataTransfer.files);
         },
@@ -78,6 +104,7 @@ export function ImageDropzone({
                     handleClick();
                 }
             }}
+            onDragEnter={handleDragEnter}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}

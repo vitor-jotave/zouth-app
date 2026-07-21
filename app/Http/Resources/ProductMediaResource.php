@@ -24,6 +24,9 @@ class ProductMediaResource extends JsonResource
             'type' => $type,
             'path' => $this->path,
             'url' => Storage::disk('s3')->url($this->path),
+            'thumbnail_url' => Storage::disk('s3')->url($this->thumbnail_path ?: $this->path),
+            'width' => $this->width,
+            'height' => $this->height,
             'sort_order' => $this->sort_order,
         ];
     }
