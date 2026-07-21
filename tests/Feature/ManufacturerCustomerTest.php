@@ -6,6 +6,7 @@ use App\Models\CatalogSetting;
 use App\Models\Customer;
 use App\Models\Manufacturer;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Plan;
 use App\Models\Product;
 use App\Models\User;
@@ -159,7 +160,19 @@ it('lists only customers from the current manufacturer and supports search', fun
         'customer_document' => '52998224725',
     ]);
     $customerWithOrders = Customer::where('customer_document', '52998224725')->first();
-    Order::factory()->forCustomer($customerWithOrders)->count(2)->create();
+    $orders = Order::factory()->forCustomer($customerWithOrders)->count(2)->create();
+    OrderItem::factory()->create([
+        'order_id' => $orders[0]->id,
+        'product_id' => $this->product->id,
+        'unit_price' => 100,
+        'quantity' => 2,
+    ]);
+    OrderItem::factory()->create([
+        'order_id' => $orders[1]->id,
+        'product_id' => $this->product->id,
+        'unit_price' => 50,
+        'quantity' => 1,
+    ]);
 
     Customer::factory()->forManufacturer($this->manufacturer)->create([
         'name' => 'Pedro Cliente',
@@ -179,23 +192,168 @@ it('lists only customers from the current manufacturer and supports search', fun
     expect($customers)->toHaveCount(1);
     expect($customers[0]['name'])->toBe('Maria Cliente');
     expect($customers[0]['orders_count'])->toBe(2);
+    expect($customers[0]['commercial_orders_count'])->toBe(2);
+    expect($customers[0]['total_spent'])->toBe('250.00');
+});
+
+it('summarizes and segments the customer portfolio by commercial relationship', function () {
+    $recurringCustomer = Customer::factory()->forManufacturer($this->manufacturer)->create([
+        'name' => 'Lojista Recorrente',
+    ]);
+    $staleCustomer = Customer::factory()->forManufacturer($this->manufacturer)->create([
+        'name' => 'Lojista para Retomar',
+    ]);
+    $customerWithoutOrders = Customer::factory()->forManufacturer($this->manufacturer)->create([
+        'name' => 'Lojista sem Pedido',
+    ]);
+
+    $recurringOrders = Order::factory()
+        ->forCustomer($recurringCustomer)
+        ->status(OrderStatus::Delivered)
+        ->count(2)
+        ->sequence(
+            ['created_at' => now()->subDays(10), 'updated_at' => now()->subDays(10)],
+            ['created_at' => now()->subDays(30), 'updated_at' => now()->subDays(30)],
+        )
+        ->create();
+
+    OrderItem::factory()->create([
+        'order_id' => $recurringOrders[0]->id,
+        'product_id' => $this->product->id,
+        'unit_price' => 100,
+        'quantity' => 2,
+    ]);
+    OrderItem::factory()->create([
+        'order_id' => $recurringOrders[1]->id,
+        'product_id' => $this->product->id,
+        'unit_price' => 50,
+        'quantity' => 1,
+    ]);
+
+    $staleOrder = Order::factory()
+        ->forCustomer($staleCustomer)
+        ->status(OrderStatus::Delivered)
+        ->create([
+            'created_at' => now()->subDays(90),
+            'updated_at' => now()->subDays(90),
+        ]);
+    OrderItem::factory()->create([
+        'order_id' => $staleOrder->id,
+        'product_id' => $this->product->id,
+        'unit_price' => 75,
+        'quantity' => 1,
+    ]);
+
+    $cancelledOrder = Order::factory()
+        ->forCustomer($staleCustomer)
+        ->status(OrderStatus::Cancelled)
+        ->create([
+            'created_at' => now()->subDays(2),
+            'updated_at' => now()->subDays(2),
+        ]);
+    OrderItem::factory()->create([
+        'order_id' => $cancelledOrder->id,
+        'product_id' => $this->product->id,
+        'unit_price' => 999,
+        'quantity' => 1,
+    ]);
+
+    $response = $this->actingAs($this->owner)
+        ->get(route('manufacturer.customers.index'));
+
+    $response->assertOk();
+    $props = $response->viewData('page')['props'];
+
+    expect($props['customer_summary'])
+        ->toBe([
+            'total_customers' => 3,
+            'buyers' => 2,
+            'recurring' => 1,
+            'attention' => 2,
+        ]);
+
+    $recurringData = collect($props['customers']['data'])
+        ->firstWhere('id', $recurringCustomer->id);
+
+    expect($recurringData['commercial_orders_count'])->toBe(2);
+    expect($recurringData['total_spent'])->toBe('250.00');
+
+    $repeatResponse = $this->actingAs($this->owner)
+        ->get(route('manufacturer.customers.index', ['relationship' => 'repeat']));
+    $repeatCustomers = $repeatResponse->viewData('page')['props']['customers']['data'];
+
+    expect($repeatCustomers)->toHaveCount(1);
+    expect($repeatCustomers[0]['id'])->toBe($recurringCustomer->id);
+
+    $attentionResponse = $this->actingAs($this->owner)
+        ->get(route('manufacturer.customers.index', ['relationship' => 'attention']));
+    $attentionCustomers = collect($attentionResponse->viewData('page')['props']['customers']['data']);
+
+    expect($attentionCustomers->pluck('id')->all())
+        ->toContain($staleCustomer->id, $customerWithoutOrders->id)
+        ->not->toContain($recurringCustomer->id);
 });
 
 it('shows a customer with every order status in the order history', function () {
     $customer = Customer::factory()->forManufacturer($this->manufacturer)->create();
 
-    Order::factory()->forManufacturer($this->manufacturer)->forCustomer($customer)->status(OrderStatus::New)->create();
-    Order::factory()->forManufacturer($this->manufacturer)->forCustomer($customer)->status(OrderStatus::Delivered)->create();
-    Order::factory()->forManufacturer($this->manufacturer)->forCustomer($customer)->status(OrderStatus::Cancelled)->create();
+    $newOrder = Order::factory()
+        ->forManufacturer($this->manufacturer)
+        ->forCustomer($customer)
+        ->status(OrderStatus::New)
+        ->create([
+            'created_at' => now()->subDays(90),
+            'updated_at' => now()->subDays(90),
+        ]);
+    $deliveredOrder = Order::factory()
+        ->forManufacturer($this->manufacturer)
+        ->forCustomer($customer)
+        ->status(OrderStatus::Delivered)
+        ->create([
+            'created_at' => now()->subDays(30),
+            'updated_at' => now()->subDays(30),
+        ]);
+    $cancelledOrder = Order::factory()
+        ->forManufacturer($this->manufacturer)
+        ->forCustomer($customer)
+        ->status(OrderStatus::Cancelled)
+        ->create([
+            'created_at' => now()->subDays(2),
+            'updated_at' => now()->subDays(2),
+        ]);
+
+    OrderItem::factory()->create([
+        'order_id' => $newOrder->id,
+        'product_id' => $this->product->id,
+        'unit_price' => 100,
+        'quantity' => 1,
+    ]);
+    OrderItem::factory()->create([
+        'order_id' => $deliveredOrder->id,
+        'product_id' => $this->product->id,
+        'unit_price' => 75,
+        'quantity' => 2,
+    ]);
+    OrderItem::factory()->create([
+        'order_id' => $cancelledOrder->id,
+        'product_id' => $this->product->id,
+        'unit_price' => 999,
+        'quantity' => 1,
+    ]);
 
     $response = $this->actingAs($this->owner)
         ->get(route('manufacturer.customers.show', $customer));
 
     $response->assertOk();
-    $orders = $response->viewData('page')['props']['orders']['data'];
+    $props = $response->viewData('page')['props'];
+    $orders = $props['orders']['data'];
 
     expect($orders)->toHaveCount(3);
     expect(collect($orders)->pluck('status')->all())->toContain('new', 'delivered', 'cancelled');
+    expect($props['customer']['orders_count'])->toBe(3);
+    expect($props['customer']['commercial_orders_count'])->toBe(2);
+    expect($props['customer']['total_spent'])->toBe('250.00');
+    expect($props['customer']['last_order_at'])->toContain($deliveredOrder->created_at->format('Y-m-d'));
 });
 
 it('forbids viewing a customer from another manufacturer', function () {
