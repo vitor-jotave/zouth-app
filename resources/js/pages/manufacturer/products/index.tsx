@@ -1,5 +1,6 @@
 import { Head, Link, router } from '@inertiajs/react';
 import {
+    FileUp,
     MoreHorizontal,
     PackagePlus,
     Pencil,
@@ -563,7 +564,7 @@ export default function ProductsIndex({
                         </>
                     }
                     aside={
-                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
                             <Button
                                 asChild
                                 className="min-h-12 rounded-[2px] bg-[#ff4d3d] text-[#18181f] hover:-translate-y-px hover:bg-[#ff4d3d]"
@@ -592,6 +593,23 @@ export default function ProductsIndex({
                                         aria-hidden="true"
                                     />
                                     Criar combo
+                                </Link>
+                            </Button>
+                            <Button
+                                asChild
+                                variant="outline"
+                                className="min-h-12 rounded-[2px] border-[#18181f] bg-transparent hover:bg-[#e7e3dc]"
+                            >
+                                <Link
+                                    href={
+                                        manufacturer.productImports.create().url
+                                    }
+                                >
+                                    <FileUp
+                                        className="size-4"
+                                        aria-hidden="true"
+                                    />
+                                    Trazer coleção
                                 </Link>
                             </Button>
                         </div>
