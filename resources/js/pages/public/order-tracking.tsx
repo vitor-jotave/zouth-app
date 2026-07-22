@@ -46,7 +46,10 @@ interface Order {
     customer_name: string;
     items: OrderItem[];
     total_items: number;
+    subtotal_amount: string;
+    discount_amount: string;
     total_amount: string;
+    applied_order_rules: Array<{ name: string }>;
     status_history: StatusHistory[];
     created_at: string;
 }
@@ -334,16 +337,31 @@ export default function OrderTracking({ order, manufacturer }: Props) {
                             </div>
                         ))}
                     </div>
-                    <div className="flex items-center justify-between gap-4 border-t bg-gray-50 p-4">
+                    <div className="flex items-end justify-between gap-4 border-t bg-gray-50 p-4">
                         <p className="text-sm font-medium">
                             Total: {order.total_items} item(ns)
                         </p>
-                        <div className="text-right">
-                            <p className="text-xs text-muted-foreground">
-                                Valor total
+                        <div className="grid min-w-44 gap-1 text-right text-sm">
+                            <p className="flex justify-between gap-5 text-muted-foreground">
+                                <span>Subtotal</span>
+                                <span>
+                                    {formatCurrency(order.subtotal_amount)}
+                                </span>
                             </p>
-                            <p className="text-lg font-bold text-gray-950">
-                                {formatCurrency(order.total_amount)}
+                            {Number(order.discount_amount) > 0 && (
+                                <p className="flex justify-between gap-5 text-green-700">
+                                    <span>Desconto</span>
+                                    <span>
+                                        −{' '}
+                                        {formatCurrency(order.discount_amount)}
+                                    </span>
+                                </p>
+                            )}
+                            <p className="mt-1 flex justify-between gap-5 border-t pt-1 font-bold text-gray-950">
+                                <span>Total</span>
+                                <span>
+                                    {formatCurrency(order.total_amount)}
+                                </span>
                             </p>
                         </div>
                     </div>

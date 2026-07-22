@@ -69,6 +69,8 @@ type Order = {
     customer_email: string | null;
     tracking_ref: string | null;
     total_items: number;
+    subtotal_amount: string;
+    discount_amount: string;
     total_amount: string;
     allowed_transitions: AllowedTransition[];
     sales_rep: { id: number; name: string } | null;

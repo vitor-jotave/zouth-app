@@ -239,6 +239,14 @@ body:has(.zouth-app) [data-sidebar='content'] {
     letter-spacing: -0.02em;
 }
 
+.zouth-app-header[data-theme='dark'] [data-slot='breadcrumb-list'] {
+    color: #98968d;
+}
+
+.zouth-app-header[data-theme='dark'] [data-slot='breadcrumb-page'] {
+    color: #f6f4f0;
+}
+
 body:has(.zouth-app) [data-slot='dropdown-menu-content'] {
     border-color: #cac4ba;
     border-radius: 2px;
@@ -247,6 +255,26 @@ body:has(.zouth-app) [data-slot='dropdown-menu-content'] {
     box-shadow: none;
     font-family:
         'Zouth Manrope', 'Manrope', ui-sans-serif, system-ui, sans-serif;
+}
+
+.order-rule-progress {
+    overflow: hidden;
+    border: 0;
+    border-radius: 999px;
+    appearance: none;
+    background: #d7d3cc;
+}
+
+.order-rule-progress::-webkit-progress-bar {
+    background: #d7d3cc;
+}
+
+.order-rule-progress::-webkit-progress-value {
+    background: var(--order-rule-progress-color, #ff4d3d);
+}
+
+.order-rule-progress::-moz-progress-bar {
+    background: var(--order-rule-progress-color, #ff4d3d);
 }
 
 @media (max-width: 47.999rem) {

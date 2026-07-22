@@ -1,14 +1,18 @@
 import { Head, router } from '@inertiajs/react';
 import {
     AlertCircle,
+    ArrowRight,
     Box,
     Check,
+    ChevronDown,
     ChevronLeft,
     ChevronRight,
+    Circle,
     ClipboardCopy,
     Filter,
     Heart,
     Maximize2,
+    MessageCircle,
     Minus,
     Package,
     Plus,
@@ -61,6 +65,11 @@ import {
     SheetTitle,
 } from '@/components/ui/sheet';
 import { LAYOUT_TOKENS, PATTERNS, GRADIENTS } from '@/lib/catalog-theming';
+import {
+    evaluateOrderRules,
+    pendingRuleProgress,
+    type OrderRuleContract,
+} from '@/lib/order-rules';
 import { cn } from '@/lib/utils';
 
 interface Manufacturer {
@@ -73,6 +82,7 @@ interface CatalogSettings {
     brand_name: string;
     show_brand_name: boolean;
     show_logo: boolean;
+    hide_prices: boolean;
     tagline?: string | null;
     description?: string | null;
     logo_url?: string | null;
@@ -114,6 +124,7 @@ interface Product {
     name: string;
     sku: string;
     description?: string | null;
+    category_id?: number | null;
     category?: string | null;
     primary_image?: string | null;
     primary_thumbnail?: string | null;
@@ -176,6 +187,12 @@ interface Props {
     catalog_token: string;
     filters: CatalogFilters;
     filter_options: CatalogFilterOptions;
+    order_rules: OrderRuleContract[];
+    whatsapp_checkout: {
+        enabled: boolean;
+        available: boolean;
+        base_url?: string | null;
+    };
 }
 
 interface CatalogFilters {
@@ -273,6 +290,75 @@ function formatPrice(priceCents?: number | null): string {
         style: 'currency',
         currency: 'BRL',
     }).format(priceCents / 100);
+}
+
+function orderRuleBenefitLabel(rule: OrderRuleContract): string {
+    if (rule.action.type === 'percentage_discount') {
+        return `${new Intl.NumberFormat('pt-BR', {
+            maximumFractionDigits: 2,
+        }).format((rule.action.value ?? 0) / 100)}% de desconto`;
+    }
+
+    return `${formatPrice(rule.action.value)} de desconto`;
+}
+
+function orderRuleRemainingLabel(
+    rule: OrderRuleContract,
+    remaining: number,
+): string {
+    const metric = rule.conditions[0]?.metric;
+
+    if (metric === 'subtotal_cents') {
+        return formatPrice(remaining);
+    }
+
+    if (metric === 'distinct_products') {
+        return `${remaining} ${remaining === 1 ? 'modelo' : 'modelos'}`;
+    }
+
+    return `${remaining} ${remaining === 1 ? 'peça' : 'peças'}`;
+}
+
+function orderRuleRequirementLabel(
+    rule: OrderRuleContract,
+    remaining: number,
+): string {
+    const metric = rule.conditions[0]?.metric;
+
+    if (metric === 'subtotal_cents') {
+        return `${formatPrice(remaining)} para alcançar o pedido mínimo`;
+    }
+
+    if (metric === 'distinct_products') {
+        return `${remaining} ${remaining === 1 ? 'modelo' : 'modelos'} para completar a variedade`;
+    }
+
+    if (metric === 'total_quantity') {
+        return `${remaining} ${remaining === 1 ? 'peça' : 'peças'} para completar o mínimo`;
+    }
+
+    return (
+        rule.public_message ??
+        'Este pedido ainda não atende a uma condição comercial.'
+    );
+}
+
+function blockingRuleRemaining(
+    rule: OrderRuleContract,
+    currentValues: number[],
+): number | null {
+    if (rule.conditions.length !== 1) {
+        return null;
+    }
+
+    const condition = rule.conditions[0];
+    const current = currentValues[0] ?? 0;
+
+    if (condition.operator === 'lte') {
+        return Math.max(0, condition.value + 1 - current);
+    }
+
+    return null;
 }
 
 function booleanSetting(value: unknown, fallback: boolean): boolean {
@@ -727,6 +813,7 @@ function ProductQuickViewModal({
     isAdded,
     primaryColor,
     accentColor,
+    showPrice,
     onClose,
     onSelectVariation,
     onAddToCart,
@@ -738,6 +825,7 @@ function ProductQuickViewModal({
     isAdded: boolean;
     primaryColor: string;
     accentColor: string;
+    showPrice: boolean;
     onClose: () => void;
     onSelectVariation: (variationName: string, value: string) => void;
     onAddToCart: (product: Product) => void;
@@ -791,16 +879,18 @@ function ProductQuickViewModal({
                             </DialogDescription>
                         </DialogHeader>
 
-                        <p
-                            className={`text-lg font-semibold ${product.price_cents == null ? 'italic opacity-55' : ''}`}
-                            style={
-                                product.price_cents != null
-                                    ? { color: primaryColor }
-                                    : {}
-                            }
-                        >
-                            {formatPrice(product.price_cents)}
-                        </p>
+                        {showPrice && (
+                            <p
+                                className={`text-lg font-semibold ${product.price_cents == null ? 'italic opacity-55' : ''}`}
+                                style={
+                                    product.price_cents != null
+                                        ? { color: primaryColor }
+                                        : {}
+                                }
+                            >
+                                {formatPrice(product.price_cents)}
+                            </p>
+                        )}
 
                         {product.description && (
                             <div className="space-y-2 border-t pt-5">
@@ -1415,6 +1505,107 @@ function ComboSummary({ product }: { product: Product }) {
     );
 }
 
+function comboPieceCount(product: Product): number {
+    if (product.product_type !== 'combo') {
+        return 1;
+    }
+
+    return product.combo_items.reduce(
+        (total, comboItem) => total + comboItem.quantity,
+        0,
+    );
+}
+
+function comboModelCount(product: Product): number {
+    return new Set(product.combo_items.map((comboItem) => comboItem.product_id))
+        .size;
+}
+
+function buildWhatsappCartMessage(
+    brandName: string,
+    cart: CartItem[],
+    cartSelectionLabel: string,
+    cartPieceLabel: string,
+    catalogUrl: string,
+): string {
+    const itemLines = cart.map((item) => {
+        const details = [
+            `SKU ${item.product.sku}`,
+            variationSummary(item.selected_variations ?? null),
+            item.product.product_type === 'combo'
+                ? `${comboPieceCount(item.product)} peças · ${comboModelCount(item.product)} modelos`
+                : null,
+        ].filter(Boolean);
+
+        return `• ${item.quantity}x ${item.product.name} — ${details.join(' · ')}`;
+    });
+
+    return [
+        `Olá! Montei uma seleção no catálogo da ${brandName} e gostaria de falar com o comercial.`,
+        '',
+        ...itemLines,
+        '',
+        `${cartSelectionLabel} · ${cartPieceLabel}`,
+        `Catálogo: ${catalogUrl}`,
+    ].join('\n');
+}
+
+function catalogUrlForWhatsapp(): string {
+    if (typeof window === 'undefined') {
+        return '';
+    }
+
+    const currentUrl = new URL(window.location.href);
+    const representativeReference = currentUrl.searchParams.get('ref');
+
+    currentUrl.search = '';
+    currentUrl.hash = '';
+
+    if (representativeReference) {
+        currentUrl.searchParams.set('ref', representativeReference);
+    }
+
+    return currentUrl.toString();
+}
+
+function CartComboSummary({ product }: { product: Product }) {
+    if (product.product_type !== 'combo' || product.combo_items.length === 0) {
+        return null;
+    }
+
+    return (
+        <details className="group mt-4 border-t border-[#d8d3cb] pt-3">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-[#18181f] transition-colors outline-none hover:text-[#ff4d3d] focus-visible:ring-1 focus-visible:ring-[#ff4d3d] focus-visible:ring-offset-1 [&::-webkit-details-marker]:hidden">
+                <span>Ver composição</span>
+                <span className="flex items-center gap-2 text-xs font-normal text-[#716f68]">
+                    <span className="hidden sm:inline">
+                        {comboPieceCount(product)} peças ·{' '}
+                        {comboModelCount(product)} modelos
+                    </span>
+                    <ChevronDown className="size-4 transition-transform duration-200 group-open:rotate-180" />
+                </span>
+            </summary>
+            <ul className="grid gap-2 pt-2 pb-1 text-xs leading-5 text-[#716f68]">
+                {product.combo_items.map((comboItem, index) => (
+                    <li
+                        key={`${comboItem.product_id}-${index}`}
+                        className="flex justify-between gap-4 border-t border-[#e7e3dc] pt-2 first:border-0 first:pt-0"
+                    >
+                        <span>
+                            {comboItem.quantity}x {comboItem.product_name}
+                        </span>
+                        {variationSummary(comboItem.variation_key) && (
+                            <span className="shrink-0 text-right">
+                                {variationSummary(comboItem.variation_key)}
+                            </span>
+                        )}
+                    </li>
+                ))}
+            </ul>
+        </details>
+    );
+}
+
 function ComboGridSection({
     combos,
     settings,
@@ -1440,7 +1631,7 @@ function ComboGridSection({
 
     const options: ProductDisplayOptions = displayOptions ?? {
         presentation: 'commercial',
-        showPrice: true,
+        showPrice: !settings.hide_prices,
         showSku: true,
         showStock: true,
         showVariations: true,
@@ -1860,7 +2051,9 @@ function MinimalLayout({
             : 'commercial';
     const productDisplayOptions: ProductDisplayOptions = {
         presentation: productPresentation,
-        showPrice: booleanSetting(productGridSection?.props?.show_price, true),
+        showPrice:
+            !settings.hide_prices &&
+            booleanSetting(productGridSection?.props?.show_price, true),
         showSku: booleanSetting(productGridSection?.props?.show_sku, true),
         showStock: booleanSetting(productGridSection?.props?.show_stock, false),
         showVariations: booleanSetting(
@@ -2648,18 +2841,22 @@ function PlayfulLayout({
                                         <p className="text-xs font-semibold tracking-wide uppercase opacity-50">
                                             SKU {product.sku}
                                         </p>
-                                        <p
-                                            className={`text-base font-bold ${product.price_cents == null ? 'italic opacity-50' : ''}`}
-                                            style={
-                                                product.price_cents != null
-                                                    ? {
-                                                          color: settings.accent_color,
-                                                      }
-                                                    : {}
-                                            }
-                                        >
-                                            {formatPrice(product.price_cents)}
-                                        </p>
+                                        {!settings.hide_prices && (
+                                            <p
+                                                className={`text-base font-bold ${product.price_cents == null ? 'italic opacity-50' : ''}`}
+                                                style={
+                                                    product.price_cents != null
+                                                        ? {
+                                                              color: settings.accent_color,
+                                                          }
+                                                        : {}
+                                                }
+                                            >
+                                                {formatPrice(
+                                                    product.price_cents,
+                                                )}
+                                            </p>
+                                        )}
                                         {product.product_type === 'combo' && (
                                             <Badge variant="outline">
                                                 Combo
@@ -2930,20 +3127,23 @@ function BoutiqueLayout({
                                             <h3 className="font-serif text-xl font-light tracking-wide">
                                                 {product.name}
                                             </h3>
-                                            <p
-                                                className={`mt-1 text-base font-semibold ${product.price_cents == null ? 'font-light italic opacity-50' : ''}`}
-                                                style={
-                                                    product.price_cents != null
-                                                        ? {
-                                                              color: 'var(--brand-primary)',
-                                                          }
-                                                        : {}
-                                                }
-                                            >
-                                                {formatPrice(
-                                                    product.price_cents,
-                                                )}
-                                            </p>
+                                            {!settings.hide_prices && (
+                                                <p
+                                                    className={`mt-1 text-base font-semibold ${product.price_cents == null ? 'font-light italic opacity-50' : ''}`}
+                                                    style={
+                                                        product.price_cents !=
+                                                        null
+                                                            ? {
+                                                                  color: 'var(--brand-primary)',
+                                                              }
+                                                            : {}
+                                                    }
+                                                >
+                                                    {formatPrice(
+                                                        product.price_cents,
+                                                    )}
+                                                </p>
+                                            )}
                                         </div>
                                         {product.product_type === 'combo' && (
                                             <Badge variant="outline">
@@ -3008,6 +3208,8 @@ export default function PublicCatalog({
     catalog_token,
     filters,
     filter_options,
+    order_rules,
+    whatsapp_checkout,
 }: Props) {
     const headingFont =
         fontMap[
@@ -3060,13 +3262,88 @@ export default function PublicCatalog({
     const [copied, setCopied] = useState(false);
 
     const cartTotal = cart.reduce((sum, item) => sum + item.quantity, 0);
+    const cartPieceTotal = cart.reduce(
+        (sum, item) => sum + comboPieceCount(item.product) * item.quantity,
+        0,
+    );
+    const cartCompositionTotal = cart.reduce(
+        (sum, item) =>
+            item.product.product_type === 'combo' ? sum + item.quantity : sum,
+        0,
+    );
+    const hasOnlyCompositions =
+        cart.length > 0 &&
+        cart.every((item) => item.product.product_type === 'combo');
+    const cartSelectionLabel = hasOnlyCompositions
+        ? `${cartCompositionTotal} ${cartCompositionTotal === 1 ? 'composição' : 'composições'}`
+        : `${cartTotal} ${cartTotal === 1 ? 'seleção' : 'seleções'}`;
+    const cartPieceLabel = `${cartPieceTotal} ${cartPieceTotal === 1 ? 'peça' : 'peças'}`;
+    const whatsappMessage = whatsapp_checkout.enabled
+        ? buildWhatsappCartMessage(
+              catalog_settings.brand_name ?? manufacturer.name,
+              cart,
+              cartSelectionLabel,
+              cartPieceLabel,
+              catalogUrlForWhatsapp(),
+          )
+        : '';
+    const whatsappCheckoutUrl =
+        whatsapp_checkout.enabled &&
+        whatsapp_checkout.available &&
+        whatsapp_checkout.base_url
+            ? `${whatsapp_checkout.base_url}?text=${encodeURIComponent(whatsappMessage)}`
+            : null;
 
-    const cartPriceTotal = cart.reduce((sum, item) => {
-        if (item.unit_price_cents == null) return sum;
-        return sum + item.unit_price_cents * item.quantity;
-    }, 0);
-
-    const hasAnyPriced = cart.some((item) => item.unit_price_cents != null);
+    const hasAnyPriced =
+        !whatsapp_checkout.enabled &&
+        cart.some((item) => item.unit_price_cents != null);
+    const hasItemsUnderConsultation = cart.some(
+        (item) => item.unit_price_cents == null,
+    );
+    const orderRuleEvaluation = evaluateOrderRules(
+        order_rules,
+        cart.map((item) => ({
+            product_id: item.product.id,
+            product_category_id: item.product.category_id ?? null,
+            quantity: item.quantity,
+            unit_price_cents: item.unit_price_cents ?? null,
+        })),
+    );
+    const pendingBenefit = orderRuleEvaluation.evaluations
+        .filter(
+            (evaluation) =>
+                evaluation.rule.action.type !== 'block_checkout' &&
+                !evaluation.matched,
+        )
+        .map((evaluation) => ({
+            evaluation,
+            progress: pendingRuleProgress(evaluation),
+        }))
+        .filter(
+            (
+                candidate,
+            ): candidate is typeof candidate & {
+                progress: NonNullable<typeof candidate.progress>;
+            } => candidate.progress !== null,
+        )
+        .sort(
+            (a, b) =>
+                a.progress.remaining / a.progress.target -
+                b.progress.remaining / b.progress.target,
+        )[0];
+    const pendingRequirements = orderRuleEvaluation.evaluations
+        .filter(
+            (evaluation) =>
+                evaluation.rule.action.type === 'block_checkout' &&
+                evaluation.matched,
+        )
+        .map((evaluation) => ({
+            evaluation,
+            remaining: blockingRuleRemaining(
+                evaluation.rule,
+                evaluation.current_values,
+            ),
+        }));
 
     useEffect(() => {
         if (addedProductId === null) {
@@ -3179,6 +3456,10 @@ export default function PublicCatalog({
     };
 
     const handleCheckout = () => {
+        if (whatsapp_checkout.enabled) {
+            return;
+        }
+
         setCheckoutErrors({});
         setSubmitting(true);
 
@@ -3384,6 +3665,7 @@ export default function PublicCatalog({
                 }
                 primaryColor={catalog_settings.primary_color}
                 accentColor={catalog_settings.accent_color}
+                showPrice={!whatsapp_checkout.enabled}
                 onClose={() => setQuickViewProduct(null)}
                 onSelectVariation={(variationName, value) => {
                     if (!quickViewProduct) {
@@ -3406,7 +3688,11 @@ export default function PublicCatalog({
                     style={{ backgroundColor: catalog_settings.primary_color }}
                 >
                     <ShoppingCart className="h-5 w-5" />
-                    <span>Ver pedido</span>
+                    <span>
+                        {whatsapp_checkout.enabled
+                            ? 'Ver seleção'
+                            : 'Ver pedido'}
+                    </span>
                     <span className="rounded-full bg-white/20 px-2 py-0.5 font-bold">
                         {cartTotal}
                     </span>
@@ -3417,157 +3703,475 @@ export default function PublicCatalog({
             <Sheet open={cartOpen} onOpenChange={setCartOpen}>
                 <SheetContent
                     side="right"
-                    className="flex flex-col"
-                    style={{ fontFamily: bodyFont }}
+                    overlayClassName="bg-[#18181f]/72 backdrop-blur-[1px]"
+                    className="flex w-full gap-0 border-l border-[#cac4ba] bg-[#f6f4f0] shadow-none ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:duration-200 data-[state=open]:duration-300 sm:max-w-[34rem] [&_[data-slot=sheet-close]]:top-5 [&_[data-slot=sheet-close]]:right-4 sm:[&_[data-slot=sheet-close]]:top-7 sm:[&_[data-slot=sheet-close]]:right-6"
+                    style={{
+                        fontFamily: bodyFont,
+                        color: '#18181f',
+                    }}
                 >
-                    <SheetHeader>
-                        <SheetTitle style={{ fontFamily: headingFont }}>
-                            Seu pedido ({cartTotal} itens)
+                    <SheetHeader className="sticky top-0 z-20 gap-2 border-b border-[#d8d3cb] bg-[#f6f4f0]/96 px-6 pt-7 pb-6 backdrop-blur-sm sm:px-8 sm:pt-9 sm:pb-7">
+                        <p
+                            className="pr-12 text-[11px] font-semibold tracking-[0.18em] uppercase"
+                            style={{ color: catalog_settings.accent_color }}
+                        >
+                            {whatsapp_checkout.enabled
+                                ? 'Seleção em construção'
+                                : 'Pedido em construção'}
+                        </p>
+                        <SheetTitle
+                            className="pr-12 text-[2.35rem] leading-[0.98] font-semibold tracking-[-0.04em] sm:text-[2.75rem]"
+                            style={{ fontFamily: headingFont }}
+                        >
+                            Sua seleção
+                            <span
+                                aria-hidden="true"
+                                style={{ color: catalog_settings.accent_color }}
+                            >
+                                .
+                            </span>
                         </SheetTitle>
-                        <SheetDescription>
-                            Revise os itens selecionados antes de finalizar o
-                            pedido.
+                        <SheetDescription className="text-sm text-[#716f68]">
+                            {cartSelectionLabel} · {cartPieceLabel}
                         </SheetDescription>
                     </SheetHeader>
 
-                    <div className="flex-1 overflow-y-auto">
+                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                         {cart.length === 0 ? (
-                            <p className="px-4 text-sm text-muted-foreground">
-                                Nenhum item adicionado.
-                            </p>
-                        ) : (
-                            <div className="space-y-3 px-4">
-                                {cart.map((item) => (
-                                    <div
-                                        key={item.key}
-                                        className="flex items-center gap-3 rounded-lg border p-3"
+                            <div className="grid min-h-72 place-items-center px-6 text-center">
+                                <div className="max-w-64">
+                                    <Package className="mx-auto size-6 text-[#98968d]" />
+                                    <p
+                                        className="mt-4 text-xl font-semibold"
+                                        style={{ fontFamily: headingFont }}
                                     >
-                                        <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-md bg-gray-100">
-                                            {item.product.primary_image ? (
-                                                <img
-                                                    src={
-                                                        item.product
-                                                            .primary_image
-                                                    }
-                                                    alt={item.product.name}
-                                                    className="h-full w-full object-cover"
-                                                />
-                                            ) : (
-                                                <div className="flex h-full items-center justify-center">
-                                                    <Package className="h-4 w-4 text-gray-400" />
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="truncate text-sm font-medium">
-                                                {item.product.name}
-                                            </p>
-                                            <p className="text-xs text-muted-foreground">
-                                                SKU {item.product.sku}
-                                            </p>
-                                            {item.selected_variations && (
-                                                <p className="text-xs text-muted-foreground">
-                                                    {variationSummary(
-                                                        item.selected_variations,
-                                                    )}
-                                                </p>
-                                            )}
-                                            <p className="text-xs font-medium">
-                                                {formatPrice(
-                                                    item.unit_price_cents,
-                                                )}
-                                            </p>
-                                            <ComboSummary
-                                                product={item.product}
-                                            />
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <Button
-                                                variant="outline"
-                                                size="icon"
-                                                className="h-7 w-7"
-                                                disabled={
-                                                    item.quantity >=
-                                                    (availableStockForSelection(
-                                                        item.product,
-                                                        item.selected_variations ??
-                                                            {},
-                                                    ) ?? 0)
-                                                }
-                                                onClick={() =>
-                                                    updateQuantity(
-                                                        item.key,
-                                                        item.quantity - 1,
-                                                    )
-                                                }
-                                            >
-                                                <Minus className="h-3 w-3" />
-                                            </Button>
-                                            <span className="w-8 text-center text-sm font-medium">
-                                                {item.quantity}
-                                            </span>
-                                            <Button
-                                                variant="outline"
-                                                size="icon"
-                                                className="h-7 w-7"
-                                                onClick={() =>
-                                                    updateQuantity(
-                                                        item.key,
-                                                        item.quantity + 1,
-                                                    )
-                                                }
-                                            >
-                                                <Plus className="h-3 w-3" />
-                                            </Button>
-                                        </div>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 text-destructive"
-                                            onClick={() =>
-                                                removeFromCart(item.key)
-                                            }
+                                        Sua seleção começa no catálogo.
+                                    </p>
+                                    <p className="mt-2 text-sm leading-6 text-[#716f68]">
+                                        Escolha as peças e composições que fazem
+                                        sentido para a sua loja.
+                                    </p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-[#d8d3cb] px-6 sm:px-8">
+                                {cart.map((item) => {
+                                    const availableStock =
+                                        availableStockForSelection(
+                                            item.product,
+                                            item.selected_variations ?? {},
+                                        );
+
+                                    return (
+                                        <article
+                                            key={item.key}
+                                            className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-4 py-6 sm:grid-cols-[6rem_minmax(0,1fr)] sm:gap-5 sm:py-7"
                                         >
-                                            <Trash2 className="h-3 w-3" />
-                                        </Button>
-                                    </div>
-                                ))}
+                                            <div className="h-[112px] w-[88px] overflow-hidden bg-[#e7e3dc] sm:h-[120px] sm:w-[96px]">
+                                                {item.product.primary_image ? (
+                                                    <img
+                                                        src={
+                                                            item.product
+                                                                .primary_image
+                                                        }
+                                                        alt={item.product.name}
+                                                        className="h-full w-full object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="flex h-full items-center justify-center">
+                                                        <Package className="size-5 text-[#98968d]" />
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="min-w-0">
+                                                <h3
+                                                    className="text-lg leading-6 font-semibold tracking-[-0.02em]"
+                                                    style={{
+                                                        fontFamily: headingFont,
+                                                    }}
+                                                >
+                                                    {item.product.name}
+                                                </h3>
+                                                <p className="mt-1 text-[11px] tracking-[0.08em] text-[#98968d] uppercase">
+                                                    {item.product.sku}
+                                                </p>
+                                                {!whatsapp_checkout.enabled && (
+                                                    <p
+                                                        className="mt-3 text-base font-semibold"
+                                                        style={{
+                                                            fontFamily:
+                                                                headingFont,
+                                                        }}
+                                                    >
+                                                        {formatPrice(
+                                                            item.unit_price_cents,
+                                                        )}
+                                                    </p>
+                                                )}
+
+                                                {item.product.product_type ===
+                                                'combo' ? (
+                                                    <p className="mt-1 text-xs text-[#716f68]">
+                                                        {comboPieceCount(
+                                                            item.product,
+                                                        )}{' '}
+                                                        peças ·{' '}
+                                                        {comboModelCount(
+                                                            item.product,
+                                                        )}{' '}
+                                                        modelos
+                                                    </p>
+                                                ) : (
+                                                    item.selected_variations && (
+                                                        <p className="mt-1 text-xs text-[#716f68]">
+                                                            {variationSummary(
+                                                                item.selected_variations,
+                                                            )}
+                                                        </p>
+                                                    )
+                                                )}
+
+                                                <CartComboSummary
+                                                    product={item.product}
+                                                />
+
+                                                <div className="mt-4 flex items-center justify-between gap-3">
+                                                    <div
+                                                        className="flex h-11 items-center border border-[#cac4ba] bg-[#f6f4f0]"
+                                                        aria-label={`Quantidade de ${item.product.name}`}
+                                                    >
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="size-10 rounded-none hover:bg-[#e7e3dc]"
+                                                            disabled={
+                                                                item.quantity <=
+                                                                1
+                                                            }
+                                                            aria-label={`Diminuir quantidade de ${item.product.name}`}
+                                                            onClick={() =>
+                                                                updateQuantity(
+                                                                    item.key,
+                                                                    item.quantity -
+                                                                        1,
+                                                                )
+                                                            }
+                                                        >
+                                                            <Minus className="size-4" />
+                                                        </Button>
+                                                        <span
+                                                            className="w-10 text-center text-sm font-semibold"
+                                                            aria-live="polite"
+                                                        >
+                                                            {item.quantity}
+                                                        </span>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="size-10 rounded-none hover:bg-[#e7e3dc]"
+                                                            disabled={
+                                                                availableStock !==
+                                                                    null &&
+                                                                item.quantity >=
+                                                                    availableStock
+                                                            }
+                                                            aria-label={`Aumentar quantidade de ${item.product.name}`}
+                                                            onClick={() =>
+                                                                updateQuantity(
+                                                                    item.key,
+                                                                    item.quantity +
+                                                                        1,
+                                                                )
+                                                            }
+                                                        >
+                                                            <Plus className="size-4" />
+                                                        </Button>
+                                                    </div>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="size-11 rounded-none text-[#716f68] hover:bg-[#e7e3dc] hover:text-[#ff4d3d]"
+                                                        aria-label={`Remover ${item.product.name} do pedido`}
+                                                        onClick={() =>
+                                                            removeFromCart(
+                                                                item.key,
+                                                            )
+                                                        }
+                                                    >
+                                                        <Trash2 className="size-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </article>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {cart.length > 0 && (
+                            <div className="border-t border-[#d8d3cb] px-6 py-6 sm:px-8 sm:py-7">
+                                {whatsapp_checkout.enabled ? (
+                                    <p className="mb-6 border-l-2 border-[#ff4d3d] pl-4 text-xs leading-5 text-[#716f68]">
+                                        Nenhum valor aparece nesta seleção. O
+                                        comercial confirma preços, condições e
+                                        disponibilidade durante a conversa.
+                                    </p>
+                                ) : hasItemsUnderConsultation ? (
+                                    <p className="mb-6 border-l-2 border-[#98968d] pl-4 text-xs leading-5 text-[#716f68]">
+                                        Itens sob consulta entram no pedido, mas
+                                        não participam do total estimado nem dos
+                                        descontos por valor.
+                                    </p>
+                                ) : null}
+
+                                {pendingRequirements.length > 0 && (
+                                    <section aria-labelledby="cart-requirements-title">
+                                        <h3
+                                            id="cart-requirements-title"
+                                            className="text-xl font-semibold tracking-[-0.025em]"
+                                            style={{ fontFamily: headingFont }}
+                                        >
+                                            {whatsapp_checkout.enabled
+                                                ? 'Antes de conversar'
+                                                : 'O que falta para fechar'}
+                                        </h3>
+                                        <div className="mt-3 divide-y divide-[#d8d3cb] border-y border-[#d8d3cb]">
+                                            {pendingRequirements.map(
+                                                ({ evaluation, remaining }) => (
+                                                    <div
+                                                        key={evaluation.rule.id}
+                                                        className="flex min-h-14 items-center gap-3 py-3 text-sm leading-5"
+                                                        role="status"
+                                                    >
+                                                        <Circle
+                                                            className="size-4 shrink-0"
+                                                            style={{
+                                                                color: catalog_settings.accent_color,
+                                                            }}
+                                                            aria-hidden="true"
+                                                        />
+                                                        <span>
+                                                            {remaining !== null
+                                                                ? orderRuleRequirementLabel(
+                                                                      evaluation.rule,
+                                                                      remaining,
+                                                                  )
+                                                                : (evaluation
+                                                                      .rule
+                                                                      .public_message ??
+                                                                  'Este pedido ainda não atende a uma condição comercial.')}
+                                                        </span>
+                                                    </div>
+                                                ),
+                                            )}
+                                        </div>
+                                    </section>
+                                )}
+
+                                {orderRuleEvaluation.best_discount_rule &&
+                                    orderRuleEvaluation.discount_cents > 0 && (
+                                        <div
+                                            className="mt-6 flex gap-3 border-l-2 px-4 py-3 text-sm leading-5"
+                                            style={{
+                                                borderColor:
+                                                    catalog_settings.accent_color,
+                                                backgroundColor: `${catalog_settings.accent_color}12`,
+                                            }}
+                                            role="status"
+                                        >
+                                            <Check className="mt-0.5 size-4 shrink-0" />
+                                            <span>
+                                                {orderRuleEvaluation
+                                                    .best_discount_rule
+                                                    .public_message ??
+                                                    `${orderRuleEvaluation.best_discount_rule.name} liberado neste pedido.`}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                {pendingBenefit && (
+                                    <section className="mt-7">
+                                        <div className="flex items-center justify-between gap-4 text-[11px] font-semibold tracking-[0.14em] text-[#98968d] uppercase">
+                                            <span>Próxima vantagem</span>
+                                            <span>
+                                                {Math.round(
+                                                    pendingBenefit.progress
+                                                        .ratio * 100,
+                                                )}
+                                                %
+                                            </span>
+                                        </div>
+                                        <progress
+                                            value={
+                                                pendingBenefit.progress.current
+                                            }
+                                            max={pendingBenefit.progress.target}
+                                            className="order-rule-progress mt-3 h-[3px] w-full"
+                                            style={
+                                                {
+                                                    '--order-rule-progress-color':
+                                                        catalog_settings.accent_color,
+                                                } as CSSProperties
+                                            }
+                                            aria-label={`Progresso para ${pendingBenefit.evaluation.rule.name}`}
+                                        />
+                                        <p className="mt-3 text-sm leading-6 font-medium">
+                                            Faltam{' '}
+                                            {orderRuleRemainingLabel(
+                                                pendingBenefit.evaluation.rule,
+                                                pendingBenefit.progress
+                                                    .remaining,
+                                            )}{' '}
+                                            para liberar{' '}
+                                            {orderRuleBenefitLabel(
+                                                pendingBenefit.evaluation.rule,
+                                            )}
+                                            .
+                                        </p>
+                                    </section>
+                                )}
                             </div>
                         )}
                     </div>
 
                     {cart.length > 0 && (
-                        <SheetFooter className="flex-col gap-2">
+                        <SheetFooter className="mt-0 shrink-0 gap-4 border-t border-[#cac4ba] bg-[#f6f4f0] px-6 py-5 sm:px-8 sm:py-6">
                             {hasAnyPriced && (
-                                <div className="flex w-full items-center justify-between px-1 text-sm">
-                                    <span className="font-medium">
-                                        Total estimado:
-                                    </span>
-                                    <span className="font-bold">
-                                        {formatPrice(cartPriceTotal)}
-                                    </span>
+                                <div className="grid w-full gap-2 text-sm">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[#716f68]">
+                                            Subtotal
+                                        </span>
+                                        <span>
+                                            {formatPrice(
+                                                orderRuleEvaluation.subtotal_cents,
+                                            )}
+                                        </span>
+                                    </div>
+                                    {orderRuleEvaluation.discount_cents > 0 && (
+                                        <div className="flex items-center justify-between text-green-700">
+                                            <span>Desconto liberado</span>
+                                            <span>
+                                                −{' '}
+                                                {formatPrice(
+                                                    orderRuleEvaluation.discount_cents,
+                                                )}
+                                            </span>
+                                        </div>
+                                    )}
+                                    <div
+                                        className="flex items-baseline justify-between border-t border-[#d8d3cb] pt-3 text-xl font-semibold tracking-[-0.025em]"
+                                        style={{ fontFamily: headingFont }}
+                                    >
+                                        <span className="text-lg">
+                                            Total estimado
+                                        </span>
+                                        <span className="text-2xl">
+                                            {formatPrice(
+                                                orderRuleEvaluation.total_cents,
+                                            )}
+                                        </span>
+                                    </div>
                                 </div>
                             )}
-                            <Button
-                                className="w-full"
-                                onClick={() => {
-                                    setCartOpen(false);
-                                    setCheckoutOpen(true);
-                                }}
-                                style={{
-                                    backgroundColor:
-                                        catalog_settings.primary_color,
-                                }}
-                            >
-                                Finalizar pedido
-                            </Button>
+                            {whatsapp_checkout.enabled && (
+                                <div className="w-full border-l-2 border-[#ff4d3d] pl-4 text-sm leading-6">
+                                    <p
+                                        className="font-semibold"
+                                        style={{ fontFamily: headingFont }}
+                                    >
+                                        Sua seleção está pronta para conversar.
+                                    </p>
+                                    <p className="mt-1 text-xs text-[#716f68]">
+                                        O WhatsApp abre com todos os itens
+                                        preenchidos. Revise e toque em enviar.
+                                    </p>
+                                </div>
+                            )}
+
+                            {whatsapp_checkout.enabled ? (
+                                whatsappCheckoutUrl ? (
+                                    <Button
+                                        asChild
+                                        className="h-[52px] w-full rounded-[2px] text-sm font-semibold shadow-none transition-transform duration-200 hover:-translate-y-px"
+                                        style={{
+                                            backgroundColor:
+                                                catalog_settings.primary_color,
+                                        }}
+                                    >
+                                        <a
+                                            href={whatsappCheckoutUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            onClick={() => setCartOpen(false)}
+                                        >
+                                            <MessageCircle className="mr-2 size-4" />
+                                            Falar com o comercial
+                                            <ArrowRight className="ml-2 size-4" />
+                                        </a>
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        type="button"
+                                        disabled
+                                        className="h-[52px] w-full rounded-[2px] text-sm font-semibold shadow-none"
+                                    >
+                                        Atendimento temporariamente indisponível
+                                    </Button>
+                                )
+                            ) : (
+                                <Button
+                                    type="button"
+                                    className="h-[52px] w-full rounded-[2px] text-sm font-semibold shadow-none transition-transform duration-200 hover:-translate-y-px"
+                                    onClick={() => {
+                                        if (orderRuleEvaluation.is_blocked) {
+                                            setCartOpen(false);
+
+                                            return;
+                                        }
+
+                                        setCartOpen(false);
+                                        setCheckoutOpen(true);
+                                    }}
+                                    style={{
+                                        backgroundColor:
+                                            catalog_settings.primary_color,
+                                    }}
+                                >
+                                    {orderRuleEvaluation.is_blocked
+                                        ? 'Continuar escolhendo peças'
+                                        : 'Finalizar pedido'}
+                                    <ArrowRight className="ml-2 size-4" />
+                                </Button>
+                            )}
+
+                            {whatsapp_checkout.enabled &&
+                            !whatsapp_checkout.available ? (
+                                <p className="text-center text-xs leading-5 text-[#716f68]">
+                                    O canal comercial está offline. Sua seleção
+                                    permanece salva neste navegador.
+                                </p>
+                            ) : !whatsapp_checkout.enabled &&
+                              orderRuleEvaluation.is_blocked ? (
+                                <p className="text-center text-xs leading-5 text-[#716f68]">
+                                    Sua seleção fica salva enquanto você
+                                    continua no catálogo.
+                                </p>
+                            ) : null}
                         </SheetFooter>
                     )}
                 </SheetContent>
             </Sheet>
 
             {/* Checkout Dialog */}
-            <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
+            <Dialog
+                open={!whatsapp_checkout.enabled && checkoutOpen}
+                onOpenChange={setCheckoutOpen}
+            >
                 <DialogContent
                     className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
                     style={{ fontFamily: bodyFont }}
@@ -3920,16 +4524,50 @@ export default function PublicCatalog({
                             </Alert>
                         )}
 
+                        {checkoutErrors.order_rules && (
+                            <Alert variant="destructive">
+                                <AlertCircle className="size-4" />
+                                <AlertDescription>
+                                    {checkoutErrors.order_rules}
+                                </AlertDescription>
+                            </Alert>
+                        )}
+
                         <div className="rounded-md bg-muted p-3">
                             <p className="text-xs text-muted-foreground">
                                 {cart.length} produto(s) - {cartTotal} item(ns)
                                 no total
                             </p>
                             {hasAnyPriced && (
-                                <p className="mt-1 text-sm font-semibold">
-                                    Total estimado:{' '}
-                                    {formatPrice(cartPriceTotal)}
-                                </p>
+                                <div className="mt-3 grid gap-1.5 text-sm">
+                                    <p className="flex justify-between">
+                                        <span>Subtotal</span>
+                                        <span>
+                                            {formatPrice(
+                                                orderRuleEvaluation.subtotal_cents,
+                                            )}
+                                        </span>
+                                    </p>
+                                    {orderRuleEvaluation.discount_cents > 0 && (
+                                        <p className="flex justify-between text-green-700">
+                                            <span>Desconto</span>
+                                            <span>
+                                                −{' '}
+                                                {formatPrice(
+                                                    orderRuleEvaluation.discount_cents,
+                                                )}
+                                            </span>
+                                        </p>
+                                    )}
+                                    <p className="flex justify-between border-t pt-1.5 font-semibold">
+                                        <span>Total estimado</span>
+                                        <span>
+                                            {formatPrice(
+                                                orderRuleEvaluation.total_cents,
+                                            )}
+                                        </span>
+                                    </p>
+                                </div>
                             )}
                             <p className="mt-2 text-xs text-muted-foreground">
                                 O estoque e reservado quando o pedido e enviado.
@@ -3946,7 +4584,11 @@ export default function PublicCatalog({
                         </Button>
                         <Button
                             onClick={handleCheckout}
-                            disabled={submitting || !customerName.trim()}
+                            disabled={
+                                submitting ||
+                                !customerName.trim() ||
+                                orderRuleEvaluation.is_blocked
+                            }
                             style={{
                                 backgroundColor: catalog_settings.primary_color,
                             }}

@@ -101,7 +101,10 @@ type Order = {
     tracking_ref: string | null;
     items: OrderItem[];
     total_items: number;
+    subtotal_amount: string;
+    discount_amount: string;
     total_amount: string;
+    applied_order_rules: Array<{ name: string; discount_cents: number }>;
     status_history: StatusHistory[];
     sales_rep: { id: number; name: string } | null;
     allowed_transitions: AllowedTransition[];
@@ -564,7 +567,7 @@ export default function OrderShow({ order }: Props) {
                     className="mt-7"
                     items={[
                         {
-                            label: 'Valor total',
+                            label: 'Total líquido',
                             value: (
                                 <span className="text-[1.28rem] whitespace-nowrap sm:text-[1.65rem] xl:text-[2.2rem]">
                                     {formatCurrency(order.total_amount)}
@@ -647,12 +650,31 @@ export default function OrderShow({ order }: Props) {
                                     · {order.total_items}{' '}
                                     {order.total_items === 1 ? 'peça' : 'peças'}
                                 </p>
-                                <div className="text-right">
-                                    <p className="text-[0.62rem] font-bold tracking-[0.14em] text-muted-foreground uppercase">
-                                        Total do pedido
+                                <div className="grid min-w-52 gap-1 text-sm">
+                                    <p className="flex justify-between gap-6 text-muted-foreground">
+                                        <span>Subtotal</span>
+                                        <span className="tabular-nums">
+                                            {formatCurrency(
+                                                order.subtotal_amount,
+                                            )}
+                                        </span>
                                     </p>
-                                    <p className="mt-1 font-zouth-display text-2xl font-semibold tracking-[-0.04em] tabular-nums">
-                                        {formatCurrency(order.total_amount)}
+                                    {Number(order.discount_amount) > 0 && (
+                                        <p className="flex justify-between gap-6 text-[#2e705a]">
+                                            <span>Desconto</span>
+                                            <span className="tabular-nums">
+                                                −{' '}
+                                                {formatCurrency(
+                                                    order.discount_amount,
+                                                )}
+                                            </span>
+                                        </p>
+                                    )}
+                                    <p className="mt-1 flex justify-between gap-6 border-t border-border pt-2 font-zouth-display text-lg font-semibold tracking-[-0.03em]">
+                                        <span>Total líquido</span>
+                                        <span className="tabular-nums">
+                                            {formatCurrency(order.total_amount)}
+                                        </span>
                                     </p>
                                 </div>
                             </div>

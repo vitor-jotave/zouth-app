@@ -22,6 +22,10 @@ class Order extends Model
         'sales_rep_id',
         'public_token',
         'status',
+        'subtotal_cents',
+        'discount_cents',
+        'total_cents',
+        'applied_order_rules',
         'customer_name',
         'customer_phone',
         'customer_email',
@@ -51,6 +55,10 @@ class Order extends Model
     {
         return [
             'status' => OrderStatus::class,
+            'subtotal_cents' => 'integer',
+            'discount_cents' => 'integer',
+            'total_cents' => 'integer',
+            'applied_order_rules' => 'array',
             'inventory_reserved_at' => 'datetime',
             'inventory_released_at' => 'datetime',
         ];
@@ -88,10 +96,45 @@ class Order extends Model
 
     public function totalAmount(): float
     {
+        return round($this->totalCents() / 100, 2);
+    }
+
+    public function subtotalCents(): int
+    {
+        if ($this->subtotal_cents !== null) {
+            return (int) $this->subtotal_cents;
+        }
+
         $items = $this->relationLoaded('items')
             ? $this->items
             : $this->items()->get(['unit_price', 'quantity']);
 
-        return round((float) $items->sum(fn (OrderItem $item) => (float) $item->unit_price * $item->quantity), 2);
+        return (int) round((float) $items->sum(
+            fn (OrderItem $item): float => (float) $item->unit_price * $item->quantity * 100,
+        ));
+    }
+
+    public function discountCents(): int
+    {
+        return (int) ($this->discount_cents ?? 0);
+    }
+
+    public function totalCents(): int
+    {
+        if ($this->total_cents !== null) {
+            return (int) $this->total_cents;
+        }
+
+        return max(0, $this->subtotalCents() - $this->discountCents());
+    }
+
+    public function subtotalAmount(): float
+    {
+        return round($this->subtotalCents() / 100, 2);
+    }
+
+    public function discountAmount(): float
+    {
+        return round($this->discountCents() / 100, 2);
     }
 }

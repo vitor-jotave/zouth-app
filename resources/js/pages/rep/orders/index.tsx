@@ -20,6 +20,9 @@ interface Order {
     status_label: string;
     customer_name: string;
     total_items: number;
+    subtotal_amount: string;
+    discount_amount: string;
+    total_amount: string;
     created_at: string;
 }
 
@@ -75,6 +78,7 @@ export default function RepOrdersIndex({ orders }: Props) {
                                 <TableHead>Cliente</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Itens</TableHead>
+                                <TableHead>Valores</TableHead>
                                 <TableHead>Data</TableHead>
                                 <TableHead>Acompanhamento</TableHead>
                             </TableRow>
@@ -83,7 +87,7 @@ export default function RepOrdersIndex({ orders }: Props) {
                             {orders.data.length === 0 && (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={6}
+                                        colSpan={7}
                                         className="py-10 text-center"
                                     >
                                         <div className="flex flex-col items-center gap-2">
@@ -114,6 +118,20 @@ export default function RepOrdersIndex({ orders }: Props) {
                                         </Badge>
                                     </TableCell>
                                     <TableCell>{order.total_items}</TableCell>
+                                    <TableCell className="text-xs">
+                                        <span className="block text-muted-foreground">
+                                            Subtotal R$ {order.subtotal_amount}
+                                        </span>
+                                        {Number(order.discount_amount) > 0 && (
+                                            <span className="block text-green-700">
+                                                Desconto − R${' '}
+                                                {order.discount_amount}
+                                            </span>
+                                        )}
+                                        <strong className="block">
+                                            Total R$ {order.total_amount}
+                                        </strong>
+                                    </TableCell>
                                     <TableCell className="text-xs text-muted-foreground">
                                         {new Date(
                                             order.created_at,

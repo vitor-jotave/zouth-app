@@ -1,4 +1,4 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import {
     AlignCenter,
     AlignLeft,
@@ -13,6 +13,7 @@ import {
     ImageIcon,
     LayoutGrid,
     Link2,
+    MessageCircle,
     Minus,
     Monitor,
     Palette,
@@ -65,6 +66,7 @@ interface CatalogSettings {
     brand_name: string;
     show_brand_name: boolean;
     show_logo: boolean;
+    hide_prices: boolean;
     tagline?: string | null;
     description?: string | null;
     logo_url?: string | null;
@@ -117,6 +119,12 @@ interface Props {
     };
     sample_products: Product[];
     manufacturer_name: string;
+    whatsapp_channel: {
+        available: boolean;
+        profile_name?: string | null;
+        phone_masked?: string | null;
+        channels_url: string;
+    };
 }
 
 type CatalogPanel = CatalogSectionType | 'appearance' | 'publish';
@@ -351,11 +359,13 @@ function OptionSwitch({
     description,
     checked,
     onCheckedChange,
+    disabled = false,
 }: {
     label: string;
     description: string;
     checked: boolean;
     onCheckedChange: (checked: boolean) => void;
+    disabled?: boolean;
 }) {
     return (
         <div className="flex items-start justify-between gap-4 py-1">
@@ -369,7 +379,8 @@ function OptionSwitch({
                 aria-label={label}
                 checked={checked}
                 onCheckedChange={onCheckedChange}
-                className="shrink-0 data-[state=checked]:bg-[#ff4d3d]"
+                disabled={disabled}
+                className="shrink-0 disabled:cursor-not-allowed disabled:opacity-45 data-[state=checked]:bg-[#ff4d3d]"
             />
         </div>
     );
@@ -381,6 +392,7 @@ export default function CatalogSettings({
     stats,
     sample_products,
     manufacturer_name,
+    whatsapp_channel,
 }: Props) {
     const [activePanel, setActivePanel] = useState<CatalogPanel>('hero');
     const [viewport, setViewport] = useState<ViewportMode>('desktop');
@@ -398,6 +410,7 @@ export default function CatalogSettings({
         brand_name: settings.brand_name ?? '',
         show_brand_name: settings.show_brand_name ?? true,
         show_logo: settings.show_logo ?? true,
+        hide_prices: settings.hide_prices ?? false,
         tagline: settings.tagline ?? '',
         description: settings.description ?? '',
         primary_color: settings.primary_color ?? '#0F766E',
@@ -1364,13 +1377,18 @@ export default function CatalogSettings({
                                 abrir os detalhes da peça.
                             </p>
                             <OptionSwitch
-                                label="Preço"
-                                description="Mostra o valor de atacado na vitrine."
+                                label="Preço na vitrine"
+                                description={
+                                    settingsForm.data.hide_prices
+                                        ? 'Oculto porque a negociação está direcionada ao WhatsApp.'
+                                        : 'Mostra o valor de atacado nos cards da vitrine.'
+                                }
                                 checked={sectionProp(
                                     selectedSection,
                                     'show_price',
                                     true,
                                 )}
+                                disabled={settingsForm.data.hide_prices}
                                 onCheckedChange={(checked) =>
                                     updateSectionProp(
                                         'product_grid',
@@ -1879,6 +1897,114 @@ export default function CatalogSettings({
                     title="Publicar e compartilhar"
                     description="Leve a coleção ao lojista e acompanhe sua chegada."
                 />
+                <InspectorSection title="Forma de negociação">
+                    <div className="space-y-4">
+                        <p className="text-xs leading-5 text-muted-foreground">
+                            Escolha se o lojista fecha o pedido pelo catálogo ou
+                            leva a seleção para uma conversa comercial.
+                        </p>
+                        <div className="grid border border-border bg-[#f6f4f0]">
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    settingsForm.setData('hide_prices', false)
+                                }
+                                aria-pressed={!settingsForm.data.hide_prices}
+                                className={cn(
+                                    'grid min-h-20 grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-3 px-4 py-3 text-left transition-colors focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-[#ff4d3d]',
+                                    !settingsForm.data.hide_prices
+                                        ? 'bg-[#18181f] text-[#f6f4f0]'
+                                        : 'hover:bg-[#e7e3dc]/55',
+                                )}
+                            >
+                                <Eye className="size-5" />
+                                <span>
+                                    <span className="block text-sm font-semibold">
+                                        Com preços
+                                    </span>
+                                    <span
+                                        className={cn(
+                                            'mt-1 block text-[0.68rem] leading-4',
+                                            !settingsForm.data.hide_prices
+                                                ? 'text-[#cac4ba]'
+                                                : 'text-muted-foreground',
+                                        )}
+                                    >
+                                        Pedido e valores fechados no catálogo.
+                                    </span>
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    settingsForm.setData('hide_prices', true)
+                                }
+                                disabled={!whatsapp_channel.available}
+                                aria-pressed={settingsForm.data.hide_prices}
+                                className={cn(
+                                    'grid min-h-20 grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-3 border-t border-border px-4 py-3 text-left transition-colors focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-[#ff4d3d] disabled:cursor-not-allowed disabled:opacity-45',
+                                    settingsForm.data.hide_prices
+                                        ? 'bg-[#18181f] text-[#f6f4f0]'
+                                        : 'hover:bg-[#e7e3dc]/55',
+                                )}
+                            >
+                                <MessageCircle className="size-5" />
+                                <span>
+                                    <span className="block text-sm font-semibold">
+                                        Pelo WhatsApp
+                                    </span>
+                                    <span
+                                        className={cn(
+                                            'mt-1 block text-[0.68rem] leading-4',
+                                            settingsForm.data.hide_prices
+                                                ? 'text-[#cac4ba]'
+                                                : 'text-muted-foreground',
+                                        )}
+                                    >
+                                        Preços ocultos e seleção pronta para o
+                                        comercial.
+                                    </span>
+                                </span>
+                            </button>
+                        </div>
+
+                        <div
+                            className={cn(
+                                'border-l-2 px-3 py-1.5 text-xs leading-5',
+                                whatsapp_channel.available
+                                    ? 'border-[#2e705a] text-foreground'
+                                    : 'border-[#ff4d3d] text-muted-foreground',
+                            )}
+                        >
+                            {whatsapp_channel.available ? (
+                                <>
+                                    <p className="font-semibold">
+                                        {whatsapp_channel.profile_name ??
+                                            'WhatsApp conectado'}
+                                    </p>
+                                    <p className="text-muted-foreground">
+                                        {whatsapp_channel.phone_masked}
+                                    </p>
+                                </>
+                            ) : (
+                                <>
+                                    <p>
+                                        Conecte um número antes de negociar sem
+                                        preços.
+                                    </p>
+                                    <Link
+                                        href={whatsapp_channel.channels_url}
+                                        className="mt-2 inline-flex min-h-9 items-center gap-2 font-semibold text-[#18181f] underline decoration-[#ff4d3d] underline-offset-4"
+                                    >
+                                        Ir para Canais
+                                        <ExternalLink className="size-3.5" />
+                                    </Link>
+                                </>
+                            )}
+                        </div>
+                        <InputError message={settingsForm.errors.hide_prices} />
+                    </div>
+                </InspectorSection>
                 <InspectorSection>
                     <div className="flex items-center justify-between gap-4">
                         <div>

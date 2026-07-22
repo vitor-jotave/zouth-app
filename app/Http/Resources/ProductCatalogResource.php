@@ -16,6 +16,7 @@ class ProductCatalogResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $hidePrices = $request->attributes->get('catalog_hide_prices', false) === true;
         $media = $this->displayMedia();
         $images = $media->filter(fn ($item) => ($item->type instanceof ProductMediaType)
             ? $item->type === ProductMediaType::Image
@@ -67,6 +68,7 @@ class ProductCatalogResource extends JsonResource
             'name' => $this->name,
             'sku' => $this->sku,
             'description' => $this->description,
+            'category_id' => $this->product_category_id,
             'category' => $this->category?->name,
             'primary_image' => $primaryImage ? Storage::disk('s3')->url($primaryImage->path) : null,
             'primary_thumbnail' => $primaryImage
@@ -78,11 +80,18 @@ class ProductCatalogResource extends JsonResource
                 ->values(),
             'videos' => $videos->map(fn ($item) => Storage::disk('s3')->url($item->path))->values(),
             'variations' => $variations,
-            'variant_stocks' => $this->variantStocks?->map(fn ($stock) => [
-                'variation_key' => $stock->variation_key,
-                'quantity' => $stock->quantity,
-                'price_cents' => $stock->price_cents,
-            ]) ?? [],
+            'variant_stocks' => $this->variantStocks?->map(function ($stock) use ($hidePrices): array {
+                $stockData = [
+                    'variation_key' => $stock->variation_key,
+                    'quantity' => $stock->quantity,
+                ];
+
+                if (! $hidePrices) {
+                    $stockData['price_cents'] = $stock->price_cents;
+                }
+
+                return $stockData;
+            }) ?? [],
             'combo_items' => $this->comboItems?->map(fn ($item) => [
                 'product_id' => $item->component_product_id,
                 'product_name' => $item->componentProduct?->name,
@@ -91,7 +100,7 @@ class ProductCatalogResource extends JsonResource
                 'quantity' => $item->quantity,
             ])->values() ?? [],
             'total_stock' => $this->getTotalStock(),
-            'price_cents' => $this->price_cents,
+            'price_cents' => $this->when(! $hidePrices, $this->price_cents),
         ];
     }
 }

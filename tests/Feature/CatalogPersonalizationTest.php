@@ -9,6 +9,7 @@ use App\Models\ProductVariation;
 use App\Models\User;
 use App\Models\VariationType;
 use App\Models\VariationValue;
+use App\Models\WhatsappInstance;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -47,6 +48,22 @@ function attachCatalogVariation(Product $product, VariationType $type, string $v
         'variation_key' => [$type->name => $value],
         'quantity' => $quantity,
     ]);
+}
+
+function catalogSettingsUpdatePayload(array $overrides = []): array
+{
+    return [
+        'brand_name' => 'Zouth Atelier',
+        'show_brand_name' => true,
+        'show_logo' => true,
+        'primary_color' => '#111111',
+        'secondary_color' => '#222222',
+        'accent_color' => '#ff4d3d',
+        'background_color' => '#f6f4f0',
+        'font_family' => 'sora',
+        'public_link_active' => true,
+        ...$overrides,
+    ];
 }
 
 it('shows the catalog settings page', function () {
@@ -114,6 +131,106 @@ it('updates catalog branding settings', function () {
         'primary_color' => '#111111',
         'font_family' => 'sora',
     ]);
+});
+
+it('shows the connected commercial channel in the catalog editor', function () {
+    createCatalogSettingFor($this->manufacturer);
+    WhatsappInstance::factory()->connected()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'phone_number' => '+55 (11) 99999-1234',
+        'profile_name' => 'Comercial Zouth',
+    ]);
+
+    $this->actingAs($this->user)
+        ->get(route('manufacturer.catalog-settings.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('whatsapp_channel.available', true)
+            ->where('whatsapp_channel.profile_name', 'Comercial Zouth')
+            ->where('whatsapp_channel.phone_masked', '+55 (11) •••••-1234')
+            ->where('whatsapp_channel.channels_url', route('manufacturer.atendimento.channels'))
+        );
+});
+
+it('enables negotiation by whatsapp when the manufacturer has a connected channel', function () {
+    createCatalogSettingFor($this->manufacturer);
+    WhatsappInstance::factory()->connected()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'phone_number' => '+5511999991234',
+    ]);
+
+    $this->actingAs($this->user)
+        ->put(
+            route('manufacturer.catalog-settings.update'),
+            catalogSettingsUpdatePayload(['hide_prices' => true]),
+        )
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
+
+    $this->assertDatabaseHas('catalog_settings', [
+        'manufacturer_id' => $this->manufacturer->id,
+        'hide_prices' => true,
+    ]);
+});
+
+it('does not enable hidden prices using another manufacturer channel', function () {
+    createCatalogSettingFor($this->manufacturer);
+    $otherManufacturer = Manufacturer::factory()->create(['is_active' => true]);
+    WhatsappInstance::factory()->connected()->create([
+        'manufacturer_id' => $otherManufacturer->id,
+        'phone_number' => '+5511988881234',
+    ]);
+
+    $this->actingAs($this->user)
+        ->put(
+            route('manufacturer.catalog-settings.update'),
+            catalogSettingsUpdatePayload(['hide_prices' => true]),
+        )
+        ->assertSessionHasErrors('hide_prices');
+
+    $this->assertDatabaseHas('catalog_settings', [
+        'manufacturer_id' => $this->manufacturer->id,
+        'hide_prices' => false,
+    ]);
+});
+
+it('does not enable hidden prices with an invalid connected phone number', function () {
+    createCatalogSettingFor($this->manufacturer);
+    WhatsappInstance::factory()->connected()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'phone_number' => '+55',
+    ]);
+
+    $this->actingAs($this->user)
+        ->put(
+            route('manufacturer.catalog-settings.update'),
+            catalogSettingsUpdatePayload(['hide_prices' => true]),
+        )
+        ->assertSessionHasErrors('hide_prices');
+
+    $this->assertDatabaseHas('catalog_settings', [
+        'manufacturer_id' => $this->manufacturer->id,
+        'hide_prices' => false,
+    ]);
+});
+
+it('keeps an already hidden catalog private when its channel disconnects', function () {
+    $setting = createCatalogSettingFor($this->manufacturer);
+    $setting->update(['hide_prices' => true]);
+
+    $this->actingAs($this->user)
+        ->put(
+            route('manufacturer.catalog-settings.update'),
+            catalogSettingsUpdatePayload([
+                'hide_prices' => true,
+                'tagline' => 'Uma nova coleção',
+            ]),
+        )
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
+
+    expect($setting->fresh()->hide_prices)->toBeTrue()
+        ->and($setting->fresh()->tagline)->toBe('Uma nova coleção');
 });
 
 it('uploads a catalog logo', function () {
@@ -196,6 +313,42 @@ it('includes product description in public catalog props for quick view', functi
     $productProps = collect($response->inertiaProps('products.data'))->firstWhere('name', 'Macacão Bordado');
 
     expect($productProps['description'])->toBe('Macacão em algodão com bordado delicado.');
+});
+
+it('removes prices from the public contract and exposes only a sanitized whatsapp link', function () {
+    $setting = createCatalogSettingFor($this->manufacturer);
+    $setting->update(['hide_prices' => true]);
+    WhatsappInstance::factory()->connected()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'phone_number' => '+55 (11) 97777-4321',
+    ]);
+
+    $product = Product::factory()->forManufacturer($this->manufacturer)->withoutCategory()->create([
+        'name' => 'Conjunto Essencial',
+        'price_cents' => 12990,
+        'is_active' => true,
+    ]);
+    ProductVariantStock::factory()->create([
+        'product_id' => $product->id,
+        'variation_key' => ['Tamanho' => 'M'],
+        'quantity' => 8,
+        'price_cents' => 13990,
+    ]);
+
+    $response = $this->get(route('public.catalog.show', ['token' => $setting->public_token]));
+    $publicProduct = collect($response->inertiaProps('products.data'))->firstWhere('id', $product->id);
+
+    $response->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('catalog_settings.hide_prices', true)
+            ->where('whatsapp_checkout.enabled', true)
+            ->where('whatsapp_checkout.available', true)
+            ->where('whatsapp_checkout.base_url', 'https://wa.me/5511977774321')
+            ->missing('whatsapp_checkout.instance_id')
+        );
+
+    expect($publicProduct)->not->toHaveKey('price_cents')
+        ->and($publicProduct['variant_stocks'][0])->not->toHaveKey('price_cents');
 });
 
 it('filters public catalog products by name or sku search', function () {
@@ -655,5 +808,6 @@ it('resets catalog settings to defaults', function () {
         ->and($setting->secondary_color)->toBe('#0F172A')
         ->and($setting->accent_color)->toBe('#F97316')
         ->and($setting->background_color)->toBe('#F8FAFC')
-        ->and($setting->font_family)->toBe('space-grotesk');
+        ->and($setting->font_family)->toBe('space-grotesk')
+        ->and($setting->hide_prices)->toBeFalse();
 });

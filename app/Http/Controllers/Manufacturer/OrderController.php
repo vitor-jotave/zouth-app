@@ -7,7 +7,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateOrderStatusRequest;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
-use App\Models\OrderItem;
 use App\Services\OrderService;
 use App\Services\TenantManager;
 use Illuminate\Database\Eloquent\Builder;
@@ -55,7 +54,7 @@ class OrderController extends Controller
             ->selectRaw('status, COUNT(*) as aggregate')
             ->groupBy('status')
             ->pluck('aggregate', 'status');
-        $totalAmount = $this->orderItemsTotal(
+        $totalAmount = $this->ordersTotal(
             $manufacturer->id,
             excludedStatus: OrderStatus::Cancelled,
         );
@@ -121,7 +120,7 @@ class OrderController extends Controller
                 'label' => $status->label(),
                 'count' => $count,
                 'total_amount' => number_format(
-                    $this->orderItemsTotal($manufacturerId, $status, search: $search),
+                    $this->ordersTotal($manufacturerId, $status, search: $search),
                     2,
                     '.',
                     '',
@@ -149,35 +148,29 @@ class OrderController extends Controller
         });
     }
 
-    private function orderItemsTotal(
+    private function ordersTotal(
         int $manufacturerId,
         ?OrderStatus $status = null,
         ?OrderStatus $excludedStatus = null,
         string $search = '',
     ): float {
-        $aggregate = OrderItem::query()
-            ->whereHas('order', function (Builder $query) use (
-                $manufacturerId,
-                $status,
-                $excludedStatus,
-                $search,
-            ): void {
-                $query->where('manufacturer_id', $manufacturerId);
+        $query = Order::query()
+            ->where('manufacturer_id', $manufacturerId)
+            ->with('items');
 
-                if ($status) {
-                    $query->where('status', $status);
-                }
+        if ($status) {
+            $query->where('status', $status);
+        }
 
-                if ($excludedStatus) {
-                    $query->where('status', '!=', $excludedStatus);
-                }
+        if ($excludedStatus) {
+            $query->where('status', '!=', $excludedStatus);
+        }
 
-                $this->applySearch($query, $search);
-            })
-            ->selectRaw('COALESCE(SUM(COALESCE(unit_price, 0) * quantity), 0) as aggregate')
-            ->value('aggregate');
+        $this->applySearch($query, $search);
 
-        return round((float) $aggregate, 2);
+        return round((float) $query->get()->sum(
+            fn (Order $order): float => $order->totalAmount(),
+        ), 2);
     }
 
     public function show(Request $request, Order $order): Response

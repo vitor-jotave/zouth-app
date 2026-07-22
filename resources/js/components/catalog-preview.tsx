@@ -15,6 +15,7 @@ interface CatalogSettings {
     brand_name: string;
     show_brand_name?: boolean;
     show_logo?: boolean;
+    hide_prices?: boolean;
     tagline?: string | null;
     description?: string | null;
     logo_url?: string | null;
@@ -513,7 +514,9 @@ export default function CatalogPreview({
                         'commercial',
                     );
                     const isEditorial = presentation === 'editorial';
-                    const showPrice = sectionValue(section, 'show_price', true);
+                    const showPrice =
+                        !settings.hide_prices &&
+                        sectionValue(section, 'show_price', true);
                     const showSku = sectionValue(section, 'show_sku', true);
                     const showStock = sectionValue(section, 'show_stock', true);
                     const showAction = sectionValue(

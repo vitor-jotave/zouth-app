@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\OrderStatus;
 use App\Models\Order;
+use App\Models\OrderRule;
 use App\Models\Product;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -14,6 +15,8 @@ class OrderService
     public function __construct(
         private CustomerService $customerService,
         private InventoryReservationService $inventoryReservationService,
+        private OrderCartBuilder $orderCartBuilder,
+        private OrderRuleEvaluator $orderRuleEvaluator,
     ) {}
 
     /**
@@ -46,6 +49,25 @@ class OrderService
     public function createPublicOrder(array $data): Order
     {
         return DB::transaction(function () use ($data) {
+            $cart = $this->orderCartBuilder->build(
+                $data['manufacturer_id'],
+                $data['items'],
+                lockForUpdate: true,
+            );
+            $rules = OrderRule::query()
+                ->where('manufacturer_id', $data['manufacturer_id'])
+                ->where('is_active', true)
+                ->orderBy('created_at')
+                ->orderBy('id')
+                ->get();
+            $pricing = $this->orderRuleEvaluator->evaluate($rules, $cart['items']);
+
+            if ($pricing['is_blocked']) {
+                throw ValidationException::withMessages([
+                    'order_rules' => $pricing['blocking_messages'],
+                ]);
+            }
+
             $customer = $this->customerService->upsertFromOrderData($data);
 
             $order = Order::create([
@@ -54,6 +76,10 @@ class OrderService
                 'sales_rep_id' => $data['sales_rep_id'] ?? null,
                 'public_token' => Str::random(48),
                 'status' => OrderStatus::New,
+                'subtotal_cents' => $pricing['subtotal_cents'],
+                'discount_cents' => $pricing['discount_cents'],
+                'total_cents' => $pricing['total_cents'],
+                'applied_order_rules' => $pricing['applied_order_rules'],
                 'customer_name' => $data['customer_name'],
                 'customer_phone' => $data['customer_phone'] ?? null,
                 'customer_email' => $data['customer_email'] ?? null,
@@ -76,14 +102,7 @@ class OrderService
                 'utm_term' => $data['utm_term'] ?? null,
             ]);
 
-            $productIds = collect($data['items'])->pluck('product_id')->unique();
-            $products = Product::whereIn('id', $productIds)
-                ->where('manufacturer_id', $data['manufacturer_id'])
-                ->where('is_active', true)
-                ->with(['comboItems.componentProduct', 'productVariations'])
-                ->lockForUpdate()
-                ->get()
-                ->keyBy('id');
+            $products = $cart['products'];
 
             foreach ($data['items'] as $item) {
                 $product = $products->get($item['product_id']);

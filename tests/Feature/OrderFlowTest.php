@@ -126,6 +126,20 @@ it('creates an order via the public catalog endpoint', function () {
     $response->assertRedirect(route('public.order.show', $order->public_token));
 });
 
+it('depletes the available stock when the order consumes every unit', function () {
+    $this->product1->update(['base_quantity' => 10]);
+
+    $this->post(
+        "/catalog/{$this->catalogSetting->public_token}/orders",
+        ($this->validCustomerData)([
+            'items' => [['product_id' => $this->product1->id, 'quantity' => 10]],
+        ]),
+    )->assertRedirect();
+
+    expect($this->product1->fresh()->base_quantity)->toBe(0)
+        ->and(Order::query()->firstOrFail()->inventory_reserved_at)->not->toBeNull();
+});
+
 it('reserves the selected variant stock and snapshots its price and options', function () {
     $variationType = VariationType::factory()->create([
         'manufacturer_id' => $this->manufacturer->id,

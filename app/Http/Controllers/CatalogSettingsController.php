@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\WhatsappInstanceStatus;
 use App\Http\Requests\CatalogSettingBackgroundRequest;
 use App\Http\Requests\CatalogSettingCoverRequest;
 use App\Http\Requests\CatalogSettingLogoRequest;
@@ -27,6 +28,15 @@ class CatalogSettingsController extends Controller
         $this->authorize('view', $setting);
 
         $manufacturer = $tenantManager->get();
+        $whatsappChannel = $manufacturer->whatsappInstances()
+            ->where('status', WhatsappInstanceStatus::Connected->value)
+            ->whereNotNull('phone_number')
+            ->where('phone_number', '!=', '')
+            ->first();
+
+        if (! $this->hasValidWhatsappPhoneNumber($whatsappChannel?->phone_number)) {
+            $whatsappChannel = null;
+        }
 
         $sampleProducts = Product::where('manufacturer_id', $manufacturer->id)
             ->where('is_active', true)
@@ -60,6 +70,12 @@ class CatalogSettingsController extends Controller
             'stats' => $this->buildStats($setting),
             'sample_products' => $sampleProducts,
             'manufacturer_name' => $manufacturer->name,
+            'whatsapp_channel' => [
+                'available' => $whatsappChannel !== null,
+                'profile_name' => $whatsappChannel?->profile_name,
+                'phone_masked' => $this->maskPhoneNumber($whatsappChannel?->phone_number),
+                'channels_url' => route('manufacturer.atendimento.channels'),
+            ],
         ]);
     }
 
@@ -270,6 +286,32 @@ class CatalogSettingsController extends Controller
         foreach (array_unique(['public', $this->catalogMediaDisk()]) as $disk) {
             Storage::disk($disk)->delete($path);
         }
+    }
+
+    private function maskPhoneNumber(?string $phoneNumber): ?string
+    {
+        $digits = preg_replace('/\D/', '', (string) $phoneNumber);
+
+        if ($digits === '') {
+            return null;
+        }
+
+        if (str_starts_with($digits, '55') && strlen($digits) >= 12) {
+            return sprintf(
+                '+55 (%s) •••••-%s',
+                substr($digits, 2, 2),
+                substr($digits, -4),
+            );
+        }
+
+        return '••••••'.substr($digits, -4);
+    }
+
+    private function hasValidWhatsappPhoneNumber(?string $phoneNumber): bool
+    {
+        $digits = preg_replace('/\D/', '', (string) $phoneNumber);
+
+        return is_string($digits) && preg_match('/^\d{8,15}$/', $digits) === 1;
     }
 
     /**

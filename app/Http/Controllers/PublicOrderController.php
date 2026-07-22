@@ -28,7 +28,19 @@ class PublicOrderController extends Controller
 
     public function store(StorePublicOrderRequest $request, CatalogSetting $catalogSetting): RedirectResponse
     {
+        if ($catalogSetting->hide_prices) {
+            return redirect()->back()->withErrors([
+                'checkout' => 'Este catálogo recebe seleções diretamente pelo WhatsApp.',
+            ]);
+        }
+
         $manufacturer = Manufacturer::find($catalogSetting->manufacturer_id);
+
+        if ($manufacturer && ! $this->limitService->hasOperationalAccess($manufacturer)) {
+            return redirect()->back()->withErrors([
+                'checkout' => self::ORDER_UNAVAILABLE_MESSAGE,
+            ]);
+        }
 
         if ($manufacturer && ! $this->limitService->canCreateOrder($manufacturer)) {
             return redirect()->back()
@@ -89,7 +101,10 @@ class PublicOrderController extends Controller
                 'customer_name' => $order->customer_name,
                 'items' => OrderItemResource::collection($order->items)->resolve($request),
                 'total_items' => $order->items->sum('quantity'),
+                'subtotal_amount' => number_format($order->subtotalAmount(), 2, '.', ''),
+                'discount_amount' => number_format($order->discountAmount(), 2, '.', ''),
                 'total_amount' => number_format($order->totalAmount(), 2, '.', ''),
+                'applied_order_rules' => $order->applied_order_rules ?? [],
                 'status_history' => OrderStatusHistoryResource::collection($order->statusHistory)->resolve($request),
                 'created_at' => $order->created_at?->toISOString(),
             ],
