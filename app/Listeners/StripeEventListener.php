@@ -145,9 +145,17 @@ class StripeEventListener
             return;
         }
 
-        if ($manufacturer->current_plan_id !== $plan->id) {
-            $manufacturer->update(['current_plan_id' => $plan->id]);
+        $manufacturer->update([
+            'current_plan_id' => $plan->id,
+            'trial_ends_at' => null,
+            'trial_expired_at' => null,
+        ]);
 
+        $manufacturer->onboardingSessions()
+            ->whereNull('subscribed_at')
+            ->update(['subscribed_at' => now()]);
+
+        if ($manufacturer->wasChanged('current_plan_id')) {
             Log::info('Stripe webhook: manufacturer plan synced', [
                 'manufacturer_id' => $manufacturer->id,
                 'plan_id' => $plan->id,

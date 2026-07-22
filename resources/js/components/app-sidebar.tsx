@@ -5,16 +5,21 @@ import {
     CreditCard,
     LayoutGrid,
     Layers,
+    ListChecks,
     MessageSquare,
+    MessageSquareQuote,
+    RadioTower,
     Route,
+    Workflow,
     Package,
     Palette,
+    ChartNoAxesCombined,
     ShoppingCart,
     Tags,
     UserCheck,
     Users,
 } from 'lucide-react';
-import { NavFooter } from '@/components/nav-footer';
+import { useEffect } from 'react';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import {
@@ -22,10 +27,10 @@ import {
     SidebarContent,
     SidebarFooter,
     SidebarHeader,
-    SidebarMenu,
-    SidebarMenuItem,
+    useSidebar,
 } from '@/components/ui/sidebar';
 import { useActiveService } from '@/contexts/active-service-context';
+import { RESTORE_SIDEBAR_AFTER_CHAT_KEY } from '@/lib/sidebar-state';
 import admin from '@/routes/admin';
 import manufacturer from '@/routes/manufacturer';
 import rep from '@/routes/rep';
@@ -92,24 +97,28 @@ function useNavItems() {
     }
 
     if (user?.user_type === 'manufacturer_user') {
-        return {
-            common,
-            catalogo: [
-                { title: 'Usuários', href: '/users', icon: Users },
-                {
-                    title: 'Clientes',
-                    href: '/manufacturer/customers',
-                    icon: BookOpen,
-                },
+        const access = auth.access;
+        const canAccess = (capability: string) =>
+            Boolean(
+                access?.is_owner || access?.capabilities.includes(capability),
+            );
+        const catalogo: NavItem[] = [];
+        const atendimento: NavItem[] = [];
+
+        if (canAccess('reports.view')) {
+            common.push({
+                title: 'Relatórios',
+                href: manufacturer.reports.index(),
+                icon: ChartNoAxesCombined,
+            });
+        }
+
+        if (canAccess('collection.manage')) {
+            catalogo.push(
                 {
                     title: 'Produtos',
                     href: '/manufacturer/products',
                     icon: Package,
-                },
-                {
-                    title: 'Pedidos',
-                    href: '/manufacturer/orders',
-                    icon: ShoppingCart,
                 },
                 {
                     title: 'Categorias',
@@ -121,74 +130,175 @@ function useNavItems() {
                     href: '/manufacturer/variation-types',
                     icon: Layers,
                 },
+            );
+        }
+
+        if (canAccess('catalog.manage')) {
+            catalogo.push({
+                title: 'Catálogo',
+                href:
+                    manufacturer.catalogSettings?.index().url ??
+                    '/manufacturer/catalog-settings',
+                icon: Palette,
+            });
+        }
+
+        if (canAccess('orders.manage')) {
+            catalogo.push(
                 {
-                    title: 'Catálogo',
-                    href:
-                        manufacturer.catalogSettings?.index().url ??
-                        '/manufacturer/catalog-settings',
-                    icon: Palette,
+                    title: 'Pedidos',
+                    href: '/manufacturer/orders',
+                    icon: ShoppingCart,
                 },
-                { title: 'Afiliações', href: '/affiliations', icon: UserCheck },
+                {
+                    title: 'Regras de pedido',
+                    href: manufacturer.orderRules.index(),
+                    icon: ListChecks,
+                },
+            );
+        }
+
+        if (canAccess('customers.manage')) {
+            catalogo.push({
+                title: 'Clientes',
+                href: '/manufacturer/customers',
+                icon: BookOpen,
+            });
+        }
+
+        if (canAccess('affiliations.manage')) {
+            catalogo.push({
+                title: 'Representantes',
+                href: manufacturer.representatives.index(),
+                icon: UserCheck,
+            });
+        }
+
+        if (access?.is_owner) {
+            catalogo.push(
+                { title: 'Usuários', href: '/users', icon: Users },
                 {
                     title: 'Assinatura',
                     href: '/manufacturer/billing',
                     icon: CreditCard,
                 },
-            ] as NavItem[],
-            atendimento: [
+            );
+        }
+
+        if (canAccess('whatsapp.manage')) {
+            atendimento.push(
                 {
-                    title: 'Atendimento',
+                    title: 'Chat',
                     href: '/manufacturer/atendimento',
                     icon: MessageSquare,
+                    collapseSidebarOnNavigate: true,
                 },
                 {
                     title: 'Funis',
                     href: '/manufacturer/atendimento/funis',
                     icon: Route,
                 },
-            ] as NavItem[],
+                {
+                    title: 'Automações',
+                    href: manufacturer.atendimento.automations.index(),
+                    icon: Workflow,
+                },
+                {
+                    title: 'Canais',
+                    href: manufacturer.atendimento.channels(),
+                    icon: RadioTower,
+                },
+                {
+                    title: 'Mensagens rápidas',
+                    href: manufacturer.atendimento.quickReplies.index(),
+                    icon: MessageSquareQuote,
+                },
+            );
+        }
+
+        return {
+            common,
+            catalogo,
+            atendimento,
         };
     }
 
     return { common, catalogo: [] as NavItem[], atendimento: [] as NavItem[] };
 }
 
-const footerNavItems: NavItem[] = [];
+function orderItems(items: NavItem[], titles: string[]): NavItem[] {
+    return titles.flatMap((title) => {
+        const item = items.find((candidate) => candidate.title === title);
+
+        return item ? [item] : [];
+    });
+}
 
 export function AppSidebar() {
     const { common, catalogo, atendimento } = useNavItems();
     const { activeService } = useActiveService();
+    const page = usePage<SharedData>();
+    const { auth } = page.props;
+    const { isMobile, setOpen } = useSidebar();
+    const pathname = page.url.split('?')[0];
 
-    const isManufacturerUser = catalogo.length > 0;
+    useEffect(() => {
+        if (isMobile || pathname === '/manufacturer/atendimento') {
+            return;
+        }
+
+        if (sessionStorage.getItem(RESTORE_SIDEBAR_AFTER_CHAT_KEY) !== 'true') {
+            return;
+        }
+
+        sessionStorage.removeItem(RESTORE_SIDEBAR_AFTER_CHAT_KEY);
+        setOpen(true);
+    }, [isMobile, pathname, setOpen]);
+
+    const isManufacturerUser = auth.user.user_type === 'manufacturer_user';
+    const visibleService =
+        activeService === 'atendimento' && atendimento.length === 0
+            ? 'catalogo'
+            : activeService === 'catalogo' && catalogo.length === 0
+              ? 'atendimento'
+              : activeService;
+    const collectionItems = orderItems(catalogo, [
+        'Produtos',
+        'Categorias',
+        'Variações',
+        'Catálogo',
+    ]);
+    const commercialItems = orderItems(catalogo, [
+        'Pedidos',
+        'Regras de pedido',
+        'Clientes',
+        'Representantes',
+    ]);
+    const managementItems = orderItems(catalogo, ['Usuários', 'Assinatura']);
 
     return (
-        <Sidebar collapsible="icon" variant="inset">
-            <SidebarHeader>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                        <div className="flex items-center px-2 py-1.5">
-                            <AppLogo />
-                        </div>
-                    </SidebarMenuItem>
-                </SidebarMenu>
+        <Sidebar collapsible="icon" variant="sidebar" className="border-r-0">
+            <SidebarHeader className="gap-0 px-5 pt-7 pb-2 group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:pt-5">
+                <AppLogo />
             </SidebarHeader>
 
-            <SidebarContent>
-                <NavMain items={common} />
+            <SidebarContent className="gap-0">
+                <NavMain items={common} label="Visão geral" />
 
-                {isManufacturerUser && (
-                    <NavMain
-                        items={
-                            activeService === 'atendimento'
-                                ? atendimento
-                                : catalogo
-                        }
-                    />
+                {isManufacturerUser && visibleService === 'atendimento' && (
+                    <NavMain items={atendimento} label="Atendimento" />
+                )}
+
+                {isManufacturerUser && visibleService === 'catalogo' && (
+                    <>
+                        <NavMain items={collectionItems} label="Coleção" />
+                        <NavMain items={commercialItems} label="Comercial" />
+                        <NavMain items={managementItems} label="Gestão" />
+                    </>
                 )}
             </SidebarContent>
 
-            <SidebarFooter>
-                <NavFooter items={footerNavItems} className="mt-auto" />
+            <SidebarFooter className="border-t border-sidebar-border p-3 group-data-[collapsible=icon]:p-1.5">
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

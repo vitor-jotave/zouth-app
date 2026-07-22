@@ -10,11 +10,14 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Plan;
 use App\Models\Product;
+use App\Models\ProductMedia;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
 it('shows tenant scoped operational metrics on the manufacturer dashboard', function () {
     $this->withoutVite();
+
+    config(['filesystems.disks.s3.url' => 'https://cdn.zouth.app']);
 
     $plan = Plan::factory()->create(['name' => 'Profissional']);
     $manufacturer = Manufacturer::factory()->create(['current_plan_id' => $plan->id]);
@@ -25,12 +28,46 @@ it('shows tenant scoped operational metrics on the manufacturer dashboard', func
     ]);
     $manufacturer->users()->attach($user->id, ['role' => 'owner', 'status' => 'active']);
 
-    Product::factory()->forManufacturer($manufacturer)->withoutCategory()->count(2)->create();
-    Product::factory()->forManufacturer($manufacturer)->withoutCategory()->create(['is_active' => false]);
-    Product::factory()->forManufacturer($otherManufacturer)->withoutCategory()->count(3)->create();
+    $featuredProduct = Product::factory()->forManufacturer($manufacturer)->withoutCategory()->create([
+        'name' => 'Conjunto Horizonte',
+        'price_cents' => 12990,
+        'sort_order' => 1,
+    ]);
+    ProductMedia::factory()->for($featuredProduct)->create([
+        'path' => 'products/conjunto-horizonte.jpg',
+        'sort_order' => 0,
+    ]);
+    $secondProduct = Product::factory()->forManufacturer($manufacturer)->withoutCategory()->create([
+        'name' => 'Vestido Aurora',
+        'price_cents' => null,
+        'sort_order' => 2,
+    ]);
+    Product::factory()->forManufacturer($manufacturer)->withoutCategory()->create([
+        'name' => 'Macacao Nuvem',
+        'sort_order' => 3,
+    ]);
+    Product::factory()->forManufacturer($manufacturer)->withoutCategory()->create([
+        'name' => 'Produto fora do recorte',
+        'sort_order' => 4,
+    ]);
+    Product::factory()->forManufacturer($manufacturer)->withoutCategory()->create([
+        'is_active' => false,
+        'sort_order' => 0,
+    ]);
+    $otherProduct = Product::factory()->forManufacturer($otherManufacturer)->withoutCategory()->create([
+        'name' => 'Produto de outro fabricante',
+        'sort_order' => 0,
+    ]);
     Customer::factory()->forManufacturer($manufacturer)->count(2)->create();
 
-    $setting = CatalogSetting::factory()->forManufacturer($manufacturer)->create();
+    $setting = CatalogSetting::factory()->forManufacturer($manufacturer)->create([
+        'public_token' => 'catalogo-publico-do-fabricante',
+        'public_link_active' => true,
+    ]);
+    CatalogSetting::factory()->forManufacturer($otherManufacturer)->create([
+        'public_token' => 'catalogo-publico-de-outro-fabricante',
+        'public_link_active' => true,
+    ]);
     CatalogVisit::factory()->forCatalogSetting($setting)->count(3)->create(['visited_at' => now()->subDays(2)]);
     CatalogVisit::factory()->forCatalogSetting($setting)->create(['visited_at' => now()->subDays(40)]);
 
@@ -55,8 +92,10 @@ it('shows tenant scoped operational metrics on the manufacturer dashboard', func
 
     Order::factory()->forManufacturer($otherManufacturer)->count(4)->create();
 
-    $this->actingAs($user)
-        ->get(route('dashboard'))
+    $response = $this->actingAs($user)
+        ->get(route('dashboard'));
+
+    $response
         ->assertInertia(fn (Assert $page) => $page
             ->component('dashboard')
             ->where('manufacturer.name', $manufacturer->name)
@@ -65,13 +104,51 @@ it('shows tenant scoped operational metrics on the manufacturer dashboard', func
             ->where('stats.orders_this_month', 2)
             ->where('stats.new_orders', 1)
             ->where('stats.customers', 2)
-            ->where('stats.active_products', 2)
+            ->where('stats.active_products', 4)
             ->where('stats.catalog_visits_30_days', 3)
             ->where('stats.gross_revenue', 100)
+            ->where('catalog.public_link', route('public.catalog.show', [
+                'token' => $setting->public_token,
+            ]))
+            ->where('catalog.is_public', true)
+            ->has('catalog.products', 3)
+            ->where('catalog.products.0.id', $featuredProduct->id)
+            ->where('catalog.products.0.name', 'Conjunto Horizonte')
+            ->where('catalog.products.0.price', 129.9)
+            ->where('catalog.products.0.image_url', 'https://cdn.zouth.app/products/conjunto-horizonte.jpg')
+            ->where('catalog.products.0.image_alt', 'Conjunto Horizonte')
+            ->where('catalog.products.1.id', $secondProduct->id)
+            ->where('catalog.products.1.price', null)
+            ->where('catalog.products.1.image_url', null)
+            ->where('catalog.products.1.image_alt', null)
             ->has('recentOrders', 2)
             ->where('recentOrders', fn ($orders) => collect($orders)
                 ->pluck('customer_name')
                 ->contains('Cliente recente'))
+        );
+
+    expect(collect($response->inertiaProps('catalog.products'))->pluck('id'))
+        ->not->toContain($otherProduct->id);
+});
+
+it('does not expose a public catalog link when the manufacturer catalog is inactive', function () {
+    $this->withoutVite();
+
+    $manufacturer = Manufacturer::factory()->create();
+    $user = User::factory()->create([
+        'user_type' => 'manufacturer_user',
+        'current_manufacturer_id' => $manufacturer->id,
+    ]);
+    $manufacturer->users()->attach($user->id, ['role' => 'owner', 'status' => 'active']);
+
+    CatalogSetting::factory()->forManufacturer($manufacturer)->inactive()->create();
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('catalog.public_link', null)
+            ->where('catalog.is_public', false)
+            ->has('catalog.products', 0)
         );
 });
 

@@ -31,6 +31,11 @@ class ManufacturerFactory extends Factory
             'street' => fake()->streetName(),
             'address_number' => (string) fake()->numberBetween(1, 9999),
             'is_active' => true,
+            'onboarding_started_at' => now(),
+            'onboarding_account_created_at' => now(),
+            'onboarding_preview_viewed_at' => now(),
+            'onboarding_email_confirmed_at' => now(),
+            'onboarding_completed_at' => now(),
         ];
     }
 

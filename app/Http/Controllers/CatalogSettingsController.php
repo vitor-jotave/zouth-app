@@ -2,13 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\WhatsappInstanceStatus;
 use App\Http\Requests\CatalogSettingBackgroundRequest;
+use App\Http\Requests\CatalogSettingCoverRequest;
 use App\Http\Requests\CatalogSettingLogoRequest;
 use App\Http\Requests\CatalogSettingUpdateRequest;
 use App\Http\Resources\CatalogSettingResource;
 use App\Models\CatalogSetting;
 use App\Models\CatalogVisit;
 use App\Models\Product;
+use App\Services\CatalogCoverImageStorage;
 use App\Services\TenantManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,23 +28,41 @@ class CatalogSettingsController extends Controller
         $this->authorize('view', $setting);
 
         $manufacturer = $tenantManager->get();
+        $whatsappChannel = $manufacturer->whatsappInstances()
+            ->where('status', WhatsappInstanceStatus::Connected->value)
+            ->whereNotNull('phone_number')
+            ->where('phone_number', '!=', '')
+            ->first();
 
-        // Get sample products for preview
+        if (! $this->hasValidWhatsappPhoneNumber($whatsappChannel?->phone_number)) {
+            $whatsappChannel = null;
+        }
+
         $sampleProducts = Product::where('manufacturer_id', $manufacturer->id)
             ->where('is_active', true)
             ->with(['category', 'media'])
             ->orderBy('sort_order')
             ->orderBy('name')
-            ->limit(3)
+            ->limit(6)
             ->get()
-            ->map(fn ($product) => [
-                'id' => $product->id,
-                'name' => $product->name,
-                'sku' => $product->sku,
-                'category' => $product->category?->name,
-                'primary_image' => ($primaryImage = $product->media->where('type', 'image')->sortBy('sort_order')->first()) ? Storage::disk('s3')->url($primaryImage->path) : null,
-                'total_stock' => $product->variantStocks->sum('quantity'),
-            ]);
+            ->map(function (Product $product): array {
+                $primaryImage = $product->media
+                    ->where('type', 'image')
+                    ->sortBy('sort_order')
+                    ->first();
+
+                return [
+                    'id' => $product->id,
+                    'name' => $product->name,
+                    'sku' => $product->sku,
+                    'category' => $product->category?->name,
+                    'primary_image' => $primaryImage
+                        ? Storage::disk('s3')->url($primaryImage->thumbnail_path ?: $primaryImage->path)
+                        : null,
+                    'total_stock' => $product->variantStocks->sum('quantity'),
+                    'price_cents' => $product->price_cents,
+                ];
+            });
 
         return Inertia::render('manufacturer/catalog-settings/index', [
             'catalog_settings' => (new CatalogSettingResource($setting))->resolve(request()),
@@ -49,6 +70,12 @@ class CatalogSettingsController extends Controller
             'stats' => $this->buildStats($setting),
             'sample_products' => $sampleProducts,
             'manufacturer_name' => $manufacturer->name,
+            'whatsapp_channel' => [
+                'available' => $whatsappChannel !== null,
+                'profile_name' => $whatsappChannel?->profile_name,
+                'phone_masked' => $this->maskPhoneNumber($whatsappChannel?->phone_number),
+                'channels_url' => route('manufacturer.atendimento.channels'),
+            ],
         ]);
     }
 
@@ -135,6 +162,75 @@ class CatalogSettingsController extends Controller
             ->with('success', 'Imagem de fundo removida com sucesso.');
     }
 
+    public function uploadCover(
+        CatalogSettingCoverRequest $request,
+        TenantManager $tenantManager,
+        CatalogCoverImageStorage $coverStorage,
+    ): RedirectResponse {
+        $setting = $this->resolveSetting($tenantManager);
+
+        $this->authorize('update', $setting);
+
+        $manufacturer = $tenantManager->get();
+
+        if (! $manufacturer) {
+            abort(403);
+        }
+
+        $uploadedFile = $request->file('cover_image');
+        $storedCover = $coverStorage->optimizeAndStore(
+            $manufacturer,
+            (string) $uploadedFile->get(),
+        );
+        $previousPath = $setting->cover_image_path;
+        $previousThumbnailPath = $setting->cover_thumbnail_path;
+
+        try {
+            $setting->update([
+                'cover_image_path' => $storedCover['path'],
+                'cover_thumbnail_path' => $storedCover['thumbnail_path'],
+                'cover_image_focal_x' => $request->integer('cover_image_focal_x', 50),
+                'cover_image_focal_y' => $request->integer('cover_image_focal_y', 50),
+            ]);
+        } catch (\Throwable $exception) {
+            $coverStorage->delete($storedCover['path'], $storedCover['thumbnail_path']);
+
+            throw $exception;
+        }
+
+        $coverStorage->delete($previousPath, $previousThumbnailPath);
+
+        return redirect()
+            ->back()
+            ->with('success', 'Capa do catalogo atualizada com sucesso.');
+    }
+
+    public function destroyCover(
+        Request $request,
+        TenantManager $tenantManager,
+        CatalogCoverImageStorage $coverStorage,
+    ): RedirectResponse {
+        $setting = $this->resolveSetting($tenantManager);
+
+        $this->authorize('update', $setting);
+
+        $previousPath = $setting->cover_image_path;
+        $previousThumbnailPath = $setting->cover_thumbnail_path;
+
+        $setting->update([
+            'cover_image_path' => null,
+            'cover_thumbnail_path' => null,
+            'cover_image_focal_x' => 50,
+            'cover_image_focal_y' => 50,
+        ]);
+
+        $coverStorage->delete($previousPath, $previousThumbnailPath);
+
+        return redirect()
+            ->back()
+            ->with('success', 'Capa do catalogo removida com sucesso.');
+    }
+
     public function rotateLink(Request $request, TenantManager $tenantManager): RedirectResponse
     {
         $setting = $this->resolveSetting($tenantManager);
@@ -190,6 +286,32 @@ class CatalogSettingsController extends Controller
         foreach (array_unique(['public', $this->catalogMediaDisk()]) as $disk) {
             Storage::disk($disk)->delete($path);
         }
+    }
+
+    private function maskPhoneNumber(?string $phoneNumber): ?string
+    {
+        $digits = preg_replace('/\D/', '', (string) $phoneNumber);
+
+        if ($digits === '') {
+            return null;
+        }
+
+        if (str_starts_with($digits, '55') && strlen($digits) >= 12) {
+            return sprintf(
+                '+55 (%s) •••••-%s',
+                substr($digits, 2, 2),
+                substr($digits, -4),
+            );
+        }
+
+        return '••••••'.substr($digits, -4);
+    }
+
+    private function hasValidWhatsappPhoneNumber(?string $phoneNumber): bool
+    {
+        $digits = preg_replace('/\D/', '', (string) $phoneNumber);
+
+        return is_string($digits) && preg_match('/^\d{8,15}$/', $digits) === 1;
     }
 
     /**

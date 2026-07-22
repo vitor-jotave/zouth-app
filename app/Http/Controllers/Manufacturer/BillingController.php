@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Manufacturer;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ChangeSubscriptionPlanRequest;
+use App\Http\Requests\UpdateBillingDetailsRequest;
 use App\Models\Plan;
 use App\Services\PlanLimitService;
 use App\Services\TenantManager;
@@ -33,11 +34,26 @@ class BillingController extends Controller
 
         $plans = Plan::where('is_active', true)
             ->orderBy('sort_order')
-            ->get()
-            ->map(fn (Plan $plan) => [
+            ->get();
+
+        $subscription = $manufacturer->subscription('default');
+        $currentPlan = $this->limitService->activePlan($manufacturer);
+        $displayPlan = $currentPlan;
+
+        if (
+            ! $displayPlan
+            && $subscription?->stripe_price
+            && $this->limitService->subscriptionGrantsAccess($subscription)
+        ) {
+            $displayPlan = $plans->firstWhere('stripe_price_id', $subscription->stripe_price);
+        }
+
+        return Inertia::render('manufacturer/billing/index', [
+            'plans' => $plans->map(fn (Plan $plan) => [
                 'id' => $plan->id,
                 'name' => $plan->name,
                 'description' => $plan->description,
+                'sort_order' => $plan->sort_order,
                 'monthly_price_cents' => $plan->monthly_price_cents,
                 'formatted_price' => $plan->formatted_price,
                 'trial_days' => $plan->trial_days,
@@ -48,14 +64,8 @@ class BillingController extends Controller
                 'max_data_mb' => $plan->max_data_mb,
                 'max_files_gb' => $plan->max_files_gb,
                 'has_stripe' => $plan->stripe_price_id !== null,
-            ]);
-
-        $subscription = $manufacturer->subscription('default');
-        $currentPlan = $this->limitService->activePlan($manufacturer);
-
-        return Inertia::render('manufacturer/billing/index', [
-            'plans' => $plans,
-            'currentPlanId' => $currentPlan?->id,
+            ]),
+            'currentPlanId' => $displayPlan?->id,
             'subscription' => $subscription ? [
                 'stripe_status' => $subscription->stripe_status,
                 'on_trial' => $subscription->onTrial(),
@@ -65,8 +75,41 @@ class BillingController extends Controller
                 'cancelled' => $subscription->canceled(),
                 'active' => $this->limitService->subscriptionGrantsAccess($subscription),
             ] : null,
-            'usage' => $this->limitService->usage($manufacturer),
+            'usage' => $displayPlan
+                ? $this->limitService->usage($manufacturer, $displayPlan)
+                : [],
+            'trial' => $manufacturer->trial_started_at ? [
+                'active' => $manufacturer->onGenericTrial(),
+                'started_at' => $manufacturer->trial_started_at?->toISOString(),
+                'ends_at' => $manufacturer->trial_ends_at?->toISOString(),
+                'days_remaining' => $manufacturer->onGenericTrial() && $manufacturer->trial_ends_at
+                    ? max(1, (int) now()->ceilDay()->diffInDays($manufacturer->trial_ends_at->ceilDay()))
+                    : 0,
+            ] : null,
+            'billingDetails' => [
+                'cnpj' => $manufacturer->cnpj,
+                'phone' => $manufacturer->phone,
+                'zip_code' => $manufacturer->zip_code,
+                'state' => $manufacturer->state,
+                'city' => $manufacturer->city,
+                'neighborhood' => $manufacturer->neighborhood,
+                'street' => $manufacturer->street,
+                'address_number' => $manufacturer->address_number,
+                'complement' => $manufacturer->complement,
+            ],
+            'billingDetailsComplete' => $this->hasCompleteBillingDetails($manufacturer),
         ]);
+    }
+
+    public function updateDetails(UpdateBillingDetailsRequest $request): RedirectResponse
+    {
+        $manufacturer = $this->tenantManager->get();
+
+        abort_unless($manufacturer, 403);
+
+        $manufacturer->update($request->validated());
+
+        return back()->with('success', 'Dados de contratação salvos. Agora escolha seu plano.');
     }
 
     /**
@@ -90,6 +133,11 @@ class BillingController extends Controller
                 ->withErrors(['plan_id' => 'Este plano ainda não está configurado para assinaturas.']);
         }
 
+        if (! $this->hasCompleteBillingDetails($manufacturer)) {
+            return redirect()->route('manufacturer.billing.index')
+                ->withErrors(['billing' => 'Preencha os dados de contratação antes de escolher o plano.']);
+        }
+
         $existingSubscription = $manufacturer->subscription('default');
         if ($existingSubscription && $existingSubscription->active()) {
             return redirect()->route('manufacturer.billing.index')
@@ -98,7 +146,15 @@ class BillingController extends Controller
 
         $subscriptionBuilder = $manufacturer->newSubscription('default', $plan->stripe_price_id);
 
-        if ($plan->trial_days > 0) {
+        if (
+            $manufacturer->trial_started_at
+            && $manufacturer->trial_ends_at
+            && $manufacturer->trial_ends_at->isAfter(now()->addHours(48))
+        ) {
+            $subscriptionBuilder->trialUntil($manufacturer->trial_ends_at);
+        } elseif ($manufacturer->trial_started_at) {
+            $subscriptionBuilder->skipTrial();
+        } elseif ($plan->trial_days > 0) {
             $subscriptionBuilder->trialDays($plan->trial_days);
         }
 
@@ -261,5 +317,19 @@ class BillingController extends Controller
         return $manufacturer->redirectToBillingPortal(
             route('manufacturer.billing.index')
         );
+    }
+
+    private function hasCompleteBillingDetails(\App\Models\Manufacturer $manufacturer): bool
+    {
+        return collect([
+            $manufacturer->cnpj,
+            $manufacturer->phone,
+            $manufacturer->zip_code,
+            $manufacturer->state,
+            $manufacturer->city,
+            $manufacturer->neighborhood,
+            $manufacturer->street,
+            $manufacturer->address_number,
+        ])->every(fn (?string $value): bool => filled($value));
     }
 }

@@ -1,6 +1,7 @@
 import type { PixelCrop } from 'react-image-crop';
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
+const MAX_DIMENSION = 2000;
 const INITIAL_QUALITY = 0.92;
 const MIN_QUALITY = 0.5;
 const QUALITY_STEP = 0.05;
@@ -109,7 +110,7 @@ export async function compressCanvas(
     source: HTMLCanvasElement,
     maxSizeBytes: number = MAX_FILE_SIZE,
 ): Promise<Blob> {
-    let canvas = source;
+    let canvas = fitCanvasWithin(source, MAX_DIMENSION);
     let quality = INITIAL_QUALITY;
 
     while (true) {
@@ -200,4 +201,17 @@ function resizeCanvas(
     ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
 
     return canvas;
+}
+
+function fitCanvasWithin(
+    source: HTMLCanvasElement,
+    maxDimension: number,
+): HTMLCanvasElement {
+    const largestDimension = Math.max(source.width, source.height);
+
+    if (largestDimension <= maxDimension) {
+        return source;
+    }
+
+    return resizeCanvas(source, maxDimension / largestDimension);
 }

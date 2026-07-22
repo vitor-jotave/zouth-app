@@ -31,6 +31,8 @@ class CustomerResource extends JsonResource
             'address_complement' => $this->address_complement,
             'address_reference' => $this->address_reference,
             'orders_count' => (int) ($this->orders_count ?? 0),
+            'commercial_orders_count' => (int) ($this->commercial_orders_count ?? $this->orders_count ?? 0),
+            'total_spent' => number_format((float) ($this->total_spent ?? 0), 2, '.', ''),
             'last_order_at' => $this->last_order_at?->toISOString(),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),

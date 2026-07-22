@@ -36,8 +36,19 @@ class ProductCategoryController extends Controller
             ->paginate(20)
             ->withQueryString();
 
+        $categorySummary = [
+            'total_categories' => $manufacturer->productCategories()->count(),
+            'categorized_products' => $manufacturer->products()
+                ->whereNotNull('product_category_id')
+                ->count(),
+            'uncategorized_products' => $manufacturer->products()
+                ->whereNull('product_category_id')
+                ->count(),
+        ];
+
         return Inertia::render('manufacturer/categories/index', [
             'categories' => ProductCategoryResource::collection($categories),
+            'category_summary' => $categorySummary,
             'filters' => [
                 'search' => $request->search,
             ],

@@ -66,7 +66,7 @@ class ProductComboService
                 ]);
             }
 
-            return $combo->fresh(['category', 'media', 'comboItems.componentProduct', 'comboItems.componentVariantStock']);
+            return $combo->fresh(['category', 'comboItems.componentProduct.media', 'comboItems.componentVariantStock']);
         });
     }
 

@@ -21,6 +21,7 @@ class WhatsappMessage extends Model
         'media_url',
         'media_mimetype',
         'media_file_name',
+        'reactions',
         'status',
         'message_timestamp',
     ];
@@ -29,6 +30,7 @@ class WhatsappMessage extends Model
     {
         return [
             'from_me' => 'boolean',
+            'reactions' => 'array',
             'status' => WhatsappMessageStatus::class,
             'message_timestamp' => 'datetime',
         ];

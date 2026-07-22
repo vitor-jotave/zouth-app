@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Enums\ManufacturerCapability;
 use App\Enums\UserType;
+use App\Notifications\ZouthVerifyEmailNotification;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -42,8 +45,20 @@ class User extends Authenticatable implements MustVerifyEmail
     public function manufacturers(): BelongsToMany
     {
         return $this->belongsToMany(Manufacturer::class, 'manufacturer_user')
-            ->withPivot('role', 'status')
+            ->using(ManufacturerUser::class)
+            ->withPivot('role', 'status', 'capabilities')
             ->withTimestamps();
+    }
+
+    public function sendEmailVerificationNotification(): void
+    {
+        if ($this->isManufacturerUser() && $this->currentManufacturer?->onboarding_completed_at === null) {
+            $this->notify(new ZouthVerifyEmailNotification);
+
+            return;
+        }
+
+        parent::sendEmailVerificationNotification();
     }
 
     public function currentManufacturer(): BelongsTo
@@ -75,6 +90,16 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(ManufacturerAffiliation::class);
     }
 
+    public function salesRepresentativeProfile(): HasOne
+    {
+        return $this->hasOne(SalesRepresentativeProfile::class);
+    }
+
+    public function representativeInvitations(): HasMany
+    {
+        return $this->hasMany(RepresentativeInvitation::class, 'invited_by_user_id');
+    }
+
     public function affiliatedManufacturers(): BelongsToMany
     {
         return $this->belongsToMany(Manufacturer::class, 'manufacturer_affiliations')
@@ -95,5 +120,73 @@ class User extends Authenticatable implements MustVerifyEmail
     public function isSalesRep(): bool
     {
         return $this->user_type === UserType::SalesRep;
+    }
+
+    public function currentManufacturerMembership(): ?Manufacturer
+    {
+        if (! $this->isManufacturerUser() || ! $this->current_manufacturer_id) {
+            return null;
+        }
+
+        return $this->manufacturers()
+            ->whereKey($this->current_manufacturer_id)
+            ->wherePivot('status', 'active')
+            ->first();
+    }
+
+    public function isManufacturerOwner(): bool
+    {
+        return $this->currentManufacturerMembership()?->pivot->role === 'owner';
+    }
+
+    public function isPrimaryManufacturerOwner(): bool
+    {
+        return $this->manufacturers()
+            ->where('primary_owner_user_id', $this->id)
+            ->exists();
+    }
+
+    public function hasManufacturerCapability(ManufacturerCapability $capability): bool
+    {
+        $membership = $this->currentManufacturerMembership();
+
+        if (! $membership) {
+            return false;
+        }
+
+        if ($membership->pivot->role === 'owner') {
+            return true;
+        }
+
+        $capabilities = $membership->pivot->capabilities;
+
+        if ($capabilities === null) {
+            return true;
+        }
+
+        return in_array($capability->value, $capabilities, true);
+    }
+
+    /**
+     * @return array{role: string, is_owner: bool, capabilities: list<string>}|null
+     */
+    public function manufacturerAccess(): ?array
+    {
+        $membership = $this->currentManufacturerMembership();
+
+        if (! $membership) {
+            return null;
+        }
+
+        $isOwner = $membership->pivot->role === 'owner';
+        $capabilities = $membership->pivot->capabilities;
+
+        return [
+            'role' => $membership->pivot->role,
+            'is_owner' => $isOwner,
+            'capabilities' => $isOwner || $capabilities === null
+                ? ManufacturerCapability::values()
+                : array_values($capabilities),
+        ];
     }
 }

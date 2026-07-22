@@ -16,10 +16,14 @@ class ProductCatalogResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $media = $this->media ?? collect();
+        $hidePrices = $request->attributes->get('catalog_hide_prices', false) === true;
+        $media = $this->displayMedia();
         $images = $media->filter(fn ($item) => ($item->type instanceof ProductMediaType)
             ? $item->type === ProductMediaType::Image
             : $item->type === ProductMediaType::Image->value);
+        $videos = $media->filter(fn ($item) => ($item->type instanceof ProductMediaType)
+            ? $item->type === ProductMediaType::Video
+            : $item->type === ProductMediaType::Video->value);
         $primaryImage = $images->first();
 
         $variantStocks = $this->variantStocks ?? collect();
@@ -41,7 +45,9 @@ class ProductCatalogResource extends JsonResource
                     ->map(fn ($value) => [
                         'value' => $value->value,
                         'hex' => $value->hex,
-                        'image_url' => $value->image_path ? Storage::disk('s3')->url($value->image_path) : null,
+                        'image_url' => ($value->thumbnail_path ?: $value->image_path)
+                            ? Storage::disk('s3')->url($value->thumbnail_path ?: $value->image_path)
+                            : null,
                     ])
                     ->values()
                     ->all();
@@ -62,15 +68,30 @@ class ProductCatalogResource extends JsonResource
             'name' => $this->name,
             'sku' => $this->sku,
             'description' => $this->description,
+            'category_id' => $this->product_category_id,
             'category' => $this->category?->name,
             'primary_image' => $primaryImage ? Storage::disk('s3')->url($primaryImage->path) : null,
+            'primary_thumbnail' => $primaryImage
+                ? Storage::disk('s3')->url($primaryImage->thumbnail_path ?: $primaryImage->path)
+                : null,
             'images' => $images->map(fn ($item) => Storage::disk('s3')->url($item->path))->values(),
+            'thumbnails' => $images
+                ->map(fn ($item) => Storage::disk('s3')->url($item->thumbnail_path ?: $item->path))
+                ->values(),
+            'videos' => $videos->map(fn ($item) => Storage::disk('s3')->url($item->path))->values(),
             'variations' => $variations,
-            'variant_stocks' => $this->variantStocks?->map(fn ($stock) => [
-                'variation_key' => $stock->variation_key,
-                'quantity' => $stock->quantity,
-                'price_cents' => $stock->price_cents,
-            ]) ?? [],
+            'variant_stocks' => $this->variantStocks?->map(function ($stock) use ($hidePrices): array {
+                $stockData = [
+                    'variation_key' => $stock->variation_key,
+                    'quantity' => $stock->quantity,
+                ];
+
+                if (! $hidePrices) {
+                    $stockData['price_cents'] = $stock->price_cents;
+                }
+
+                return $stockData;
+            }) ?? [],
             'combo_items' => $this->comboItems?->map(fn ($item) => [
                 'product_id' => $item->component_product_id,
                 'product_name' => $item->componentProduct?->name,
@@ -79,7 +100,7 @@ class ProductCatalogResource extends JsonResource
                 'quantity' => $item->quantity,
             ])->values() ?? [],
             'total_stock' => $this->getTotalStock(),
-            'price_cents' => $this->price_cents,
+            'price_cents' => $this->when(! $hidePrices, $this->price_cents),
         ];
     }
 }

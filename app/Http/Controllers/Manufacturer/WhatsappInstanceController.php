@@ -10,6 +10,8 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -30,7 +32,12 @@ class WhatsappInstanceController extends Controller
 
         $instance = $manufacturer->whatsappInstances()->first();
 
+        if ($instance) {
+            $instance->loadCount('conversations');
+        }
+
         return Inertia::render('manufacturer/atendimento/setup', [
+            'connection_key' => 'zouth-'.$manufacturer->id.'-'.Str::lower(Str::random(8)),
             'instance' => $instance ? [
                 'id' => $instance->id,
                 'instance_name' => $instance->instance_name,
@@ -38,6 +45,9 @@ class WhatsappInstanceController extends Controller
                 'phone_number' => $instance->phone_number,
                 'profile_name' => $instance->profile_name,
                 'profile_picture_url' => $instance->profile_picture_url,
+                'conversation_count' => $instance->conversations_count,
+                'last_activity_at' => $instance->conversations()
+                    ->max('last_message_at'),
             ] : null,
         ]);
     }
@@ -62,6 +72,26 @@ class WhatsappInstanceController extends Controller
         );
 
         if (! $response->successful()) {
+            $responseMessage = $response->json('response.message.0')
+                ?? $response->json('message');
+
+            Log::warning('Evolution API rejected WhatsApp instance creation.', [
+                'manufacturer_id' => $manufacturer->id,
+                'instance_name' => $instanceName,
+                'status' => $response->status(),
+            ]);
+
+            if (
+                $response->forbidden()
+                && is_string($responseMessage)
+                && Str::contains(Str::lower($responseMessage), 'already in use')
+            ) {
+                return redirect()->back()->with(
+                    'error',
+                    'Esse nome de instância já está em uso. Escolha outro nome e tente novamente.',
+                );
+            }
+
             return redirect()->back()->with('error', 'Erro ao criar instância no servidor do WhatsApp. Tente novamente.');
         }
 
@@ -119,11 +149,22 @@ class WhatsappInstanceController extends Controller
                     ? $profileData[0]
                     : ($profileData['instance'] ?? []);
 
+                $phoneNumber = $instanceData['number']
+                    ?? $instanceData['ownerJid']
+                    ?? $instanceData['owner']
+                    ?? $instance->phone_number;
+
+                if (is_string($phoneNumber)) {
+                    $phoneNumber = Str::before($phoneNumber, '@');
+                }
+
                 $instance->update([
                     'status' => 'connected',
-                    'phone_number' => $instanceData['owner'] ?? $instance->phone_number,
+                    'phone_number' => $phoneNumber,
                     'profile_name' => $instanceData['profileName'] ?? $instance->profile_name,
-                    'profile_picture_url' => $instanceData['profilePictureUrl'] ?? $instance->profile_picture_url,
+                    'profile_picture_url' => $instanceData['profilePicUrl']
+                        ?? $instanceData['profilePictureUrl']
+                        ?? $instance->profile_picture_url,
                 ]);
             } elseif (in_array($state, ['close', 'refused'])) {
                 $instance->update(['status' => 'disconnected']);

@@ -1,41 +1,35 @@
-import {
-    DndContext,
-    KeyboardSensor,
-    PointerSensor,
-    closestCenter,
-    type DragEndEvent,
-    useSensor,
-    useSensors,
-} from '@dnd-kit/core';
-import {
-    SortableContext,
-    arrayMove,
-    sortableKeyboardCoordinates,
-    useSortable,
-    verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { arrayMove } from '@dnd-kit/sortable';
 import { router, useForm } from '@inertiajs/react';
 import {
+    Check,
     CircleAlert,
-    GripVertical,
-    ImagePlus,
+    Eye,
     Loader2,
-    Package,
-    Palette,
-    Shirt,
-    X,
+    RotateCcw,
+    Save,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ImageCropDialog } from '@/components/image-crop-dialog';
-import { ImageDropzone } from '@/components/image-dropzone';
-import InputError from '@/components/input-error';
-import { Badge } from '@/components/ui/badge';
+import {
+    EditorField,
+    EditorSection,
+} from '@/components/product-editor/editor-section';
+import { ProductLivePreview } from '@/components/product-editor/product-live-preview';
+import { ProductMediaStudio } from '@/components/product-editor/product-media-studio';
+import { ProductVariationStudio } from '@/components/product-editor/product-variation-studio';
+import type {
+    ProductCategoryOption,
+    ProductEditorData,
+    ProductEditorErrors,
+    ProductEditorMode,
+    ProductEditorPayload,
+    ProductMediaItem,
+    ProductStockStructure,
+    ProductVariantStockValue,
+    ProductVariationSelection,
+    ProductVariationTypeOption,
+} from '@/components/product-editor/types';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
     Select,
     SelectContent,
@@ -43,203 +37,127 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
+import manufacturer from '@/routes/manufacturer';
 
-interface Category {
-    id: number;
-    name: string;
-}
-
-interface MediaItem {
-    id: number;
-    type: 'image' | 'video';
-    path: string;
-    url?: string;
-    sort_order: number;
-}
+export const PRODUCT_EDITOR_FORM_ID = 'product-editor-form';
 
 const MAX_IMAGES = 10;
 
-interface VariationTypeValue {
-    id: number;
-    value: string;
-    hex?: string | null;
-    image_url?: string | null;
-}
-
-interface VariationTypeOption {
-    id: number;
-    name: string;
-    is_color_type: boolean;
-    values: VariationTypeValue[];
-}
-
-interface ProductVariation {
-    variation_type_id: number;
-    values: string[];
-}
-
-interface ProductVariantStock {
-    variation_key: Record<string, string>;
-    quantity: number;
-    price: string;
-    sku_variant?: string | null;
-}
-
-interface ProductPayload {
-    id: number;
-    name: string;
-    sku: string;
-    description?: string | null;
-    product_category_id?: number | null;
-    base_quantity: number;
-    is_active: boolean;
-    sort_order: number;
-    price_cents?: number | null;
-    media?: MediaItem[];
-    variations?: Array<{
-        id: number;
-        variation_type_id: number;
-        type?: {
-            id: number;
-            name: string;
-            is_color_type: boolean;
-            values: VariationTypeValue[];
-        } | null;
-    }>;
-    variant_stocks?: Array<{
-        id: number;
-        variation_key: Record<string, string>;
-        quantity: number;
-        price_cents?: number | null;
-        sku_variant?: string | null;
-    }>;
-}
-
-interface StockStructure {
-    variations: Array<{
-        id: number;
-        type: {
-            id: number;
-            name: string;
-            is_color_type: boolean;
-        };
-        values: VariationTypeValue[];
-    }>;
-    base_quantity: number;
-    stocks: Array<{
-        id: number;
-        variation_key: Record<string, string>;
-        quantity: number;
-        price_cents?: number | null;
-        sku_variant?: string | null;
-    }>;
-}
-
-interface Props {
-    mode: 'create' | 'edit';
-    categories: Category[];
-    variationTypes: VariationTypeOption[];
-    product?: ProductPayload;
-    stockStructure?: StockStructure;
-}
-
-const steps = [
-    { key: 'basic', label: 'Dados basicos', icon: Package },
-    { key: 'variants', label: 'Variacoes e estoque', icon: Shirt },
-    { key: 'media', label: 'Midia', icon: ImagePlus },
-];
-
-/** Maps error field prefixes to their respective step index. */
-const STEP_FIELDS: Record<number, string[]> = {
-    0: [
-        'name',
-        'sku',
-        'description',
-        'product_category_id',
-        'price',
-        'sort_order',
-        'is_active',
-    ],
-    1: ['variations', 'variant_stocks', 'base_quantity'],
-    2: ['images', 'video'],
+type ProductFormProps = {
+    mode: ProductEditorMode;
+    categories: ProductCategoryOption[];
+    variationTypes: ProductVariationTypeOption[];
+    product?: ProductEditorPayload;
+    stockStructure?: ProductStockStructure;
 };
 
-function getStepForError(errorKey: string): number {
-    for (const [stepStr, fields] of Object.entries(STEP_FIELDS)) {
-        const stepIdx = Number(stepStr);
-        if (
-            fields.some((f) => errorKey === f || errorKey.startsWith(`${f}.`))
-        ) {
-            return stepIdx;
-        }
+type EditorSectionKey =
+    | 'presentation'
+    | 'variations'
+    | 'availability'
+    | 'images';
+
+const sectionLinks: Array<{
+    key: EditorSectionKey;
+    label: string;
+    errorPrefixes: string[];
+}> = [
+    {
+        key: 'presentation',
+        label: 'Apresentação',
+        errorPrefixes: [
+            'name',
+            'sku',
+            'description',
+            'product_category_id',
+            'price',
+            'sort_order',
+            'is_active',
+        ],
+    },
+    {
+        key: 'variations',
+        label: 'Variações',
+        errorPrefixes: ['variations'],
+    },
+    {
+        key: 'availability',
+        label: 'Disponibilidade',
+        errorPrefixes: ['variant_stocks', 'base_quantity'],
+    },
+    {
+        key: 'images',
+        label: 'Imagens',
+        errorPrefixes: ['images', 'files', 'video', 'file', 'type'],
+    },
+];
+
+const fieldClassName =
+    'h-[52px] w-full rounded-[2px] border border-border bg-transparent px-3 font-zouth-body text-sm text-foreground shadow-none outline-none placeholder:text-muted-foreground focus:border-[#18181f] focus:ring-2 focus:ring-[#ff4d3d]/25';
+
+function centsToDisplay(cents: number | null | undefined): string {
+    if (cents == null) {
+        return '';
     }
-    return 0;
+
+    return String(cents / 100).replace('.', ',');
 }
 
-function stepsWithErrors(errors: Record<string, string>): Set<number> {
-    const set = new Set<number>();
-    for (const key of Object.keys(errors)) {
-        set.add(getStepForError(key));
-    }
-    return set;
+function normalizeVariationKey(key: Record<string, string>): string {
+    return JSON.stringify(
+        Object.entries(key).sort(([a], [b]) => a.localeCompare(b)),
+    );
 }
 
-/**
- * Build the cartesian product of all selected variation values and return stock
- * rows, preserving existing quantities when the key matches.
- */
 function buildVariantStocks(
-    variations: ProductVariation[],
-    variationTypes: VariationTypeOption[],
-    currentStocks: ProductVariantStock[],
-): ProductVariantStock[] {
+    variations: ProductVariationSelection[],
+    variationTypes: ProductVariationTypeOption[],
+    currentStocks: ProductVariantStockValue[],
+): ProductVariantStockValue[] {
     if (variations.length === 0) {
         return [];
     }
 
-    // Resolve type names for each selected variation
     const resolvedSets = variations
-        .map((v) => {
+        .map((variation) => {
             const type = variationTypes.find(
-                (t) => t.id === v.variation_type_id,
+                (item) => item.id === variation.variation_type_id,
             );
-            return type ? { name: type.name, values: v.values } : null;
+
+            return type ? { name: type.name, values: variation.values } : null;
         })
-        .filter(Boolean) as { name: string; values: string[] }[];
+        .filter(Boolean) as Array<{ name: string; values: string[] }>;
 
     if (
         resolvedSets.length === 0 ||
-        resolvedSets.some((s) => s.values.length === 0)
+        resolvedSets.some((set) => set.values.length === 0)
     ) {
         return [];
     }
 
-    // Generate cartesian product of all value sets
-    let combos: Record<string, string>[] = [{}];
-    for (const set of resolvedSets) {
-        const next: Record<string, string>[] = [];
-        for (const combo of combos) {
-            for (const val of set.values) {
-                next.push({ ...combo, [set.name]: val });
-            }
-        }
-        combos = next;
-    }
+    let combinations: Array<Record<string, string>> = [{}];
 
-    // Build a lookup from current stocks for quantity/price/sku preservation
-    const normalize = (key: Record<string, string>) =>
-        JSON.stringify(
-            Object.entries(key).sort(([a], [b]) => a.localeCompare(b)),
+    resolvedSets.forEach((set) => {
+        combinations = combinations.flatMap((combination) =>
+            set.values.map((value) => ({
+                ...combination,
+                [set.name]: value,
+            })),
         );
+    });
 
-    const stockMap = new Map<string, ProductVariantStock>();
-    currentStocks.forEach((s) => stockMap.set(normalize(s.variation_key), s));
+    const stockMap = new Map(
+        currentStocks.map((stock) => [
+            normalizeVariationKey(stock.variation_key),
+            stock,
+        ]),
+    );
 
-    return combos.map((key) => {
-        const existing = stockMap.get(normalize(key));
+    return combinations.map((variationKey) => {
+        const existing = stockMap.get(normalizeVariationKey(variationKey));
+
         return {
-            variation_key: key,
+            variation_key: variationKey,
             quantity: existing?.quantity ?? 0,
             price: existing?.price ?? '',
             sku_variant: existing?.sku_variant ?? null,
@@ -247,76 +165,33 @@ function buildVariantStocks(
     });
 }
 
-// ---------------------------------------------------------------------------
-// Sortable media item component
-// ---------------------------------------------------------------------------
-interface SortableMediaItemProps {
-    media: MediaItem;
-    index: number;
-    onDelete: (id: number) => void;
-}
-
-function SortableMediaItem({ media, index, onDelete }: SortableMediaItemProps) {
-    const {
-        attributes,
-        listeners,
-        setNodeRef,
-        transform,
-        transition,
-        isDragging,
-    } = useSortable({ id: media.id });
-
-    const style: React.CSSProperties = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.5 : 1,
-        zIndex: isDragging ? 50 : undefined,
-    };
+function firstSectionWithErrors(
+    errors: ProductEditorErrors,
+): EditorSectionKey | null {
+    const errorKeys = Object.keys(errors);
 
     return (
-        <div
-            ref={setNodeRef}
-            style={style}
-            className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-background p-3"
-        >
-            <div className="flex items-center gap-3">
-                <button
-                    type="button"
-                    className="cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
-                    aria-label="Arrastar para reordenar"
-                    {...attributes}
-                    {...listeners}
-                >
-                    <GripVertical className="h-5 w-5" />
-                </button>
-                {media.type === 'image' ? (
-                    <img
-                        src={media.url}
-                        alt="Preview"
-                        className="h-16 w-16 rounded-md object-cover"
-                    />
-                ) : (
-                    <div className="flex h-16 w-16 items-center justify-center rounded-md bg-muted text-sm">
-                        Video
-                    </div>
-                )}
-                <div>
-                    <div className="text-sm font-medium">
-                        {media.type === 'image' ? 'Imagem' : 'Video'}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                        Ordem {index + 1}
-                    </div>
-                </div>
-            </div>
-            <Button
-                type="button"
-                variant="destructive"
-                onClick={() => onDelete(media.id)}
-            >
-                Remover
-            </Button>
-        </div>
+        sectionLinks.find((section) =>
+            errorKeys.some((errorKey) =>
+                section.errorPrefixes.some(
+                    (prefix) =>
+                        errorKey === prefix ||
+                        errorKey.startsWith(`${prefix}.`),
+                ),
+            ),
+        )?.key ?? null
+    );
+}
+
+function sectionHasError(
+    section: (typeof sectionLinks)[number],
+    errors: ProductEditorErrors,
+): boolean {
+    return Object.keys(errors).some((errorKey) =>
+        section.errorPrefixes.some(
+            (prefix) =>
+                errorKey === prefix || errorKey.startsWith(`${prefix}.`),
+        ),
     );
 }
 
@@ -326,65 +201,47 @@ export function ProductForm({
     variationTypes = [],
     product,
     stockStructure,
-}: Props) {
-    const centsToDisplay = (cents: number | null | undefined): string => {
-        if (cents == null) return '';
-        return String(cents / 100).replace('.', ',');
-    };
+}: ProductFormProps) {
+    const initialVariations: ProductVariationSelection[] =
+        stockStructure?.variations
+            ? stockStructure.variations.map((variation) => ({
+                  variation_type_id: variation.type.id,
+                  values: variation.values.map((value) => value.value),
+              }))
+            : (product?.variations
+                  ?.filter((variation) => variation.type)
+                  .map((variation) => ({
+                      variation_type_id: variation.variation_type_id,
+                      values:
+                          variation.type?.values.map((value) => value.value) ??
+                          [],
+                  })) ?? []);
+    const initialStocksSource =
+        stockStructure?.stocks ?? product?.variant_stocks ?? [];
+    const initialStocks: ProductVariantStockValue[] = initialStocksSource.map(
+        (stock) => ({
+            variation_key: stock.variation_key,
+            quantity: stock.quantity,
+            price: centsToDisplay(stock.price_cents),
+            sku_variant: stock.sku_variant ?? null,
+        }),
+    );
 
-    // Derive initial variations from stockStructure (edit) or product
-    const initialVariations: ProductVariation[] = (() => {
-        if (stockStructure?.variations) {
-            return stockStructure.variations.map((v) => ({
-                variation_type_id: v.type.id,
-                values: v.values.map((val) => val.value),
-            }));
-        }
-        if (product?.variations) {
-            return product.variations
-                .filter((v) => v.type)
-                .map((v) => ({
-                    variation_type_id: v.variation_type_id,
-                    values: v.type!.values.map((val) => val.value),
-                }));
-        }
-        return [];
-    })();
-
-    const initialStocks: ProductVariantStock[] = (() => {
-        if (stockStructure?.stocks) {
-            return stockStructure.stocks.map((s) => ({
-                variation_key: s.variation_key,
-                quantity: s.quantity,
-                price: centsToDisplay(s.price_cents),
-                sku_variant: s.sku_variant ?? null,
-            }));
-        }
-        if (product?.variant_stocks) {
-            return product.variant_stocks.map((s) => ({
-                variation_key: s.variation_key,
-                quantity: s.quantity,
-                price: centsToDisplay(s.price_cents),
-                sku_variant: s.sku_variant ?? null,
-            }));
-        }
-        return [];
-    })();
-
-    const { data, setData, post, put, processing, errors } = useForm<{
-        name: string;
-        sku: string;
-        description: string;
-        product_category_id: string | number;
-        base_quantity: number;
-        is_active: boolean;
-        sort_order: number;
-        price: string;
-        variations: ProductVariation[];
-        variant_stocks: ProductVariantStock[];
-        images: File[];
-        video: File | null;
-    }>({
+    const {
+        data,
+        setData,
+        post,
+        put,
+        processing,
+        progress,
+        errors,
+        setError,
+        clearErrors,
+        reset,
+        setDefaults,
+        isDirty,
+        recentlySuccessful,
+    } = useForm<ProductEditorData>({
         name: product?.name ?? '',
         sku: product?.sku ?? '',
         description: product?.description ?? '',
@@ -392,76 +249,140 @@ export function ProductForm({
         base_quantity: product?.base_quantity ?? 0,
         is_active: product?.is_active ?? true,
         sort_order: product?.sort_order ?? 0,
-        price:
-            product?.price_cents != null
-                ? String(product.price_cents / 100).replace('.', ',')
-                : '',
+        price: centsToDisplay(product?.price_cents),
         variations: initialVariations,
         variant_stocks: initialStocks,
         images: [],
         video: null,
     });
-
-    const [step, setStep] = useState(0);
-    const [mediaItems, setMediaItems] = useState<MediaItem[]>(
+    const formErrors = errors as ProductEditorErrors;
+    const [activeSection, setActiveSection] =
+        useState<EditorSectionKey>('presentation');
+    const [mediaItems, setMediaItems] = useState<ProductMediaItem[]>(
         product?.media ?? [],
     );
-    const [videoToUpload, setVideoToUpload] = useState<File | null>(null);
-    const videoInputRef = useRef<HTMLInputElement>(null);
-
-    // Crop queue: files waiting to be cropped one-by-one
+    const [pendingVideo, setPendingVideo] = useState<File | null>(null);
     const [cropQueue, setCropQueue] = useState<File[]>([]);
     const [cropDialogOpen, setCropDialogOpen] = useState(false);
     const [uploadingMedia, setUploadingMedia] = useState(false);
+
+    const computedStocks = useMemo(
+        () =>
+            buildVariantStocks(
+                data.variations,
+                variationTypes,
+                data.variant_stocks,
+            ),
+        [data.variations, data.variant_stocks, variationTypes],
+    );
+    const errorCount = Object.keys(formErrors).length;
+    const currentCropFile = cropQueue[0] ?? null;
 
     useEffect(() => {
         setMediaItems(product?.media ?? []);
     }, [product?.media]);
 
-    const hasVariants = data.variations.length > 0;
-
-    const computedStocks = useMemo(() => {
-        return buildVariantStocks(
-            data.variations,
-            variationTypes,
-            data.variant_stocks,
-        );
-    }, [data.variations, variationTypes, data.variant_stocks]);
-
-    // Steps with validation errors — used for badges + auto-navigation
-    const errorSteps = useMemo(() => stepsWithErrors(errors), [errors]);
-
-    // When backend errors arrive, navigate to the first step that has errors
     useEffect(() => {
-        if (errorSteps.size > 0) {
-            const first = Math.min(...errorSteps);
-            setStep(first);
+        const section = firstSectionWithErrors(formErrors);
+
+        if (!section) {
+            return;
         }
-    }, [errorSteps]);
 
-    /** Client-side required-field check for the current step. */
-    const validateCurrentStep = (): boolean => {
-        if (step === 0) {
-            return data.name.trim() !== '' && data.sku.trim() !== '';
-        }
-        // Steps 1 & 2 don't have mandatory fields that block advancing
-        return true;
+        setActiveSection(section);
+        window.requestAnimationFrame(() => {
+            document.getElementById(section)?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start',
+            });
+        });
+    }, [formErrors]);
+
+    useEffect(() => {
+        const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+            if (!isDirty) {
+                return;
+            }
+
+            event.preventDefault();
+            event.returnValue = '';
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, [isDirty]);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            (entries) => {
+                const visibleSection = entries
+                    .filter((entry) => entry.isIntersecting)
+                    .sort(
+                        (first, second) =>
+                            Math.abs(first.boundingClientRect.top) -
+                            Math.abs(second.boundingClientRect.top),
+                    )[0];
+
+                if (visibleSection) {
+                    setActiveSection(
+                        visibleSection.target.id as EditorSectionKey,
+                    );
+                }
+            },
+            {
+                rootMargin: '-80px 0px -58% 0px',
+                threshold: 0,
+            },
+        );
+
+        sectionLinks.forEach((section) => {
+            const element = document.getElementById(section.key);
+
+            if (element) {
+                observer.observe(element);
+            }
+        });
+
+        return () => observer.disconnect();
+    }, []);
+
+    const scrollToSection = (section: EditorSectionKey) => {
+        setActiveSection(section);
+        document.getElementById(section)?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+        });
     };
 
-    const handleNext = () => {
-        if (!validateCurrentStep()) return;
-        setStep((current) => Math.min(current + 1, steps.length - 1));
-    };
-
-    const handlePrev = () => {
-        setStep((current) => Math.max(current - 1, 0));
-    };
-
-    const handleSubmit = (event: React.FormEvent) => {
+    const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        clearErrors();
+
+        let hasClientError = false;
+
+        if (data.name.trim() === '') {
+            setError('name', 'Dê um nome para a peça antes de salvar.');
+            hasClientError = true;
+        }
+
+        if (data.sku.trim() === '') {
+            setError('sku', 'Informe o SKU que identifica esta peça.');
+            hasClientError = true;
+        }
+
+        if (hasClientError) {
+            scrollToSection('presentation');
+            return;
+        }
 
         if (mode === 'create') {
-            post('/manufacturer/products', { forceFormData: true });
+            post(manufacturer.products.store().url, {
+                forceFormData: true,
+                preserveScroll: true,
+            });
             return;
         }
 
@@ -469,10 +390,13 @@ export function ProductForm({
             return;
         }
 
-        put(`/manufacturer/products/${product.id}`);
+        put(manufacturer.products.update(product.id).url, {
+            preserveScroll: true,
+            onSuccess: () => setDefaults(),
+        });
     };
 
-    const rebuildStocks = (nextVariations: ProductVariation[]) => {
+    const rebuildStocks = (nextVariations: ProductVariationSelection[]) => {
         setData('variations', nextVariations);
         setData(
             'variant_stocks',
@@ -486,57 +410,71 @@ export function ProductForm({
 
     const toggleVariationType = (typeId: number, checked: boolean) => {
         if (checked) {
-            if (data.variations.some((v) => v.variation_type_id === typeId))
+            if (
+                data.variations.some(
+                    (variation) => variation.variation_type_id === typeId,
+                )
+            ) {
                 return;
+            }
+
+            if (data.variations.length === 0 && data.base_quantity > 0) {
+                setData('base_quantity', 0);
+            }
+
             rebuildStocks([
                 ...data.variations,
                 { variation_type_id: typeId, values: [] },
             ]);
-        } else {
-            rebuildStocks(
-                data.variations.filter((v) => v.variation_type_id !== typeId),
-            );
+            return;
         }
+
+        rebuildStocks(
+            data.variations.filter(
+                (variation) => variation.variation_type_id !== typeId,
+            ),
+        );
     };
 
     const toggleVariationValue = (typeId: number, value: string) => {
-        const nextVariations = data.variations.map((v) => {
-            if (v.variation_type_id !== typeId) return v;
-            const hasValue = v.values.includes(value);
+        const nextVariations = data.variations.map((variation) => {
+            if (variation.variation_type_id !== typeId) {
+                return variation;
+            }
+
+            const isSelected = variation.values.includes(value);
+
             return {
-                ...v,
-                values: hasValue
-                    ? v.values.filter((val) => val !== value)
-                    : [...v.values, value],
+                ...variation,
+                values: isSelected
+                    ? variation.values.filter((item) => item !== value)
+                    : [...variation.values, value],
             };
         });
+
         rebuildStocks(nextVariations);
     };
 
     const updateStockField = (
-        key: Record<string, string>,
+        variationKey: Record<string, string>,
         field: 'quantity' | 'price' | 'sku_variant',
         value: number | string | null,
     ) => {
-        const normalize = (k: Record<string, string>) =>
-            JSON.stringify(
-                Object.entries(k).sort(([a], [b]) => a.localeCompare(b)),
-            );
-        const target = normalize(key);
+        const targetKey = normalizeVariationKey(variationKey);
         const nextStocks = computedStocks.map((stock) =>
-            normalize(stock.variation_key) === target
+            normalizeVariationKey(stock.variation_key) === targetKey
                 ? { ...stock, [field]: value }
                 : stock,
         );
+
         setData('variant_stocks', nextStocks);
     };
 
-    // -----------------------------------------------------------------------
-    // Image crop queue
-    // -----------------------------------------------------------------------
-    const currentCropFile = cropQueue.length > 0 ? cropQueue[0] : null;
-
     const handleFilesSelected = useCallback((files: File[]) => {
+        if (files.length === 0) {
+            return;
+        }
+
         setCropQueue(files);
         setCropDialogOpen(true);
     }, []);
@@ -546,10 +484,9 @@ export function ProductForm({
             if (mode === 'create') {
                 setData('images', [...data.images, croppedFile]);
             } else if (product) {
-                // Upload immediately in edit mode
                 setUploadingMedia(true);
                 router.post(
-                    `/manufacturer/products/${product.id}/media`,
+                    manufacturer.products.media.store(product.id).url,
                     { type: 'image', files: [croppedFile] },
                     {
                         forceFormData: true,
@@ -560,726 +497,571 @@ export function ProductForm({
                 );
             }
 
-            // Advance to next file in queue or close
-            setCropQueue((prev) => {
-                const next = prev.slice(1);
-                if (next.length === 0) {
+            setCropQueue((queue) => {
+                const nextQueue = queue.slice(1);
+
+                if (nextQueue.length === 0) {
                     setCropDialogOpen(false);
                 }
-                return next;
+
+                return nextQueue;
             });
         },
-        [mode, product, data.images, setData],
+        [data.images, mode, product, setData],
     );
 
     const handleCropSkip = useCallback(() => {
-        setCropQueue((prev) => {
-            const next = prev.slice(1);
-            if (next.length === 0) {
+        setCropQueue((queue) => {
+            const nextQueue = queue.slice(1);
+
+            if (nextQueue.length === 0) {
                 setCropDialogOpen(false);
             }
-            return next;
+
+            return nextQueue;
         });
     }, []);
 
     const handleVideoUpload = useCallback(() => {
-        if (!product || !videoToUpload) return;
+        if (!product || !pendingVideo) {
+            return;
+        }
 
         setUploadingMedia(true);
         router.post(
-            `/manufacturer/products/${product.id}/media`,
-            { type: 'video', file: videoToUpload },
+            manufacturer.products.media.store(product.id).url,
+            { type: 'video', file: pendingVideo },
             {
                 forceFormData: true,
                 preserveScroll: true,
                 preserveState: true,
-                onFinish: () => {
-                    setVideoToUpload(null);
-                    setUploadingMedia(false);
-                    if (videoInputRef.current) {
-                        videoInputRef.current.value = '';
-                    }
-                },
+                onSuccess: () => setPendingVideo(null),
+                onFinish: () => setUploadingMedia(false),
             },
         );
-    }, [product, videoToUpload]);
+    }, [pendingVideo, product]);
 
-    const sensors = useSensors(
-        useSensor(PointerSensor),
-        useSensor(KeyboardSensor, {
-            coordinateGetter: sortableKeyboardCoordinates,
-        }),
-    );
-
-    const handleDragEnd = useCallback(
-        (event: DragEndEvent) => {
-            const { active, over } = event;
-            if (!over || active.id === over.id || !product) return;
-
-            setMediaItems((prev) => {
-                const oldIndex = prev.findIndex((m) => m.id === active.id);
-                const newIndex = prev.findIndex((m) => m.id === over.id);
-                const next = arrayMove(prev, oldIndex, newIndex);
-
-                router.put(
-                    `/manufacturer/products/${product.id}/media/order`,
-                    { media_order: next.map((item) => item.id) },
-                    { preserveScroll: true, preserveState: true },
-                );
-
-                return next;
-            });
-        },
-        [product],
-    );
-
-    const deleteMedia = (mediaId: number) => {
+    const reorderMedia = (activeId: number, overId: number) => {
         if (!product) {
             return;
         }
 
-        router.delete(`/manufacturer/products/${product.id}/media/${mediaId}`);
+        const oldIndex = mediaItems.findIndex((media) => media.id === activeId);
+        const newIndex = mediaItems.findIndex((media) => media.id === overId);
+
+        if (oldIndex === -1 || newIndex === -1) {
+            return;
+        }
+
+        const previousItems = mediaItems;
+        const nextItems = arrayMove(mediaItems, oldIndex, newIndex);
+        setMediaItems(nextItems);
+
+        router.put(
+            manufacturer.products.media.order(product.id).url,
+            { media_order: nextItems.map((item) => item.id) },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onError: () => setMediaItems(previousItems),
+            },
+        );
     };
 
-    return (
-        <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="flex flex-wrap gap-2">
-                {steps.map((item, index) => {
-                    const Icon = item.icon;
-                    const isActive = step === index;
-                    const hasError = errorSteps.has(index);
+    const deleteMedia = (media: ProductMediaItem) => {
+        if (!product) {
+            return;
+        }
 
-                    return (
-                        <Button
-                            key={item.key}
-                            type="button"
-                            variant={isActive ? 'default' : 'outline'}
-                            onClick={() => setStep(index)}
-                            className="relative"
-                        >
-                            <Icon className="mr-2 h-4 w-4" />
-                            {item.label}
-                            {hasError && (
-                                <CircleAlert className="ml-1.5 size-4 shrink-0 text-destructive" />
-                            )}
-                        </Button>
+        router.delete(
+            manufacturer.products.media.destroy({
+                product: product.id,
+                media: media.id,
+            }).url,
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onSuccess: () => {
+                    setMediaItems((items) =>
+                        items.filter((item) => item.id !== media.id),
                     );
-                })}
-            </div>
+                },
+            },
+        );
+    };
 
-            {step === 0 && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Dados basicos</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <Label htmlFor="name">Nome</Label>
-                                <Input
+    const saveLabel = mode === 'create' ? 'Criar produto' : 'Salvar alterações';
+
+    return (
+        <form
+            id={PRODUCT_EDITOR_FORM_ID}
+            onSubmit={handleSubmit}
+            className="min-w-0"
+        >
+            <nav
+                aria-label="Seções do editor de produto"
+                className="sticky top-0 z-20 -mx-5 border-b border-border bg-[#f6f4f0]/95 px-5 backdrop-blur-sm sm:-mx-7 sm:px-7 md:-mx-9 md:px-9 xl:-mx-12 xl:px-12 2xl:-mx-14 2xl:px-14"
+            >
+                <div className="flex min-w-0 gap-6 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {sectionLinks.map((section) => {
+                        const hasError = sectionHasError(section, formErrors);
+                        const isActive = activeSection === section.key;
+
+                        return (
+                            <button
+                                key={section.key}
+                                type="button"
+                                onClick={() => scrollToSection(section.key)}
+                                aria-current={isActive ? 'location' : undefined}
+                                className={`relative min-h-14 shrink-0 border-b-2 px-0 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#ff4d3d] ${
+                                    isActive
+                                        ? 'border-[#ff4d3d] text-[#e93d30]'
+                                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                                }`}
+                            >
+                                <span className="inline-flex items-center gap-2">
+                                    {section.label}
+                                    {hasError && (
+                                        <CircleAlert
+                                            className="size-4 text-[#b42318]"
+                                            aria-label="Esta seção contém erros"
+                                        />
+                                    )}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+            </nav>
+
+            {errorCount > 0 && (
+                <div
+                    className="mt-6 flex items-start gap-3 border border-[#b42318]/30 bg-[#b42318]/5 px-4 py-3 text-sm text-[#8f1d14]"
+                    role="alert"
+                >
+                    <CircleAlert
+                        className="mt-0.5 size-4 shrink-0"
+                        aria-hidden="true"
+                    />
+                    <div>
+                        <p className="font-semibold">
+                            A peça precisa de {errorCount}{' '}
+                            {errorCount === 1 ? 'ajuste' : 'ajustes'} antes de
+                            seguir.
+                        </p>
+                        <p className="mt-1 text-xs leading-5">
+                            Já levamos você para a primeira seção que pede
+                            atenção.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            <details className="group mt-6 border border-border lg:hidden">
+                <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 px-4 font-zouth-display text-sm font-semibold tracking-[-0.01em] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#ff4d3d] [&::-webkit-details-marker]:hidden">
+                    <span className="inline-flex items-center gap-2">
+                        <Eye className="size-4" aria-hidden="true" />
+                        Prévia no catálogo
+                    </span>
+                    <span className="text-xs font-medium text-muted-foreground group-open:hidden">
+                        Abrir
+                    </span>
+                    <span className="hidden text-xs font-medium text-muted-foreground group-open:inline">
+                        Fechar
+                    </span>
+                </summary>
+                <div className="border-t border-border p-3">
+                    <ProductLivePreview
+                        data={data}
+                        categories={categories}
+                        mediaItems={mediaItems}
+                        variationCount={computedStocks.length}
+                        compact
+                    />
+                </div>
+            </details>
+
+            <div className="grid min-w-0 gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.39fr)] xl:gap-16">
+                <div className="min-w-0">
+                    <EditorSection
+                        id="presentation"
+                        eyebrow="01 · Apresentação"
+                        description="Informações que o lojista precisa ver para fazer o pedido."
+                        marker={
+                            <span
+                                className={`inline-flex min-h-8 items-center gap-2 px-3 text-[0.68rem] font-bold tracking-[0.08em] uppercase ${
+                                    data.is_active
+                                        ? 'bg-[#2e705a]/12 text-[#245845]'
+                                        : 'bg-[#e7e3dc] text-[#5f5d57]'
+                                }`}
+                            >
+                                <span
+                                    className={`size-2 rounded-full ${
+                                        data.is_active
+                                            ? 'bg-[#2e705a]'
+                                            : 'bg-[#98968d]'
+                                    }`}
+                                    aria-hidden="true"
+                                />
+                                {data.is_active ? 'Visível' : 'Oculta'}
+                            </span>
+                        }
+                    >
+                        <div className="space-y-6">
+                            <EditorField
+                                label="Nome da peça"
+                                htmlFor="name"
+                                required
+                                error={formErrors.name}
+                            >
+                                <input
                                     id="name"
                                     value={data.name}
                                     onChange={(event) =>
                                         setData('name', event.target.value)
                                     }
+                                    placeholder="Ex.: Macacão Aconchego Verde"
+                                    autoComplete="off"
+                                    className={`${fieldClassName} h-[64px] px-4 font-zouth-display text-[clamp(1.25rem,2vw,1.65rem)] font-semibold tracking-[-0.035em]`}
                                 />
-                                <InputError message={errors.name} />
-                            </div>
+                            </EditorField>
 
-                            <div className="space-y-2">
-                                <Label htmlFor="sku">SKU</Label>
-                                <Input
-                                    id="sku"
-                                    value={data.sku}
-                                    onChange={(event) =>
-                                        setData('sku', event.target.value)
-                                    }
-                                />
-                                <InputError message={errors.sku} />
-                            </div>
-                        </div>
-
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <Label>Categoria</Label>
-                                <Select
-                                    value={
-                                        data.product_category_id
-                                            ? String(data.product_category_id)
-                                            : 'none'
-                                    }
-                                    onValueChange={(value) =>
-                                        setData(
-                                            'product_category_id',
-                                            value === 'none'
-                                                ? ''
-                                                : Number(value),
-                                        )
-                                    }
+                            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                                <EditorField
+                                    label="SKU"
+                                    htmlFor="sku"
+                                    required
+                                    hint="O código interno desta peça."
+                                    error={formErrors.sku}
                                 >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Sem categoria" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">
-                                            Sem categoria
-                                        </SelectItem>
-                                        {categories.map((category) => (
-                                            <SelectItem
-                                                key={category.id}
-                                                value={String(category.id)}
-                                            >
-                                                {category.name}
+                                    <input
+                                        id="sku"
+                                        value={data.sku}
+                                        onChange={(event) =>
+                                            setData('sku', event.target.value)
+                                        }
+                                        placeholder="ACON-001"
+                                        autoComplete="off"
+                                        className={fieldClassName}
+                                    />
+                                </EditorField>
+
+                                <EditorField
+                                    label="Categoria"
+                                    error={formErrors.product_category_id}
+                                >
+                                    <Select
+                                        value={
+                                            data.product_category_id
+                                                ? String(
+                                                      data.product_category_id,
+                                                  )
+                                                : 'none'
+                                        }
+                                        onValueChange={(value) =>
+                                            setData(
+                                                'product_category_id',
+                                                value === 'none'
+                                                    ? ''
+                                                    : Number(value),
+                                            )
+                                        }
+                                    >
+                                        <SelectTrigger className="h-[52px] rounded-[2px] border-border bg-transparent shadow-none focus:ring-2 focus:ring-[#ff4d3d]/25">
+                                            <SelectValue placeholder="Sem categoria" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">
+                                                Sem categoria
                                             </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <InputError
-                                    message={errors.product_category_id}
-                                />
+                                            {categories.map((category) => (
+                                                <SelectItem
+                                                    key={category.id}
+                                                    value={String(category.id)}
+                                                >
+                                                    {category.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </EditorField>
+
+                                <EditorField
+                                    label="Preço geral"
+                                    htmlFor="price"
+                                    hint="Vazio aparece como Sob consulta."
+                                    error={formErrors.price}
+                                    className="sm:col-span-2 xl:col-span-1"
+                                >
+                                    <input
+                                        id="price"
+                                        inputMode="decimal"
+                                        value={data.price}
+                                        onChange={(event) =>
+                                            setData('price', event.target.value)
+                                        }
+                                        placeholder="R$ 189,90"
+                                        className={fieldClassName}
+                                    />
+                                </EditorField>
                             </div>
 
-                            <div className="space-y-2">
-                                <Label htmlFor="sort_order">Ordem</Label>
-                                <Input
-                                    id="sort_order"
-                                    type="number"
-                                    min={0}
-                                    value={data.sort_order}
+                            <EditorField
+                                label="Descrição da peça"
+                                htmlFor="description"
+                                hint="Fale de caimento, materiais e detalhes que ajudam a vender."
+                                error={formErrors.description}
+                            >
+                                <textarea
+                                    id="description"
+                                    value={data.description}
                                     onChange={(event) =>
                                         setData(
-                                            'sort_order',
-                                            Number(event.target.value),
+                                            'description',
+                                            event.target.value,
                                         )
                                     }
+                                    rows={5}
+                                    placeholder="Conte o que torna esta peça especial para a coleção."
+                                    className="min-h-32 w-full resize-y rounded-[2px] border border-border bg-transparent px-4 py-3 font-zouth-body text-sm leading-6 text-foreground shadow-none outline-none placeholder:text-muted-foreground focus:border-[#18181f] focus:ring-2 focus:ring-[#ff4d3d]/25"
                                 />
-                            </div>
-                        </div>
+                            </EditorField>
 
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <div className="space-y-2">
-                                <Label htmlFor="price">Preco (R$)</Label>
-                                <Input
-                                    id="price"
-                                    placeholder="Ex: 12,90"
-                                    value={data.price}
-                                    onChange={(event) =>
-                                        setData('price', event.target.value)
-                                    }
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    Deixe em branco para exibir &ldquo;Sob
-                                    consulta&rdquo;
-                                </p>
-                                <InputError message={errors.price} />
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="description">Descricao</Label>
-                            <textarea
-                                id="description"
-                                value={data.description ?? ''}
-                                onChange={(event) =>
-                                    setData('description', event.target.value)
-                                }
-                                className="min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
-                            />
-                            <InputError message={errors.description} />
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-6">
-                            <label className="flex items-center gap-2 text-sm">
-                                <Checkbox
-                                    checked={data.is_active}
-                                    onCheckedChange={(checked) =>
-                                        setData('is_active', Boolean(checked))
-                                    }
-                                />
-                                Produto ativo
-                            </label>
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
-            {step === 2 && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Midia</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        {/* Image drop zone */}
-                        <div className="space-y-4">
-                            <Label>Fotos do produto</Label>
-                            <ImageDropzone
-                                onFilesSelected={handleFilesSelected}
-                                maxFiles={MAX_IMAGES}
-                                currentCount={
-                                    mode === 'create'
-                                        ? data.images.length
-                                        : mediaItems.filter(
-                                              (m) => m.type === 'image',
-                                          ).length
-                                }
-                                disabled={uploadingMedia}
-                            />
-                            <InputError message={errors.images} />
-                        </div>
-
-                        {/* Crop dialog (processes queue one by one) */}
-                        <ImageCropDialog
-                            open={cropDialogOpen}
-                            onOpenChange={setCropDialogOpen}
-                            imageFile={currentCropFile}
-                            onCropped={handleCropped}
-                            onSkip={handleCropSkip}
-                        />
-
-                        {/* Create mode: preview of cropped images ready to submit */}
-                        {mode === 'create' && data.images.length > 0 && (
-                            <div className="space-y-2">
-                                <Label className="text-xs text-muted-foreground">
-                                    {data.images.length} foto(s) pronta(s) para
-                                    envio
-                                </Label>
-                                <div className="grid grid-cols-[repeat(auto-fill,minmax(5rem,1fr))] gap-2">
-                                    {data.images.map((file, index) => (
-                                        <div
-                                            key={`img-${index}`}
-                                            className="group relative aspect-[4/5] overflow-hidden rounded-md border bg-muted"
-                                        >
-                                            <img
-                                                src={URL.createObjectURL(file)}
-                                                alt={`Preview ${index + 1}`}
-                                                className="h-full w-full object-cover"
-                                            />
-                                            <button
-                                                type="button"
-                                                className="absolute top-1 right-1 rounded-full bg-destructive p-1 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100"
-                                                onClick={() =>
-                                                    setData(
-                                                        'images',
-                                                        data.images.filter(
-                                                            (_, i) =>
-                                                                i !== index,
-                                                        ),
-                                                    )
-                                                }
-                                            >
-                                                <X className="size-3" />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Create mode: video selector */}
-                        {mode === 'create' && (
-                            <div className="space-y-2">
-                                <Label>Video (opcional)</Label>
-                                <Input
-                                    ref={videoInputRef}
-                                    type="file"
-                                    accept="video/mp4,video/quicktime,video/webm"
-                                    onChange={(event) => {
-                                        const file =
-                                            event.target.files?.[0] ?? null;
-                                        setData('video', file);
-                                    }}
-                                />
-                                <InputError message={errors.video} />
-
-                                {data.video && (
-                                    <div className="flex items-center gap-2 rounded-md border p-2 text-sm">
-                                        <span className="text-muted-foreground">
-                                            Video:
-                                        </span>
-                                        <span className="truncate">
-                                            {data.video.name}
-                                        </span>
-                                        <button
-                                            type="button"
-                                            className="ml-auto shrink-0 rounded-full bg-destructive p-1 text-destructive-foreground"
-                                            onClick={() => {
-                                                setData('video', null);
-                                                if (videoInputRef.current) {
-                                                    videoInputRef.current.value =
-                                                        '';
-                                                }
-                                            }}
-                                        >
-                                            <X className="size-3" />
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Edit mode: video upload */}
-                        {mode === 'edit' && (
-                            <div className="space-y-2">
-                                <Label>Adicionar video</Label>
-                                <Input
-                                    ref={videoInputRef}
-                                    type="file"
-                                    accept="video/mp4,video/quicktime,video/webm"
-                                    onChange={(event) => {
-                                        const file =
-                                            event.target.files?.[0] ?? null;
-                                        setVideoToUpload(file);
-                                    }}
-                                />
-                                <InputError message={errors.video} />
-
-                                {videoToUpload && (
-                                    <Button
-                                        type="button"
-                                        onClick={handleVideoUpload}
-                                        disabled={uploadingMedia}
+                            <div className="grid gap-6 border-t border-border pt-6 sm:grid-cols-[minmax(0,1fr)_minmax(180px,0.5fr)]">
+                                <EditorField label="Presença no catálogo">
+                                    <div
+                                        className="grid grid-cols-2 border border-border"
+                                        role="group"
+                                        aria-label="Presença no catálogo"
                                     >
-                                        {uploadingMedia && (
-                                            <Loader2 className="mr-2 size-4 animate-spin" />
-                                        )}
-                                        Enviar video
-                                    </Button>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Upload progress indicator */}
-                        {uploadingMedia && (
-                            <div className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-sm text-primary">
-                                <Loader2 className="size-4 animate-spin" />
-                                Enviando midia...
-                            </div>
-                        )}
-
-                        {/* Existing media list (edit mode) */}
-                        {mediaItems.length === 0 && mode === 'edit' && (
-                            <div className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
-                                Nenhuma midia adicionada.
-                            </div>
-                        )}
-
-                        {mediaItems.length > 0 && (
-                            <div className="space-y-2">
-                                <Label className="text-xs text-muted-foreground">
-                                    Midias do produto ({mediaItems.length})
-                                </Label>
-                                <DndContext
-                                    sensors={sensors}
-                                    collisionDetection={closestCenter}
-                                    onDragEnd={handleDragEnd}
-                                >
-                                    <SortableContext
-                                        items={mediaItems.map((m) => m.id)}
-                                        strategy={verticalListSortingStrategy}
-                                    >
-                                        <div className="space-y-2">
-                                            {mediaItems.map((media, index) => (
-                                                <SortableMediaItem
-                                                    key={media.id}
-                                                    media={media}
-                                                    index={index}
-                                                    onDelete={deleteMedia}
-                                                />
-                                            ))}
-                                        </div>
-                                    </SortableContext>
-                                </DndContext>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-            )}
-
-            {step === 1 && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Variacoes e estoque</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {/* Variation type selection */}
-                        {variationTypes.length > 0 && (
-                            <div className="space-y-3">
-                                <Label>Tipos de variacao</Label>
-                                <div className="flex flex-wrap items-center gap-6">
-                                    {variationTypes.map((type) => (
-                                        <label
-                                            key={type.id}
-                                            className="flex items-center gap-2 text-sm"
-                                        >
-                                            <Checkbox
-                                                checked={data.variations.some(
-                                                    (v) =>
-                                                        v.variation_type_id ===
-                                                        type.id,
-                                                )}
-                                                onCheckedChange={(checked) =>
-                                                    toggleVariationType(
-                                                        type.id,
-                                                        Boolean(checked),
-                                                    )
-                                                }
-                                            />
-                                            {type.name}
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {variationTypes.length === 0 && (
-                            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                                Nenhum tipo de variacao cadastrado. Cadastre
-                                tipos de variacao nas configuracoes do
-                                fabricante.
-                            </div>
-                        )}
-
-                        {/* Value toggles per selected variation type */}
-                        {data.variations.map((variation, vIdx) => {
-                            const type = variationTypes.find(
-                                (t) => t.id === variation.variation_type_id,
-                            );
-                            if (!type) return null;
-                            return (
-                                <div key={type.id} className="space-y-2">
-                                    <Label>Valores de {type.name}</Label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {type.values.map((val) => {
+                                        {[
+                                            {
+                                                value: true,
+                                                label: 'Visível',
+                                                detail: 'Pode ser apresentada',
+                                            },
+                                            {
+                                                value: false,
+                                                label: 'Oculta',
+                                                detail: 'Fica fora da vitrine',
+                                            },
+                                        ].map((option) => {
                                             const isSelected =
-                                                variation.values.includes(
-                                                    val.value,
-                                                );
+                                                data.is_active === option.value;
+
                                             return (
-                                                <Button
-                                                    key={val.id}
+                                                <button
+                                                    key={String(option.value)}
                                                     type="button"
-                                                    variant={
-                                                        isSelected
-                                                            ? 'default'
-                                                            : 'outline'
-                                                    }
+                                                    aria-pressed={isSelected}
                                                     onClick={() =>
-                                                        toggleVariationValue(
-                                                            type.id,
-                                                            val.value,
+                                                        setData(
+                                                            'is_active',
+                                                            option.value,
                                                         )
                                                     }
-                                                    className="gap-2"
+                                                    className={`min-h-[64px] border-r border-border px-3 text-left last:border-r-0 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#ff4d3d] ${
+                                                        isSelected
+                                                            ? 'bg-[#18181f] text-[#f6f4f0]'
+                                                            : 'bg-transparent text-foreground hover:bg-[#e7e3dc]/45'
+                                                    }`}
                                                 >
-                                                    {type.is_color_type &&
-                                                        val.image_url && (
-                                                            <img
-                                                                src={
-                                                                    val.image_url
-                                                                }
-                                                                alt=""
-                                                                className="h-4 w-4 rounded-full border object-cover"
+                                                    <span className="flex items-center gap-2 font-zouth-display text-sm font-semibold">
+                                                        {isSelected && (
+                                                            <Check
+                                                                className="size-4"
+                                                                aria-hidden="true"
                                                             />
                                                         )}
-                                                    {type.is_color_type &&
-                                                        !val.image_url &&
-                                                        val.hex && (
-                                                            <span
-                                                                className="inline-block h-4 w-4 rounded-full border"
-                                                                style={{
-                                                                    backgroundColor:
-                                                                        val.hex,
-                                                                }}
-                                                            />
-                                                        )}
-                                                    {val.value}
-                                                </Button>
+                                                        {option.label}
+                                                    </span>
+                                                    <span
+                                                        className={`mt-1 block text-[0.68rem] ${
+                                                            isSelected
+                                                                ? 'text-[#f6f4f0]/65'
+                                                                : 'text-muted-foreground'
+                                                        }`}
+                                                    >
+                                                        {option.detail}
+                                                    </span>
+                                                </button>
                                             );
                                         })}
                                     </div>
-                                    <InputError
-                                        message={
-                                            errors[`variations.${vIdx}.values`]
+                                </EditorField>
+
+                                <EditorField
+                                    label="Posição na coleção"
+                                    htmlFor="sort_order"
+                                    hint="Números menores aparecem primeiro."
+                                    error={formErrors.sort_order}
+                                >
+                                    <input
+                                        id="sort_order"
+                                        type="number"
+                                        min={0}
+                                        value={data.sort_order}
+                                        onChange={(event) =>
+                                            setData(
+                                                'sort_order',
+                                                Number(event.target.value),
+                                            )
                                         }
+                                        className={fieldClassName}
                                     />
-                                </div>
-                            );
-                        })}
-
-                        <InputError message={errors.variations} />
-
-                        <Separator />
-
-                        {/* Base quantity (no variations) */}
-                        {!hasVariants && (
-                            <div className="space-y-2">
-                                <Label htmlFor="base_quantity">
-                                    Quantidade base
-                                </Label>
-                                <Input
-                                    id="base_quantity"
-                                    type="number"
-                                    min={0}
-                                    value={data.base_quantity}
-                                    onChange={(event) =>
-                                        setData(
-                                            'base_quantity',
-                                            Number(event.target.value),
-                                        )
-                                    }
-                                />
-                                <InputError message={errors.base_quantity} />
+                                </EditorField>
                             </div>
-                        )}
+                        </div>
+                    </EditorSection>
 
-                        {/* Stock grid for variations */}
-                        {hasVariants && computedStocks.length > 0 && (
-                            <div className="space-y-4">
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                    <Palette className="h-4 w-4" />
-                                    Estoque por variacao
-                                </div>
+                    <ProductVariationStudio
+                        variationTypes={variationTypes}
+                        variations={data.variations}
+                        stocks={computedStocks}
+                        baseQuantity={data.base_quantity}
+                        errors={formErrors}
+                        onToggleType={toggleVariationType}
+                        onToggleValue={toggleVariationValue}
+                        onBaseQuantityChange={(quantity) =>
+                            setData('base_quantity', quantity)
+                        }
+                        onStockChange={updateStockField}
+                    />
 
-                                <div className="grid gap-3">
-                                    {computedStocks.map((stock) => (
-                                        <div
-                                            key={JSON.stringify(
-                                                stock.variation_key,
-                                            )}
-                                            className="flex flex-wrap items-center gap-3 rounded-md border p-3"
-                                        >
-                                            <div className="flex flex-wrap gap-1.5">
-                                                {Object.entries(
-                                                    stock.variation_key,
-                                                ).map(([typeName, value]) => {
-                                                    const type =
-                                                        variationTypes.find(
-                                                            (t) =>
-                                                                t.name ===
-                                                                typeName,
-                                                        );
-                                                    const val =
-                                                        type?.values.find(
-                                                            (v) =>
-                                                                v.value ===
-                                                                value,
-                                                        );
-                                                    return (
-                                                        <Badge
-                                                            key={typeName}
-                                                            variant="outline"
-                                                            className="gap-1.5"
-                                                        >
-                                                            {type?.is_color_type &&
-                                                                val?.hex && (
-                                                                    <span
-                                                                        className="inline-block h-3 w-3 rounded-full border"
-                                                                        style={{
-                                                                            backgroundColor:
-                                                                                val.hex,
-                                                                        }}
-                                                                    />
-                                                                )}
-                                                            {value}
-                                                        </Badge>
-                                                    );
-                                                })}
-                                            </div>
-                                            <div className="flex flex-1 flex-wrap items-center gap-2">
-                                                <Input
-                                                    type="number"
-                                                    min={0}
-                                                    placeholder="Qtd"
-                                                    value={stock.quantity}
-                                                    onChange={(e) =>
-                                                        updateStockField(
-                                                            stock.variation_key,
-                                                            'quantity',
-                                                            Number(
-                                                                e.target.value,
-                                                            ),
-                                                        )
-                                                    }
-                                                    className="w-24"
-                                                />
-                                                <Input
-                                                    placeholder="Preco (R$)"
-                                                    value={stock.price}
-                                                    onChange={(e) =>
-                                                        updateStockField(
-                                                            stock.variation_key,
-                                                            'price',
-                                                            e.target.value,
-                                                        )
-                                                    }
-                                                    className="w-32"
-                                                />
-                                                <Input
-                                                    placeholder="SKU variacao"
-                                                    value={
-                                                        stock.sku_variant ?? ''
-                                                    }
-                                                    onChange={(e) =>
-                                                        updateStockField(
-                                                            stock.variation_key,
-                                                            'sku_variant',
-                                                            e.target.value,
-                                                        )
-                                                    }
-                                                />
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
+                    <ProductMediaStudio
+                        mode={mode}
+                        mediaItems={mediaItems}
+                        stagedImages={data.images}
+                        stagedVideo={data.video}
+                        pendingVideo={pendingVideo}
+                        maxImages={MAX_IMAGES}
+                        uploadingMedia={uploadingMedia}
+                        errors={formErrors}
+                        onFilesSelected={handleFilesSelected}
+                        onRemoveStagedImage={(index) =>
+                            setData(
+                                'images',
+                                data.images.filter(
+                                    (_, imageIndex) => imageIndex !== index,
+                                ),
+                            )
+                        }
+                        onStagedVideoChange={(file) => setData('video', file)}
+                        onPendingVideoChange={setPendingVideo}
+                        onUploadVideo={handleVideoUpload}
+                        onReorder={reorderMedia}
+                        onDelete={deleteMedia}
+                    />
+                </div>
 
-                                <InputError message={errors.variant_stocks} />
-                            </div>
-                        )}
+                <aside className="hidden min-w-0 border-l border-border pl-7 lg:block xl:pl-9">
+                    <div className="sticky top-36">
+                        <p className="mb-4 text-[0.68rem] font-bold tracking-[0.2em] text-foreground uppercase">
+                            Prévia no catálogo
+                        </p>
+                        <ProductLivePreview
+                            data={data}
+                            categories={categories}
+                            mediaItems={mediaItems}
+                            variationCount={computedStocks.length}
+                        />
+                        <p className="mt-4 text-xs leading-5 text-muted-foreground">
+                            Uma aproximação da vitrine. A identidade final segue
+                            as escolhas do catálogo da sua marca.
+                        </p>
+                    </div>
+                </aside>
+            </div>
 
-                        {hasVariants && computedStocks.length === 0 && (
-                            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                                Selecione ao menos um valor em cada tipo de
-                                variacao para gerar a grade de estoque.
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-            )}
-
-            <div className="flex flex-wrap items-center justify-between gap-4">
-                {step > 0 ? (
-                    <Button
-                        type="button"
-                        variant="outline"
-                        onClick={handlePrev}
-                    >
-                        Voltar
-                    </Button>
-                ) : (
-                    <div />
+            <div className="sticky bottom-0 z-30 -mx-5 mt-12 border-t border-border bg-[#f6f4f0]/96 px-5 py-3 backdrop-blur-sm sm:-mx-7 sm:px-7 md:-mx-9 md:px-9 xl:-mx-12 xl:px-12 2xl:-mx-14 2xl:px-14">
+                {progress && (
+                    <div
+                        className="absolute top-0 left-0 h-0.5 bg-[#ff4d3d] transition-[width]"
+                        style={{ width: `${progress.percentage}%` }}
+                        aria-hidden="true"
+                    />
                 )}
-                <div className="flex gap-2">
-                    {step < steps.length - 1 && (
-                        <Button type="button" onClick={handleNext}>
-                            Continuar
-                        </Button>
-                    )}
-                    {step === steps.length - 1 && (
-                        <Button type="submit" disabled={processing}>
-                            {processing && (
-                                <Loader2 className="mr-2 size-4 animate-spin" />
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div
+                        className="inline-flex min-h-8 items-center gap-2 text-xs font-semibold text-muted-foreground"
+                        role="status"
+                    >
+                        {processing || uploadingMedia ? (
+                            <Loader2
+                                className="size-4 animate-spin text-[#e93d30]"
+                                aria-hidden="true"
+                            />
+                        ) : isDirty ? (
+                            <CircleAlert
+                                className="size-4 text-[#e93d30]"
+                                aria-hidden="true"
+                            />
+                        ) : (
+                            <Check
+                                className="size-4 text-[#2e705a]"
+                                aria-hidden="true"
+                            />
+                        )}
+                        {processing
+                            ? mode === 'create'
+                                ? 'Criando a peça…'
+                                : 'Salvando a peça…'
+                            : uploadingMedia
+                              ? 'Atualizando imagens…'
+                              : recentlySuccessful
+                                ? 'Alterações salvas agora'
+                                : isDirty
+                                  ? 'Alterações ainda não salvas'
+                                  : mode === 'create'
+                                    ? 'Comece pela apresentação da peça'
+                                    : 'Tudo salvo por aqui'}
+                    </div>
+
+                    <div className="ml-auto flex items-center gap-2 sm:gap-3">
+                        {isDirty && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    reset();
+                                    clearErrors();
+                                }}
+                                className="inline-flex min-h-11 items-center gap-2 px-3 text-sm font-semibold text-foreground underline decoration-[#cac4ba] underline-offset-4 hover:text-[#c53024] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff4d3d]"
+                            >
+                                <RotateCcw
+                                    className="hidden size-4 sm:block"
+                                    aria-hidden="true"
+                                />
+                                Descartar
+                            </button>
+                        )}
+                        <Button
+                            type="submit"
+                            disabled={processing || uploadingMedia}
+                            className="min-h-12 rounded-[2px] bg-[#ff4d3d] px-5 text-[#18181f] shadow-none hover:-translate-y-px hover:bg-[#ff4d3d] sm:px-7"
+                        >
+                            {processing ? (
+                                <Loader2
+                                    className="size-4 animate-spin"
+                                    aria-hidden="true"
+                                />
+                            ) : (
+                                <Save className="size-4" aria-hidden="true" />
                             )}
-                            {processing
-                                ? mode === 'create'
-                                    ? 'Criando...'
-                                    : 'Salvando...'
-                                : mode === 'create'
-                                  ? 'Criar produto'
-                                  : 'Salvar alteracoes'}
+                            {saveLabel}
                         </Button>
-                    )}
+                    </div>
                 </div>
             </div>
+
+            <ImageCropDialog
+                open={cropDialogOpen}
+                onOpenChange={setCropDialogOpen}
+                imageFile={currentCropFile}
+                onCropped={handleCropped}
+                onSkip={handleCropSkip}
+                title="Prepare a foto para a vitrine"
+                description="Ajuste o recorte 4:5 que será usado na apresentação da peça."
+            />
         </form>
     );
 }

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 
 class Product extends Model
 {
@@ -83,6 +84,37 @@ class Product extends Model
     public function comboComponentItems(): HasMany
     {
         return $this->hasMany(ProductComboItem::class, 'component_product_id');
+    }
+
+    /**
+     * @return Collection<int, ProductMedia>
+     */
+    public function displayMedia(): Collection
+    {
+        if (! $this->isCombo()) {
+            return $this->relationLoaded('media') ? $this->media : collect();
+        }
+
+        if (! $this->relationLoaded('comboItems')) {
+            return collect();
+        }
+
+        return $this->comboItems
+            ->flatMap(function (ProductComboItem $item): Collection {
+                if (! $item->relationLoaded('componentProduct')) {
+                    return collect();
+                }
+
+                $componentProduct = $item->componentProduct;
+
+                if (! $componentProduct || ! $componentProduct->relationLoaded('media')) {
+                    return collect();
+                }
+
+                return $componentProduct->media;
+            })
+            ->unique('id')
+            ->values();
     }
 
     public function hasVariations(): bool

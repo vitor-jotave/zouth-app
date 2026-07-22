@@ -57,6 +57,7 @@ it('allows superadmin to create manufacturer with owner', function () {
 
     expect($owner->user_type)->toBe(UserType::ManufacturerUser);
     expect($owner->current_manufacturer_id)->toBe($manufacturer->id);
+    expect($manufacturer->primary_owner_user_id)->toBe($owner->id);
 
     // Check pivot relationship
     $pivot = $manufacturer->users()

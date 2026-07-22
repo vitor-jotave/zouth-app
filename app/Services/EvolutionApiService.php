@@ -14,8 +14,8 @@ class EvolutionApiService
 
     public function __construct()
     {
-        $this->baseUrl = rtrim(config('evolution.url'), '/');
-        $this->apiKey = config('evolution.api_key');
+        $this->baseUrl = rtrim((string) config('evolution.url'), '/');
+        $this->apiKey = (string) config('evolution.api_key');
     }
 
     /**
@@ -126,6 +126,23 @@ class EvolutionApiService
         ]);
     }
 
+    public function sendReaction(
+        string $instanceName,
+        string $remoteJid,
+        bool $fromMe,
+        string $messageId,
+        string $reaction,
+    ): Response {
+        return $this->client()->post("/message/sendReaction/{$instanceName}", [
+            'key' => [
+                'remoteJid' => $remoteJid,
+                'fromMe' => $fromMe,
+                'id' => $messageId,
+            ],
+            'reaction' => $reaction,
+        ]);
+    }
+
     public function sendPresence(string $instanceName, string $remoteJid, string $presence, int $delayMs): Response
     {
         $number = $this->recipientNumber($remoteJid);
@@ -164,6 +181,19 @@ class EvolutionApiService
     {
         return $this->client()->post("/chat/findMessages/{$instanceName}", [
             'where' => $where,
+        ]);
+    }
+
+    /**
+     * Download and decrypt media attached to an Evolution message record.
+     *
+     * @param  array<string, mixed>  $message
+     */
+    public function downloadMediaMessage(string $instanceName, array $message): Response
+    {
+        return $this->client()->post("/chat/getBase64FromMediaMessage/{$instanceName}", [
+            'message' => $message,
+            'convertToMp4' => false,
         ]);
     }
 

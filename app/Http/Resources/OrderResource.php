@@ -41,7 +41,10 @@ class OrderResource extends JsonResource
                 'name' => $this->salesRep->name,
             ]),
             'total_items' => $this->whenLoaded('items', fn () => $this->items->sum('quantity')),
+            'subtotal_amount' => $this->whenLoaded('items', fn () => number_format($this->subtotalAmount(), 2, '.', '')),
+            'discount_amount' => $this->whenLoaded('items', fn () => number_format($this->discountAmount(), 2, '.', '')),
             'total_amount' => $this->whenLoaded('items', fn () => number_format($this->totalAmount(), 2, '.', '')),
+            'applied_order_rules' => $this->applied_order_rules ?? [],
             'allowed_transitions' => collect($this->status->allowedTransitions())->map(fn ($s) => [
                 'value' => $s->value,
                 'label' => $s->label(),

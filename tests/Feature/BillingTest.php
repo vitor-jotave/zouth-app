@@ -45,7 +45,13 @@ test('billing page shows available plans', function () {
     $response = $this->actingAs($user)
         ->get(route('manufacturer.billing.index'));
 
-    $response->assertOk();
+    $response->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('plans', 3)
+            ->where('plans.0.sort_order', 1)
+            ->where('plans.1.sort_order', 2)
+            ->where('plans.2.sort_order', 3)
+        );
 });
 
 test('billing page does not expose unavailable csv import capability', function () {
@@ -68,6 +74,41 @@ test('billing page shows current plan', function () {
         ->get(route('manufacturer.billing.index'));
 
     $response->assertOk();
+});
+
+test('billing page identifies the subscribed plan while webhook plan synchronization is pending', function () {
+    $this->withoutVite();
+
+    $plan = Plan::factory()->intermediate()->withStripe()->create();
+    $manufacturer = Manufacturer::factory()->create([
+        'is_active' => true,
+        'current_plan_id' => null,
+    ]);
+    $user = User::factory()->create([
+        'user_type' => 'manufacturer_user',
+        'current_manufacturer_id' => $manufacturer->id,
+    ]);
+
+    $manufacturer->users()->attach($user->id, [
+        'role' => 'owner',
+        'status' => 'active',
+    ]);
+    $manufacturer->subscriptions()->create([
+        'type' => 'default',
+        'stripe_id' => 'sub_pending_plan_sync',
+        'stripe_status' => 'trialing',
+        'stripe_price' => $plan->stripe_price_id,
+        'trial_ends_at' => now()->addDays(7),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('manufacturer.billing.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('currentPlanId', $plan->id)
+            ->where('usage.products.limit', $plan->max_products)
+            ->where('subscription.on_trial', true)
+        );
 });
 
 test('checkout redirects guests to login', function () {

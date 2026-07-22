@@ -15,6 +15,7 @@ class PlanSeeder extends Seeder
         $plans = [
             [
                 'name' => 'Básico',
+                'is_self_service_default' => true,
                 'description' => 'Ideal para quem está começando. Inclui 7 dias grátis para testar.',
                 'monthly_price_cents' => 14700,
                 'trial_days' => 7,
@@ -28,6 +29,7 @@ class PlanSeeder extends Seeder
             ],
             [
                 'name' => 'Intermediário',
+                'is_self_service_default' => false,
                 'description' => 'Para fabricantes em crescimento que precisam de mais recursos.',
                 'monthly_price_cents' => 39700,
                 'trial_days' => 0,
@@ -41,6 +43,7 @@ class PlanSeeder extends Seeder
             ],
             [
                 'name' => 'Premium',
+                'is_self_service_default' => false,
                 'description' => 'Recursos ilimitados para fabricantes de grande porte.',
                 'monthly_price_cents' => 89700,
                 'trial_days' => 0,

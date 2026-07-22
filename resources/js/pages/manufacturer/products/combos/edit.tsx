@@ -1,65 +1,26 @@
 import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft } from 'lucide-react';
-import { ProductComboForm } from '@/components/product-combo-form';
+import { ArrowLeft, Save } from 'lucide-react';
+import { AppPageHeader } from '@/components/app-page-header';
+import {
+    PRODUCT_COMBO_EDITOR_FORM_ID,
+    ProductComboForm,
+} from '@/components/product-combo-form';
+import type {
+    ComboCategoryOption,
+    ComboComponentProductOption,
+    ProductComboPayload,
+} from '@/components/product-editor/combo-types';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/app-layout';
+import { dashboard } from '@/routes';
+import manufacturer from '@/routes/manufacturer';
 import type { BreadcrumbItem } from '@/types';
 
-interface Category {
-    id: number;
-    name: string;
-}
-
-interface ComponentProduct {
-    id: number;
-    name: string;
-    sku: string;
-    price_cents: number | null;
-    base_quantity: number;
-    has_variations: boolean;
-    variant_stocks: Array<{
-        id: number;
-        variation_key: Record<string, string>;
-        quantity: number;
-        price_cents?: number | null;
-        sku_variant?: string | null;
-    }>;
-}
-
-interface Product {
-    id: number;
-    name: string;
-    sku: string;
-    description?: string | null;
-    product_category_id?: number | null;
-    is_active: boolean;
-    sort_order: number;
-    price_cents?: number | null;
-    media?: Array<{
-        id: number;
-        type: 'image' | 'video';
-        url?: string;
-        path: string;
-        sort_order: number;
-    }>;
-    combo_items?: Array<{
-        component_product_id: number;
-        component_variant_stock_id: number | null;
-        quantity: number;
-    }>;
-}
-
 interface Props {
-    product: { data: Product } | Product;
-    categories: Category[];
-    component_products: ComponentProduct[];
+    product: { data: ProductComboPayload } | ProductComboPayload;
+    categories: ComboCategoryOption[];
+    component_products: ComboComponentProductOption[];
 }
-
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Dashboard', href: '/dashboard' },
-    { title: 'Produtos', href: '/manufacturer/products' },
-    { title: 'Editar combo', href: '#' },
-];
 
 export default function ProductCombosEdit({
     product,
@@ -67,28 +28,55 @@ export default function ProductCombosEdit({
     component_products,
 }: Props) {
     const resolvedProduct = 'data' in product ? product.data : product;
+    const breadcrumbs: BreadcrumbItem[] = [
+        { title: 'Visão geral', href: dashboard().url },
+        { title: 'Produtos', href: manufacturer.products.index().url },
+        {
+            title: resolvedProduct.name,
+            href: manufacturer.products.combos.edit(resolvedProduct.id).url,
+        },
+    ];
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title={`Editar combo - ${resolvedProduct.name}`} />
+            <Head title={`Editar ${resolvedProduct.name}`} />
 
-            <div className="flex h-full flex-1 flex-col gap-4 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div>
-                        <h1 className="text-2xl font-bold tracking-tight">
-                            Editar combo
-                        </h1>
-                        <p className="text-sm text-muted-foreground">
+            <div className="mx-auto flex w-full max-w-[1560px] flex-1 flex-col px-5 py-8 sm:px-7 md:px-9 lg:pt-8 lg:pb-12 xl:px-12 2xl:px-14">
+                <AppPageHeader
+                    eyebrow="Edição do combo"
+                    title={
+                        <>
                             {resolvedProduct.name}
-                        </p>
-                    </div>
-                    <Link href="/manufacturer/products">
-                        <Button variant="outline">
-                            <ArrowLeft className="mr-2 size-4" />
-                            Voltar
-                        </Button>
-                    </Link>
-                </div>
+                            <span className="text-[#ff4d3d]">.</span>
+                        </>
+                    }
+                    description="Refine a seleção, as quantidades e as informações do conjunto. O catálogo atualiza automaticamente."
+                    aside={
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                            <Button
+                                type="submit"
+                                form={PRODUCT_COMBO_EDITOR_FORM_ID}
+                                className="min-h-12 rounded-[2px] bg-[#ff4d3d] text-[#18181f] shadow-none hover:-translate-y-px hover:bg-[#ff4d3d]"
+                            >
+                                <Save className="size-4" aria-hidden="true" />
+                                Salvar alterações
+                            </Button>
+                            <Button
+                                asChild
+                                variant="outline"
+                                className="min-h-12 rounded-[2px] border-[#18181f] bg-transparent shadow-none hover:bg-[#e7e3dc]"
+                            >
+                                <Link href={manufacturer.products.index().url}>
+                                    <ArrowLeft
+                                        className="size-4"
+                                        aria-hidden="true"
+                                    />
+                                    Voltar para produtos
+                                </Link>
+                            </Button>
+                        </div>
+                    }
+                />
 
                 <ProductComboForm
                     mode="edit"

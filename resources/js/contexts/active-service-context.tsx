@@ -1,5 +1,5 @@
 import { usePage } from '@inertiajs/react';
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 
 export type ServiceKey = 'catalogo' | 'atendimento';
 
@@ -43,12 +43,35 @@ export function ActiveServiceProvider({
     children: React.ReactNode;
 }) {
     const { url } = usePage();
-    const [selectedService, setSelectedService] =
-        useState<ServiceKey>(initialService);
-    const activeService = serviceFromPath(url) ?? selectedService;
+    const [selection, setSelection] = useState(() => ({
+        service: initialService(),
+        url,
+    }));
+    const routeService = serviceFromPath(url);
+    const activeService =
+        selection.url === url
+            ? selection.service
+            : (routeService ?? selection.service);
+
+    useEffect(() => {
+        setSelection((currentSelection) => {
+            if (currentSelection.url === url) {
+                return currentSelection;
+            }
+
+            return {
+                service: routeService ?? currentSelection.service,
+                url,
+            };
+        });
+
+        if (routeService) {
+            localStorage.setItem(STORAGE_KEY, routeService);
+        }
+    }, [routeService, url]);
 
     function setActiveService(service: ServiceKey) {
-        setSelectedService(service);
+        setSelection({ service, url });
         localStorage.setItem(STORAGE_KEY, service);
     }
 

@@ -9,10 +9,15 @@ use App\Models\ProductVariation;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
+use Throwable;
 
 class ProductUpsertService
 {
+    public function __construct(private readonly ProductImageStorage $imageStorage) {}
+
     public function createProduct(array $data): Product
     {
         return $this->upsert(null, $data);
@@ -25,12 +30,16 @@ class ProductUpsertService
 
     public function storeMedia(Product $product, UploadedFile $file, ProductMediaType $type, ?int $sortOrder = null): ProductMedia
     {
+        if ($type === ProductMediaType::Image) {
+            return $this->storeImage($product, $file, $sortOrder);
+        }
+
         if ($type === ProductMediaType::Video) {
             $hasVideo = $product->media()->where('type', ProductMediaType::Video->value)->exists();
 
             if ($hasVideo) {
                 throw ValidationException::withMessages([
-                    'type' => 'Apenas um video e permitido por produto.',
+                    'file' => 'Apenas um vídeo é permitido por produto.',
                 ]);
             }
         }
@@ -44,6 +53,44 @@ class ProductUpsertService
             'sort_order' => $order,
             'file_size_bytes' => $file->getSize(),
         ]);
+    }
+
+    private function storeImage(Product $product, UploadedFile $file, ?int $sortOrder): ProductMedia
+    {
+        $contents = file_get_contents($file->getRealPath());
+
+        if (! is_string($contents) || $contents === '') {
+            throw ValidationException::withMessages([
+                'files' => 'Não foi possível ler a imagem enviada.',
+            ]);
+        }
+
+        try {
+            $imageAttributes = $this->imageStorage->optimizeAndStore($product, $contents);
+        } catch (Throwable $exception) {
+            throw ValidationException::withMessages([
+                'files' => $exception instanceof RuntimeException
+                    ? 'Não foi possível armazenar a imagem. Tente novamente.'
+                    : $exception->getMessage(),
+            ]);
+        }
+
+        $order = $sortOrder ?? ((int) $product->media()->max('sort_order') + 1);
+
+        try {
+            return $product->media()->create([
+                'type' => ProductMediaType::Image->value,
+                'sort_order' => $order,
+                ...$imageAttributes,
+            ]);
+        } catch (Throwable $exception) {
+            Storage::disk('s3')->delete([
+                $imageAttributes['path'],
+                $imageAttributes['thumbnail_path'],
+            ]);
+
+            throw $exception;
+        }
     }
 
     public function reorderMedia(Product $product, array $mediaOrder): void
@@ -160,9 +207,10 @@ class ProductUpsertService
         }
 
         $stocks = collect($data['variant_stocks'] ?? []);
-
-        // Delete all and recreate for simplicity
-        $product->variantStocks()->delete();
+        $existingStocks = $product->variantStocks()
+            ->get()
+            ->keyBy(fn ($stock) => $this->normalizeVariationKey($stock->variation_key));
+        $retainedStockIds = [];
 
         foreach ($stocks as $stock) {
             $variationKey = $stock['variation_key'] ?? [];
@@ -171,14 +219,41 @@ class ProductUpsertService
                 continue;
             }
 
-            $product->variantStocks()->create([
+            $attributes = [
                 'variation_key' => $variationKey,
                 'quantity' => (int) ($stock['quantity'] ?? 0),
                 'price_cents' => isset($stock['price_cents']) && $stock['price_cents'] !== '' && $stock['price_cents'] !== null
                     ? (int) $stock['price_cents']
                     : null,
                 'sku_variant' => Arr::get($stock, 'sku_variant'),
-            ]);
+            ];
+
+            $existingStock = $existingStocks->get($this->normalizeVariationKey($variationKey));
+
+            if ($existingStock) {
+                $existingStock->update($attributes);
+                $retainedStockIds[] = $existingStock->id;
+
+                continue;
+            }
+
+            $retainedStockIds[] = $product->variantStocks()->create($attributes)->id;
         }
+
+        $product->variantStocks()
+            ->whereNotIn('id', $retainedStockIds)
+            ->delete();
+    }
+
+    /**
+     * Build an order-independent identity for a variation combination.
+     *
+     * @param  array<string, string>  $variationKey
+     */
+    private function normalizeVariationKey(array $variationKey): string
+    {
+        ksort($variationKey);
+
+        return json_encode($variationKey, JSON_THROW_ON_ERROR);
     }
 }

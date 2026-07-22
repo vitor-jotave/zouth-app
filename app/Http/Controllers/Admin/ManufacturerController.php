@@ -94,6 +94,11 @@ class ManufacturerController extends Controller
                 'address_number' => $validated['address_number'] ?? null,
                 'complement' => $validated['complement'] ?? null,
                 'is_active' => true,
+                'onboarding_started_at' => now(),
+                'onboarding_account_created_at' => now(),
+                'onboarding_preview_viewed_at' => now(),
+                'onboarding_email_confirmed_at' => now(),
+                'onboarding_completed_at' => now(),
             ]);
 
             $owner = User::create([
@@ -107,6 +112,10 @@ class ManufacturerController extends Controller
             $manufacturer->users()->attach($owner->id, [
                 'role' => 'owner',
                 'status' => 'active',
+            ]);
+
+            $manufacturer->update([
+                'primary_owner_user_id' => $owner->id,
             ]);
 
             Password::sendResetLink(['email' => $owner->email]);

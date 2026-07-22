@@ -3,11 +3,15 @@
 namespace App\Http\Controllers\Manufacturer;
 
 use App\Enums\OrderStatus;
+use App\Enums\ProductMediaType;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Product;
+use App\Models\ProductMedia;
 use App\Services\PlanLimitService;
 use App\Services\TenantManager;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -23,6 +27,32 @@ class DashboardController extends Controller
         $manufacturer = $this->tenantManager->get();
         $activePlan = $this->planLimitService->activePlan($manufacturer);
         $orders = $manufacturer->orders();
+        $catalogSetting = $manufacturer->catalogSetting()->first();
+
+        $catalogProducts = $manufacturer->products()
+            ->where('is_active', true)
+            ->with(['media' => fn ($query) => $query
+                ->where('type', ProductMediaType::Image->value)])
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->limit(3)
+            ->get(['id', 'manufacturer_id', 'name', 'price_cents', 'sort_order'])
+            ->map(function (Product $product): array {
+                /** @var ProductMedia|null $primaryImage */
+                $primaryImage = $product->media->first();
+
+                return [
+                    'id' => $product->id,
+                    'name' => $product->name,
+                    'price' => $product->price_cents !== null
+                        ? $product->price_cents / 100
+                        : null,
+                    'image_url' => $primaryImage
+                        ? Storage::disk('s3')->url($primaryImage->path)
+                        : null,
+                    'image_alt' => $primaryImage ? $product->name : null,
+                ];
+            });
 
         $grossRevenue = OrderItem::query()
             ->whereHas('order', fn ($query) => $query
@@ -64,6 +94,13 @@ class DashboardController extends Controller
                     ->where('visited_at', '>=', now()->subDays(30))
                     ->count(),
                 'gross_revenue' => (float) $grossRevenue,
+            ],
+            'catalog' => [
+                'public_link' => $catalogSetting?->public_link_active
+                    ? route('public.catalog.show', ['token' => $catalogSetting->public_token])
+                    : null,
+                'is_public' => $catalogSetting?->public_link_active ?? false,
+                'products' => $catalogProducts,
             ],
             'recentOrders' => $recentOrders,
         ]);

@@ -32,7 +32,7 @@ class VariationTypeUpdateRequest extends FormRequest
             'values.*.id' => ['nullable', 'integer'],
             'values.*.value' => ['required', 'string', 'max:100'],
             'values.*.hex' => ['nullable', 'string', 'max:7'],
-            'values.*.image' => ['nullable', File::image()->max(2048)],
+            'values.*.image' => ['nullable', File::image()->max(5120)],
             'values.*.remove_image' => ['sometimes', 'boolean'],
         ];
     }

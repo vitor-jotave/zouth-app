@@ -13,11 +13,21 @@ interface PaginationProps {
 }
 
 function normalizeLabel(label: string): string {
-    return label
+    const normalizedLabel = label
         .replace(/&laquo;/g, '«')
         .replace(/&raquo;/g, '»')
         .replace(/<[^>]*>/g, '')
         .trim();
+
+    if (/previous/i.test(normalizedLabel)) {
+        return '← Anterior';
+    }
+
+    if (/next/i.test(normalizedLabel)) {
+        return 'Próxima →';
+    }
+
+    return normalizedLabel;
 }
 
 export function Pagination({ links }: PaginationProps) {
@@ -26,8 +36,11 @@ export function Pagination({ links }: PaginationProps) {
         : Array.isArray(links?.links)
           ? links?.links
           : [];
+    const numberedLinks = resolvedLinks.filter((link) =>
+        /^\d+$/.test(normalizeLabel(link.label)),
+    );
 
-    if (resolvedLinks.length <= 1) {
+    if (numberedLinks.length <= 1) {
         return null;
     }
 
@@ -45,6 +58,7 @@ export function Pagination({ links }: PaginationProps) {
                         asChild={!isDisabled}
                         disabled={isDisabled}
                         className={cn(
+                            'min-h-11 min-w-11 rounded-[2px] px-4',
                             isDisabled && 'cursor-not-allowed opacity-60',
                         )}
                     >

@@ -22,6 +22,9 @@ beforeEach(function () {
         'role' => 'owner',
         'status' => 'active',
     ]);
+    $this->manufacturer->update([
+        'primary_owner_user_id' => $this->owner->id,
+    ]);
 });
 
 // ──────────────────────────────────────────────
@@ -59,6 +62,7 @@ it('allows owner to create a new user', function () {
             'name' => 'Novo Usuario',
             'email' => 'novo@example.com',
             'role' => 'staff',
+            'capabilities' => ['collection.manage', 'orders.manage'],
         ])
         ->assertRedirect();
 
@@ -75,6 +79,7 @@ it('allows owner to create a new user', function () {
         'manufacturer_id' => $this->manufacturer->id,
         'role' => 'staff',
         'status' => 'active',
+        'capabilities' => json_encode(['collection.manage', 'orders.manage']),
     ]);
 });
 
@@ -95,6 +100,7 @@ it('denies staff from creating users', function () {
             'name' => 'Blocked',
             'email' => 'blocked@example.com',
             'role' => 'staff',
+            'capabilities' => ['orders.manage'],
         ])
         ->assertForbidden();
 });
@@ -113,6 +119,7 @@ it('rejects duplicate email', function () {
             'name' => 'Duplicate',
             'email' => $this->owner->email,
             'role' => 'staff',
+            'capabilities' => ['orders.manage'],
         ])
         ->assertSessionHasErrors('email');
 });
@@ -128,6 +135,7 @@ it('enforces plan user limit', function () {
             'name' => 'Over Limit',
             'email' => 'overlimit@example.com',
             'role' => 'staff',
+            'capabilities' => ['orders.manage'],
         ])
         ->assertRedirect()
         ->assertSessionHasErrors('limit');
@@ -170,6 +178,25 @@ it('rejects invalid status value', function () {
         ->assertSessionHasErrors('status');
 });
 
+it('prevents another owner from blocking the primary owner', function () {
+    $otherOwner = User::factory()->create([
+        'user_type' => UserType::ManufacturerUser,
+        'current_manufacturer_id' => $this->manufacturer->id,
+    ]);
+    $this->manufacturer->users()->attach($otherOwner->id, [
+        'role' => 'owner',
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($otherOwner)
+        ->post(route('users.update-status', $this->owner), ['status' => 'blocked'])
+        ->assertSessionHasErrors('status');
+
+    $membership = $this->manufacturer->users()->findOrFail($this->owner->id);
+
+    expect($membership->pivot->status)->toBe('active');
+});
+
 // ──────────────────────────────────────────────
 // Update Role
 // ──────────────────────────────────────────────
@@ -192,12 +219,186 @@ it('allows owner to change user role', function () {
     expect($pivot->pivot->role)->toBe('owner');
 });
 
+it('allows owner to choose the areas a collaborator can access', function () {
+    $staff = User::factory()->create([
+        'user_type' => UserType::ManufacturerUser,
+        'current_manufacturer_id' => $this->manufacturer->id,
+    ]);
+    $this->manufacturer->users()->attach($staff->id, [
+        'role' => 'staff',
+        'status' => 'active',
+        'capabilities' => ['collection.manage'],
+    ]);
+
+    $this->actingAs($this->owner)
+        ->post(route('users.update-role', $staff), [
+            'role' => 'staff',
+            'capabilities' => ['orders.manage', 'customers.manage'],
+        ])
+        ->assertRedirect();
+
+    $membership = $this->manufacturer->users()->findOrFail($staff->id);
+
+    expect($membership->pivot->capabilities)->toBe([
+        'orders.manage',
+        'customers.manage',
+    ]);
+});
+
+it('requires at least one area for collaborators', function () {
+    $staff = User::factory()->create([
+        'user_type' => UserType::ManufacturerUser,
+        'current_manufacturer_id' => $this->manufacturer->id,
+    ]);
+    $this->manufacturer->users()->attach($staff->id, [
+        'role' => 'staff',
+        'status' => 'active',
+        'capabilities' => ['orders.manage'],
+    ]);
+
+    $this->actingAs($this->owner)
+        ->post(route('users.update-role', $staff), [
+            'role' => 'staff',
+            'capabilities' => [],
+        ])
+        ->assertSessionHasErrors('capabilities');
+});
+
+it('prevents an owner from removing their own owner access', function () {
+    $this->actingAs($this->owner)
+        ->post(route('users.update-role', $this->owner), [
+            'role' => 'staff',
+            'capabilities' => ['orders.manage'],
+        ])
+        ->assertSessionHasErrors('role');
+});
+
+it('prevents another owner from demoting the primary owner', function () {
+    $otherOwner = User::factory()->create([
+        'user_type' => UserType::ManufacturerUser,
+        'current_manufacturer_id' => $this->manufacturer->id,
+    ]);
+    $this->manufacturer->users()->attach($otherOwner->id, [
+        'role' => 'owner',
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($otherOwner)
+        ->post(route('users.update-role', $this->owner), [
+            'role' => 'staff',
+            'capabilities' => ['orders.manage'],
+        ])
+        ->assertSessionHasErrors('role');
+
+    $membership = $this->manufacturer->users()->findOrFail($this->owner->id);
+
+    expect($membership->pivot->role)->toBe('owner');
+});
+
 it('returns 404 for user not in manufacturer', function () {
     $outsider = User::factory()->create([
         'user_type' => UserType::ManufacturerUser,
     ]);
 
     $this->actingAs($this->owner)
-        ->post(route('users.update-role', $outsider), ['role' => 'staff'])
+        ->post(route('users.update-role', $outsider), [
+            'role' => 'staff',
+            'capabilities' => ['orders.manage'],
+        ])
         ->assertNotFound();
+});
+
+// ──────────────────────────────────────────────
+// Transfer Ownership
+// ──────────────────────────────────────────────
+
+it('allows the primary owner to transfer ownership to another active owner', function () {
+    $otherOwner = User::factory()->create([
+        'name' => 'Nova Responsável',
+        'user_type' => UserType::ManufacturerUser,
+        'current_manufacturer_id' => $this->manufacturer->id,
+    ]);
+    $this->manufacturer->users()->attach($otherOwner->id, [
+        'role' => 'owner',
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($this->owner)
+        ->post(route('users.transfer-ownership', $otherOwner), [
+            'current_password' => 'password',
+        ])
+        ->assertSessionHasNoErrors()
+        ->assertSessionHas('success');
+
+    expect($this->manufacturer->fresh()->primary_owner_user_id)->toBe($otherOwner->id);
+
+    $formerPrimaryMembership = $this->manufacturer->users()->findOrFail($this->owner->id);
+    expect($formerPrimaryMembership->pivot->role)->toBe('owner')
+        ->and($formerPrimaryMembership->pivot->status)->toBe('active');
+});
+
+it('requires the current password to transfer ownership', function () {
+    $otherOwner = User::factory()->create([
+        'user_type' => UserType::ManufacturerUser,
+        'current_manufacturer_id' => $this->manufacturer->id,
+    ]);
+    $this->manufacturer->users()->attach($otherOwner->id, [
+        'role' => 'owner',
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($this->owner)
+        ->post(route('users.transfer-ownership', $otherOwner), [
+            'current_password' => 'senha-incorreta',
+        ])
+        ->assertSessionHasErrors('current_password');
+
+    expect($this->manufacturer->fresh()->primary_owner_user_id)->toBe($this->owner->id);
+});
+
+it('prevents a non-primary owner from transferring ownership', function () {
+    $otherOwner = User::factory()->create([
+        'user_type' => UserType::ManufacturerUser,
+        'current_manufacturer_id' => $this->manufacturer->id,
+    ]);
+    $thirdOwner = User::factory()->create([
+        'user_type' => UserType::ManufacturerUser,
+        'current_manufacturer_id' => $this->manufacturer->id,
+    ]);
+    $this->manufacturer->users()->attach($otherOwner->id, [
+        'role' => 'owner',
+        'status' => 'active',
+    ]);
+    $this->manufacturer->users()->attach($thirdOwner->id, [
+        'role' => 'owner',
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($otherOwner)
+        ->post(route('users.transfer-ownership', $thirdOwner), [
+            'current_password' => 'password',
+        ])
+        ->assertForbidden();
+
+    expect($this->manufacturer->fresh()->primary_owner_user_id)->toBe($this->owner->id);
+});
+
+it('only transfers ownership to another active owner', function () {
+    $staff = User::factory()->create([
+        'user_type' => UserType::ManufacturerUser,
+        'current_manufacturer_id' => $this->manufacturer->id,
+    ]);
+    $this->manufacturer->users()->attach($staff->id, [
+        'role' => 'staff',
+        'status' => 'active',
+        'capabilities' => ['orders.manage'],
+    ]);
+
+    $this->actingAs($this->owner)
+        ->post(route('users.transfer-ownership', $staff), [
+            'current_password' => 'password',
+        ])
+        ->assertSessionHasErrors('ownership');
+
+    expect($this->manufacturer->fresh()->primary_owner_user_id)->toBe($this->owner->id);
 });

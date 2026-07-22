@@ -1,0 +1,947 @@
+@font-face {
+    font-family: 'Zouth Onboarding Sora';
+    src: url('/brand/zouth/assets/sora-variable.ttf') format('truetype');
+    font-weight: 100 800;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Zouth Onboarding Manrope';
+    src: url('/brand/zouth/assets/manrope-variable.ttf') format('truetype');
+    font-weight: 200 800;
+    font-display: swap;
+}
+
+.zo-onboarding {
+    --zo-accent: #ff4d3d;
+    display: grid;
+    min-height: 100svh;
+    grid-template-columns: minmax(0, 1.65fr) minmax(390px, 0.72fr);
+    overflow: hidden;
+    background: #f6f4f0;
+    color: #18181f;
+    font-family: 'Zouth Onboarding Manrope', sans-serif;
+}
+.zo-cover {
+    position: relative;
+    min-height: 100svh;
+    overflow: hidden;
+    background: #f6f4f0;
+    color: #18181f;
+    padding: 38px clamp(34px, 4.5vw, 72px);
+}
+.zo-cover__topline {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+}
+.zo-cover__topline img {
+    width: 110px;
+    height: auto;
+}
+.zo-cover__rule {
+    position: absolute;
+    z-index: 3;
+    top: 86px;
+    right: clamp(34px, 4.5vw, 72px);
+    left: clamp(34px, 4.5vw, 72px);
+    height: 1px;
+    background: #cac4ba;
+}
+.zo-cover__image-wrap {
+    position: absolute;
+    top: 112px;
+    right: 0;
+    bottom: 0;
+    left: 43%;
+}
+.zo-cover__image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+}
+.zo-cover__image-wrap::after {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgb(246 244 240/0.5), transparent 28%);
+    content: '';
+}
+.zo-cover__shape {
+    position: absolute;
+    z-index: 2;
+    top: -5%;
+    right: 0;
+    bottom: auto;
+    left: auto;
+    width: 72%;
+    height: 38%;
+    background: var(--zo-accent);
+    clip-path: polygon(18% 0, 100% 0, 100% 100%, 0 76%);
+    opacity: 0.78;
+    mix-blend-mode: color;
+}
+.zo-cover__copy {
+    position: absolute;
+    z-index: 4;
+    top: clamp(148px, 18vh, 194px);
+    right: clamp(34px, 4.5vw, 72px);
+    left: clamp(34px, 4.5vw, 72px);
+    bottom: clamp(66px, 8vh, 92px);
+    display: flex;
+    max-width: none;
+    flex-direction: column;
+}
+.zo-cover__copy > p {
+    margin: 0 0 18px;
+    color: var(--zo-accent);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.19em;
+    text-transform: uppercase;
+}
+.zo-cover__copy h1 {
+    margin: 0;
+    font-family: 'Zouth Onboarding Sora', sans-serif;
+    max-width: 78%;
+    font-size: clamp(58px, 7.5vw, 116px);
+    font-weight: 600;
+    letter-spacing: -0.07em;
+    line-height: 0.91;
+}
+.zo-cover__copy h1 span {
+    color: var(--zo-accent);
+}
+.zo-cover__caption {
+    display: flex;
+    gap: 44px;
+    width: min(420px, 44%);
+    margin-top: auto;
+    padding-top: 22px;
+    border-top: 1px solid #98968d;
+    font-size: 13px;
+    color: #595751;
+}
+.zo-cover__folio {
+    position: absolute;
+    z-index: 4;
+    right: clamp(34px, 4.5vw, 72px);
+    bottom: 40px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+}
+.zo-rail {
+    display: grid;
+    min-width: 0;
+    min-height: 100svh;
+    grid-template-rows: auto 3px 1fr auto;
+    background: #f6f4f0;
+    border-left: 1px solid #cac4ba;
+}
+.zo-rail__header,
+.zo-rail__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 26px 32px;
+}
+.zo-rail__header img {
+    width: 104px;
+}
+.zo-rail__header a {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+}
+.zo-rail__header > span,
+.zo-rail__footer {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+}
+.zo-progress {
+    height: 3px;
+    background: #e7e3dc;
+}
+.zo-progress i {
+    display: block;
+    height: 100%;
+    background: var(--zo-accent);
+    transition: width 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.zo-stage {
+    align-self: center;
+    padding: 42px clamp(28px, 3.2vw, 54px);
+    max-height: calc(100svh - 132px);
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #cac4ba transparent;
+}
+.zo-stage form {
+    display: contents;
+}
+.zo-eyebrow {
+    margin: 0 0 16px;
+    color: var(--zo-accent);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.19em;
+    text-transform: uppercase;
+}
+.zo-stage h2 {
+    margin: 0;
+    font-family: 'Zouth Onboarding Sora', sans-serif;
+    font-size: clamp(38px, 3.4vw, 58px);
+    font-weight: 600;
+    letter-spacing: -0.06em;
+    line-height: 0.98;
+}
+.zo-stage h2 span {
+    color: var(--zo-accent);
+}
+.zo-lead {
+    margin: 22px 0 32px;
+    max-width: 460px;
+    color: #706e68;
+    font-size: 15px;
+    line-height: 1.72;
+}
+.zo-field {
+    display: block;
+    margin-top: 18px;
+}
+.zo-field > span,
+.zo-palettes legend {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+.zo-field input {
+    width: 100%;
+    height: 55px;
+    border: 1px solid #cac4ba;
+    border-radius: 0;
+    background: transparent;
+    padding: 0 15px;
+    color: #18181f;
+    font:
+        500 16px 'Zouth Onboarding Manrope',
+        sans-serif;
+    outline: none;
+}
+.zo-field input:focus {
+    border-color: var(--zo-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--zo-accent) 25%, transparent);
+}
+.zo-field-error {
+    margin: 7px 0 0;
+    color: #b42318;
+    font-size: 12px;
+    font-weight: 700;
+}
+.zo-primary {
+    display: flex;
+    width: 100%;
+    min-height: 55px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-top: 28px;
+    border: 1px solid var(--zo-accent);
+    border-radius: 0;
+    background: var(--zo-accent);
+    padding: 14px 17px;
+    color: #18181f;
+    font:
+        700 14px 'Zouth Onboarding Manrope',
+        sans-serif;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        transform 0.2s ease,
+        filter 0.2s ease;
+}
+.zo-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    filter: brightness(0.97);
+}
+.zo-primary:disabled {
+    cursor: not-allowed;
+    opacity: 0.42;
+}
+.zo-primary svg {
+    width: 19px;
+    flex: 0 0 auto;
+}
+.zo-back {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 28px;
+    border: 0;
+    background: none;
+    padding: 0;
+    color: #706e68;
+    font:
+        700 12px 'Zouth Onboarding Manrope',
+        sans-serif;
+    cursor: pointer;
+}
+.zo-back svg {
+    width: 16px;
+}
+.zo-options {
+    display: grid;
+    border-top: 1px solid #cac4ba;
+}
+.zo-options button {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 30px;
+    gap: 4px 10px;
+    border: 0;
+    border-bottom: 1px solid #cac4ba;
+    background: transparent;
+    padding: 16px 4px;
+    text-align: left;
+    cursor: pointer;
+}
+.zo-options button > span {
+    font-size: 14px;
+    font-weight: 700;
+}
+.zo-options small {
+    color: #77746e;
+    font-size: 12px;
+}
+.zo-options i {
+    grid-row: 1/3;
+    grid-column: 2;
+    display: flex;
+    width: 24px;
+    height: 24px;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+    border: 1px solid #cac4ba;
+}
+.zo-options i svg {
+    width: 15px;
+}
+.zo-options .is-selected {
+    padding-left: 12px;
+    background: color-mix(in srgb, var(--zo-accent) 9%, transparent);
+    box-shadow: inset 3px 0 0 var(--zo-accent);
+}
+.zo-options .is-selected i {
+    border-color: var(--zo-accent);
+    background: var(--zo-accent);
+}
+.zo-check {
+    display: grid;
+    grid-template-columns: 18px 1fr;
+    gap: 10px;
+    margin-top: 20px;
+    color: #706e68;
+    font-size: 12px;
+    line-height: 1.5;
+}
+.zo-check input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--zo-accent);
+}
+.zo-check a {
+    color: #18181f;
+    text-decoration: underline;
+}
+.zo-microcopy {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 14px 0 0;
+    color: #77746e;
+    font-size: 11px;
+    line-height: 1.55;
+}
+.zo-microcopy svg {
+    width: 14px;
+    flex: 0 0 auto;
+    color: var(--zo-accent);
+}
+.zo-upload {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    align-items: center;
+    gap: 14px;
+    margin-top: 28px;
+    border: 1px solid #cac4ba;
+    padding: 12px;
+    cursor: pointer;
+}
+.zo-upload > svg,
+.zo-upload > img {
+    width: 64px;
+    height: 64px;
+    object-fit: contain;
+    border: 1px solid #cac4ba;
+    padding: 12px;
+}
+.zo-upload span {
+    font-size: 14px;
+    font-weight: 700;
+}
+.zo-upload small {
+    display: block;
+    margin-top: 4px;
+    color: #77746e;
+    font-size: 11px;
+    font-weight: 500;
+}
+.zo-upload input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+}
+.zo-palettes {
+    margin-top: 24px;
+    border: 0;
+    padding: 0;
+}
+.zo-palettes > div {
+    display: flex;
+    gap: 10px;
+}
+.zo-palettes button {
+    width: 36px;
+    height: 36px;
+    border: 5px solid #f6f4f0;
+    outline: 1px solid #cac4ba;
+    cursor: pointer;
+}
+.zo-palettes button[aria-pressed='true'] {
+    outline: 2px solid #18181f;
+}
+.zo-next-actions {
+    display: grid;
+    border-top: 1px solid #cac4ba;
+}
+.zo-next-actions button {
+    display: grid;
+    grid-template-columns: 32px 1fr 20px;
+    align-items: center;
+    gap: 14px;
+    border: 0;
+    border-bottom: 1px solid #cac4ba;
+    background: transparent;
+    padding: 20px 2px;
+    text-align: left;
+    cursor: pointer;
+}
+.zo-next-actions button > svg {
+    width: 21px;
+}
+.zo-next-actions span {
+    font-size: 14px;
+    font-weight: 700;
+}
+.zo-next-actions small {
+    display: block;
+    margin-top: 5px;
+    color: #77746e;
+    font-size: 11px;
+    font-weight: 500;
+}
+.zo-next-actions button:hover {
+    padding-left: 10px;
+    background: color-mix(in srgb, var(--zo-accent) 8%, transparent);
+}
+.zo-email-mark {
+    display: grid;
+    grid-template-columns: 42px 1fr;
+    align-items: center;
+    gap: 15px;
+    border-top: 1px solid #cac4ba;
+    border-bottom: 1px solid #cac4ba;
+    padding: 20px 0;
+}
+.zo-email-mark > svg {
+    width: 42px;
+    height: 42px;
+    background: var(--zo-accent);
+    padding: 11px;
+}
+.zo-email-mark span {
+    font-size: 14px;
+    font-weight: 700;
+}
+.zo-email-mark small {
+    display: block;
+    margin-top: 4px;
+    color: #77746e;
+    font-size: 11px;
+    font-weight: 500;
+}
+.zo-rail__footer {
+    border-top: 1px solid #cac4ba;
+    color: #77746e;
+}
+.zo-rail__footer button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    background: none;
+    color: #77746e;
+    font:
+        700 10px 'Zouth Onboarding Manrope',
+        sans-serif;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+.zo-rail__footer svg {
+    width: 14px;
+}
+@media (max-width: 900px) {
+    .zo-onboarding {
+        display: block;
+        overflow: visible;
+    }
+    .zo-cover {
+        min-height: 43svh;
+        background: #18181f;
+        color: #f6f4f0;
+        padding: 22px;
+    }
+    .zo-cover__topline img {
+        width: 88px;
+        filter: brightness(0) invert(1);
+    }
+    .zo-cover__rule {
+        top: 61px;
+        right: 22px;
+        left: 22px;
+    }
+    .zo-cover__image-wrap {
+        inset: 72px 0 0;
+    }
+    .zo-cover__image-wrap::after {
+        background: linear-gradient(
+            0deg,
+            rgb(24 24 31/0.85),
+            rgb(24 24 31/0.05) 80%
+        );
+    }
+    .zo-cover__shape {
+        width: 62%;
+        height: 32%;
+    }
+    .zo-cover__copy {
+        right: 22px;
+        bottom: 28px;
+        left: 22px;
+        max-width: none;
+    }
+    .zo-cover__copy > p {
+        margin-bottom: 8px;
+        font-size: 9px;
+    }
+    .zo-cover__copy h1 {
+        font-size: clamp(36px, 12vw, 58px);
+    }
+    .zo-cover__caption,
+    .zo-cover__folio,
+    .zo-cover__topline > span {
+        display: none;
+    }
+    .zo-rail {
+        min-height: 57svh;
+        border-top: 1px solid #cac4ba;
+        border-left: 0;
+    }
+    .zo-rail__header {
+        padding: 18px 22px;
+    }
+    .zo-rail__header img {
+        width: 86px;
+    }
+    .zo-stage {
+        align-self: start;
+        max-height: none;
+        padding: 34px 22px 48px;
+    }
+    .zo-stage h2 {
+        font-size: 38px;
+    }
+    .zo-rail__footer {
+        padding: 18px 22px;
+    }
+    .zo-primary {
+        margin-top: 24px;
+    }
+}
+@media (max-width: 420px) {
+    .zo-cover {
+        min-height: 38svh;
+    }
+    .zo-rail {
+        min-height: 62svh;
+    }
+    .zo-stage {
+        padding-top: 28px;
+    }
+    .zo-lead {
+        margin-top: 17px;
+        margin-bottom: 24px;
+    }
+    .zo-field input {
+        height: 51px;
+    }
+    .zo-primary {
+        min-height: 51px;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .zo-onboarding * {
+        scroll-behavior: auto !important;
+        animation: none !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+.zo-verify {
+    display: grid;
+    min-height: 100svh;
+    grid-template-columns: minmax(0, 1.25fr) minmax(390px, 0.75fr);
+    background: #f6f4f0;
+    color: #18181f;
+    font-family: 'Zouth Onboarding Manrope', sans-serif;
+}
+.zo-verify__visual {
+    position: relative;
+    min-height: 100svh;
+    overflow: hidden;
+    background: #18181f;
+}
+.zo-verify__photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.zo-verify__veil {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        0deg,
+        rgb(24 24 31/0.9),
+        rgb(24 24 31/0.08) 72%
+    );
+}
+.zo-verify__logo {
+    position: absolute;
+    z-index: 3;
+    top: 34px;
+    left: 42px;
+    width: 110px;
+}
+.zo-verify__copy {
+    position: absolute;
+    z-index: 3;
+    right: 42px;
+    bottom: 62px;
+    left: 42px;
+    color: #f6f4f0;
+}
+.zo-verify__copy p {
+    color: #ff4d3d;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+}
+.zo-verify__copy h1 {
+    max-width: 700px;
+    margin: 16px 0 0;
+    font:
+        600 clamp(48px, 6vw, 90px)/0.97 'Zouth Onboarding Sora',
+        sans-serif;
+    letter-spacing: -0.065em;
+}
+.zo-verify__copy h1 span,
+.zo-verify__panel h2 span {
+    color: #ff4d3d;
+}
+.zo-verify__panel {
+    align-self: center;
+    padding: 50px clamp(32px, 4vw, 66px);
+}
+.zo-verify__mark {
+    display: flex;
+    width: 56px;
+    height: 56px;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 34px;
+    background: #ff4d3d;
+}
+.zo-verify__mark svg {
+    width: 24px;
+}
+.zo-verify__panel h2 {
+    margin: 0;
+    font:
+        600 clamp(40px, 4vw, 60px)/0.98 'Zouth Onboarding Sora',
+        sans-serif;
+    letter-spacing: -0.06em;
+}
+.zo-verify__status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-top: 1px solid #cac4ba;
+    border-bottom: 1px solid #cac4ba;
+    padding: 14px 0;
+    color: #2e705a;
+    font-size: 12px;
+    font-weight: 700;
+}
+.zo-verify__status svg {
+    width: 17px;
+}
+.zo-verify__logout {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 20px auto 0;
+    color: #706e68;
+    font-size: 12px;
+    font-weight: 700;
+}
+.zo-verify__logout svg {
+    width: 15px;
+}
+.zo-paused {
+    min-height: 100svh;
+    background: #f6f4f0;
+    color: #18181f;
+    font-family: 'Zouth Onboarding Manrope', sans-serif;
+}
+.zo-paused > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #cac4ba;
+    padding: 28px 5vw;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+}
+.zo-paused > header img {
+    width: 110px;
+}
+.zo-paused__hero {
+    padding: clamp(70px, 9vw, 132px) 5vw 70px;
+}
+.zo-paused__hero h1 {
+    margin: 0;
+    font:
+        600 clamp(54px, 8vw, 116px)/0.89 'Zouth Onboarding Sora',
+        sans-serif;
+    letter-spacing: -0.075em;
+}
+.zo-paused__hero h1 span {
+    color: #ff4d3d;
+}
+.zo-paused__hero > p:not(.zo-eyebrow) {
+    max-width: 700px;
+    margin: 30px 0;
+    color: #706e68;
+    font-size: 17px;
+    line-height: 1.7;
+}
+.zo-paused__hero > div {
+    display: flex;
+    gap: 24px;
+    border-top: 1px solid #cac4ba;
+    padding-top: 22px;
+}
+.zo-paused__hero > div span {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 700;
+}
+.zo-paused__hero svg {
+    width: 17px;
+    color: #ff4d3d;
+}
+.zo-paused__plans {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border-top: 1px solid #cac4ba;
+}
+.zo-paused__plans article {
+    display: flex;
+    min-height: 390px;
+    flex-direction: column;
+    border-right: 1px solid #cac4ba;
+    padding: 34px;
+}
+.zo-paused__plans article > span {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.15em;
+}
+.zo-paused__plans h2 {
+    margin: 46px 0 0;
+    font:
+        600 34px 'Zouth Onboarding Sora',
+        sans-serif;
+    letter-spacing: -0.05em;
+}
+.zo-paused__plans h2 i {
+    color: #ff4d3d;
+    font-style: normal;
+}
+.zo-paused__plans p {
+    color: #706e68;
+    font-size: 13px;
+    line-height: 1.6;
+}
+.zo-paused__plans strong {
+    margin-top: auto;
+    font:
+        600 30px 'Zouth Onboarding Sora',
+        sans-serif;
+}
+.zo-paused__plans strong small {
+    font:
+        500 11px 'Zouth Onboarding Manrope',
+        sans-serif;
+}
+.zo-paused__plans a,
+.zo-paused__plans button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 22px;
+    border: 1px solid #18181f;
+    background: #18181f;
+    padding: 16px;
+    color: #f6f4f0;
+    font-size: 12px;
+    font-weight: 700;
+}
+.zo-paused__plans a svg {
+    width: 17px;
+}
+.zo-paused__plans .is-featured {
+    box-shadow: inset 0 4px #ff4d3d;
+}
+.zo-catalog-offline {
+    display: grid;
+    min-height: 100svh;
+    grid-template-rows: auto 1fr auto;
+    background: #f6f4f0;
+    padding: 32px clamp(24px, 5vw, 80px);
+    color: #18181f;
+    font-family: 'Zouth Onboarding Manrope', sans-serif;
+}
+.zo-catalog-offline > img {
+    width: 108px;
+}
+.zo-catalog-offline section {
+    align-self: center;
+    max-width: 780px;
+}
+.zo-catalog-offline section > svg {
+    width: 42px;
+    height: 42px;
+    margin-bottom: 32px;
+    color: #ff4d3d;
+}
+.zo-catalog-offline section > p:first-of-type {
+    color: #98968d;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+}
+.zo-catalog-offline h1 {
+    margin: 18px 0;
+    font:
+        600 clamp(56px, 8vw, 110px)/0.9 'Zouth Onboarding Sora',
+        sans-serif;
+    letter-spacing: -0.075em;
+}
+.zo-catalog-offline h1 span {
+    color: #ff4d3d;
+}
+.zo-catalog-offline section > p:last-child {
+    max-width: 570px;
+    color: #706e68;
+    font-size: 16px;
+    line-height: 1.7;
+}
+.zo-catalog-offline footer {
+    border-top: 1px solid #cac4ba;
+    padding-top: 20px;
+    color: #98968d;
+    font-size: 11px;
+}
+@media (max-width: 900px) {
+    .zo-verify {
+        display: block;
+    }
+    .zo-verify__visual {
+        min-height: 38svh;
+    }
+    .zo-verify__logo {
+        top: 22px;
+        left: 22px;
+        width: 88px;
+    }
+    .zo-verify__copy {
+        right: 22px;
+        bottom: 24px;
+        left: 22px;
+    }
+    .zo-verify__copy h1 {
+        font-size: 38px;
+    }
+    .zo-verify__panel {
+        padding: 44px 22px 58px;
+    }
+    .zo-paused__hero {
+        padding-right: 22px;
+        padding-left: 22px;
+    }
+    .zo-paused__hero > div {
+        flex-direction: column;
+        gap: 12px;
+    }
+    .zo-paused__plans {
+        display: block;
+    }
+    .zo-paused__plans article {
+        min-height: 330px;
+        border-right: 0;
+        border-bottom: 1px solid #cac4ba;
+    }
+    .zo-catalog-offline {
+        padding: 24px 22px;
+    }
+}

@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Rep;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreRepresentativeApplicationRequest;
 use App\Http\Resources\ProductCatalogResource;
 use App\Models\Manufacturer;
 use App\Models\ManufacturerAffiliation;
 use App\Models\Product;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -19,7 +21,8 @@ class ManufacturerController extends Controller
         $user = $request->user();
 
         $query = Manufacturer::where('is_active', true)
-            ->withCount('users');
+            ->with(['catalogSetting'])
+            ->withCount(['users', 'products']);
 
         // Search
         if ($search = $request->input('search')) {
@@ -38,12 +41,20 @@ class ManufacturerController extends Controller
             ->pluck('id', 'manufacturer_id')
             ->toArray();
 
-        $manufacturers = $query->get()->map(function ($manufacturer) use ($userAffiliations, $affiliationIds) {
+        $catalogMediaDisk = (string) config('filesystems.catalog_media_disk', 'public');
+        $manufacturers = $query->get()->map(function ($manufacturer) use ($userAffiliations, $affiliationIds, $catalogMediaDisk) {
+            $logoPath = $manufacturer->catalogSetting?->logo_path ?? $manufacturer->logo_path;
+
             return [
                 'id' => $manufacturer->id,
                 'name' => $manufacturer->name,
                 'slug' => $manufacturer->slug,
                 'users_count' => $manufacturer->users_count,
+                'products_count' => $manufacturer->products_count,
+                'city' => $manufacturer->city,
+                'state' => $manufacturer->state,
+                'tagline' => $manufacturer->catalogSetting?->tagline,
+                'logo_url' => $logoPath ? Storage::disk($catalogMediaDisk)->url($logoPath) : null,
                 'affiliation_status' => $userAffiliations[$manufacturer->id] ?? 'none',
                 'affiliation_id' => $affiliationIds[$manufacturer->id] ?? null,
             ];
@@ -75,12 +86,28 @@ class ManufacturerController extends Controller
                 'status' => $status ?? 'all',
                 'sort' => $sort,
             ],
+            'profile' => $user->salesRepresentativeProfile ? [
+                'whatsapp' => $user->salesRepresentativeProfile->whatsapp,
+                'city' => $user->salesRepresentativeProfile->city,
+                'state' => $user->salesRepresentativeProfile->state,
+                'territory' => $user->salesRepresentativeProfile->territory,
+                'presentation' => $user->salesRepresentativeProfile->presentation,
+            ] : null,
         ]);
     }
 
-    public function affiliate(Manufacturer $manufacturer): RedirectResponse
+    public function affiliate(StoreRepresentativeApplicationRequest $request, Manufacturer $manufacturer): RedirectResponse
     {
-        $user = auth()->user();
+        $user = $request->user();
+        $data = $request->validated();
+
+        $user->salesRepresentativeProfile()->updateOrCreate([], [
+            'whatsapp' => $data['whatsapp'],
+            'city' => $data['city'],
+            'state' => $data['state'],
+            'territory' => $data['territory'],
+            'presentation' => $data['presentation'],
+        ]);
 
         // Check if already has an affiliation
         $existing = ManufacturerAffiliation::where('manufacturer_id', $manufacturer->id)
@@ -97,9 +124,18 @@ class ManufacturerController extends Controller
             }
 
             // Allow re-request for rejected/revoked
-            $existing->update(['status' => 'pending']);
+            $existing->update([
+                'status' => 'pending',
+                'source' => 'request',
+                'application_note' => $data['application_note'],
+                'requested_at' => now(),
+                'approved_at' => null,
+                'rejected_at' => null,
+                'revoked_at' => null,
+                'decided_by_user_id' => null,
+            ]);
 
-            return redirect()->back()->with('success', 'Solicitação de afiliação reenviada com sucesso!');
+            return redirect()->back()->with('status', 'Sua apresentação foi reenviada para análise.');
         }
 
         // Create new affiliation request
@@ -107,9 +143,12 @@ class ManufacturerController extends Controller
             'manufacturer_id' => $manufacturer->id,
             'user_id' => $user->id,
             'status' => 'pending',
+            'source' => 'request',
+            'application_note' => $data['application_note'],
+            'requested_at' => now(),
         ]);
 
-        return redirect()->back()->with('success', 'Solicitação de afiliação enviada com sucesso!');
+        return redirect()->back()->with('status', 'Sua apresentação chegou ao fabricante.');
     }
 
     public function catalog(Manufacturer $manufacturer): Response

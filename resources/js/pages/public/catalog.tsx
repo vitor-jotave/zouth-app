@@ -1,14 +1,18 @@
 import { Head, router } from '@inertiajs/react';
 import {
     AlertCircle,
+    ArrowRight,
     Box,
     Check,
+    ChevronDown,
     ChevronLeft,
     ChevronRight,
+    Circle,
     ClipboardCopy,
     Filter,
     Heart,
     Maximize2,
+    MessageCircle,
     Minus,
     Package,
     Plus,
@@ -61,6 +65,12 @@ import {
     SheetTitle,
 } from '@/components/ui/sheet';
 import { LAYOUT_TOKENS, PATTERNS, GRADIENTS } from '@/lib/catalog-theming';
+import {
+    evaluateOrderRules,
+    pendingRuleProgress,
+    type OrderRuleContract,
+} from '@/lib/order-rules';
+import { cn } from '@/lib/utils';
 
 interface Manufacturer {
     id: number;
@@ -72,14 +82,21 @@ interface CatalogSettings {
     brand_name: string;
     show_brand_name: boolean;
     show_logo: boolean;
+    hide_prices: boolean;
     tagline?: string | null;
     description?: string | null;
     logo_url?: string | null;
+    cover_image_url?: string | null;
+    cover_thumbnail_url?: string | null;
+    cover_image_focal_x?: number | null;
+    cover_image_focal_y?: number | null;
     primary_color: string;
     secondary_color: string;
     accent_color: string;
     background_color: string;
     font_family: string;
+    heading_font_family?: string | null;
+    body_font_family?: string | null;
     // Premium fields
     layout_preset: string;
     layout_density: string;
@@ -107,9 +124,13 @@ interface Product {
     name: string;
     sku: string;
     description?: string | null;
+    category_id?: number | null;
     category?: string | null;
     primary_image?: string | null;
+    primary_thumbnail?: string | null;
     images: string[];
+    thumbnails?: string[];
+    videos?: string[];
     variations: Array<{
         type_name: string;
         is_color_type: boolean;
@@ -141,8 +162,21 @@ interface Paginated<T> {
     meta?: {
         current_page: number;
         last_page: number;
+        total?: number;
         links?: Array<{ url: string | null; label: string; active: boolean }>;
     };
+}
+
+type ProductPresentation = 'editorial' | 'commercial';
+
+interface ProductDisplayOptions {
+    presentation: ProductPresentation;
+    showPrice: boolean;
+    showSku: boolean;
+    showStock: boolean;
+    showVariations: boolean;
+    showAction: boolean;
+    showBadges: boolean;
 }
 
 interface Props {
@@ -153,6 +187,12 @@ interface Props {
     catalog_token: string;
     filters: CatalogFilters;
     filter_options: CatalogFilterOptions;
+    order_rules: OrderRuleContract[];
+    whatsapp_checkout: {
+        enabled: boolean;
+        available: boolean;
+        base_url?: string | null;
+    };
 }
 
 interface CatalogFilters {
@@ -250,6 +290,87 @@ function formatPrice(priceCents?: number | null): string {
         style: 'currency',
         currency: 'BRL',
     }).format(priceCents / 100);
+}
+
+function orderRuleBenefitLabel(rule: OrderRuleContract): string {
+    if (rule.action.type === 'percentage_discount') {
+        return `${new Intl.NumberFormat('pt-BR', {
+            maximumFractionDigits: 2,
+        }).format((rule.action.value ?? 0) / 100)}% de desconto`;
+    }
+
+    return `${formatPrice(rule.action.value)} de desconto`;
+}
+
+function orderRuleRemainingLabel(
+    rule: OrderRuleContract,
+    remaining: number,
+): string {
+    const metric = rule.conditions[0]?.metric;
+
+    if (metric === 'subtotal_cents') {
+        return formatPrice(remaining);
+    }
+
+    if (metric === 'distinct_products') {
+        return `${remaining} ${remaining === 1 ? 'modelo' : 'modelos'}`;
+    }
+
+    return `${remaining} ${remaining === 1 ? 'peça' : 'peças'}`;
+}
+
+function orderRuleRequirementLabel(
+    rule: OrderRuleContract,
+    remaining: number,
+): string {
+    const metric = rule.conditions[0]?.metric;
+
+    if (metric === 'subtotal_cents') {
+        return `${formatPrice(remaining)} para alcançar o pedido mínimo`;
+    }
+
+    if (metric === 'distinct_products') {
+        return `${remaining} ${remaining === 1 ? 'modelo' : 'modelos'} para completar a variedade`;
+    }
+
+    if (metric === 'total_quantity') {
+        return `${remaining} ${remaining === 1 ? 'peça' : 'peças'} para completar o mínimo`;
+    }
+
+    return (
+        rule.public_message ??
+        'Este pedido ainda não atende a uma condição comercial.'
+    );
+}
+
+function blockingRuleRemaining(
+    rule: OrderRuleContract,
+    currentValues: number[],
+): number | null {
+    if (rule.conditions.length !== 1) {
+        return null;
+    }
+
+    const condition = rule.conditions[0];
+    const current = currentValues[0] ?? 0;
+
+    if (condition.operator === 'lte') {
+        return Math.max(0, condition.value + 1 - current);
+    }
+
+    return null;
+}
+
+function booleanSetting(value: unknown, fallback: boolean): boolean {
+    return typeof value === 'boolean' ? value : fallback;
+}
+
+function percentageSetting(value: number | null | undefined): number {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+        return 50;
+    }
+
+    return Math.min(100, Math.max(0, value));
 }
 
 function variationSummary(key: Record<string, string> | null): string | null {
@@ -449,6 +570,7 @@ function ProductImageSlider({
     style,
     children,
     onOpen,
+    useThumbnails = true,
 }: {
     product: Product;
     className: string;
@@ -459,20 +581,38 @@ function ProductImageSlider({
     style?: CSSProperties;
     children?: ReactNode;
     onOpen?: () => void;
+    useThumbnails?: boolean;
 }) {
-    const productImages = product.images ?? [];
+    const productImages = useThumbnails
+        ? (product.thumbnails ?? product.images ?? [])
+        : (product.images ?? []);
+    const primaryImage = useThumbnails
+        ? (product.primary_thumbnail ?? product.primary_image)
+        : product.primary_image;
     const images =
         productImages.length > 0
             ? productImages
-            : product.primary_image
-              ? [product.primary_image]
+            : primaryImage
+              ? [primaryImage]
               : [];
     const [currentIndex, setCurrentIndex] = useState(0);
     const currentImage = images[currentIndex] ?? null;
+    const [failedImages, setFailedImages] = useState<string[]>([]);
+    const currentOriginalImage =
+        product.images?.[currentIndex] ?? product.primary_image ?? null;
+    const visibleImage = [
+        currentImage,
+        currentOriginalImage,
+        product.primary_image,
+    ].find(
+        (image): image is string =>
+            Boolean(image) && !failedImages.includes(image as string),
+    );
     const hasMultipleImages = images.length > 1;
 
     useEffect(() => {
         setCurrentIndex(0);
+        setFailedImages([]);
     }, [product.id, images.length]);
 
     const showPrevious = (event: MouseEvent<HTMLButtonElement>) => {
@@ -522,11 +662,20 @@ function ProductImageSlider({
             }}
             aria-label={onOpen ? `Ver detalhes de ${product.name}` : undefined}
         >
-            {currentImage ? (
+            {visibleImage ? (
                 <img
-                    src={currentImage}
+                    src={visibleImage}
                     alt={product.name}
+                    loading={useThumbnails ? 'lazy' : 'eager'}
+                    decoding="async"
                     className={imageClassName}
+                    onError={() =>
+                        setFailedImages((current) =>
+                            current.includes(visibleImage)
+                                ? current
+                                : [...current, visibleImage],
+                        )
+                    }
                 />
             ) : (
                 <div className={placeholderClassName} style={placeholderStyle}>
@@ -591,12 +740,13 @@ function ComboImageMosaic({
     className: string;
     onOpen: () => void;
 }) {
-    const productImages = product.images ?? [];
+    const productImages = product.thumbnails ?? product.images ?? [];
+    const primaryImage = product.primary_thumbnail ?? product.primary_image;
     const images = (
         productImages.length > 0
             ? productImages
-            : product.primary_image
-              ? [product.primary_image]
+            : primaryImage
+              ? [primaryImage]
               : []
     ).slice(0, 4);
 
@@ -624,6 +774,8 @@ function ComboImageMosaic({
                 <img
                     src={images[0]}
                     alt={product.name}
+                    loading="lazy"
+                    decoding="async"
                     className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                 />
             </button>
@@ -644,6 +796,8 @@ function ComboImageMosaic({
                     key={`${image}-${index}`}
                     src={image}
                     alt={`${product.name} ${index + 1}`}
+                    loading="lazy"
+                    decoding="async"
                     className={`h-full w-full object-cover transition-transform duration-500 group-hover:scale-105 ${
                         images.length === 3 && index === 0 ? 'row-span-2' : ''
                     }`}
@@ -659,18 +813,24 @@ function ProductQuickViewModal({
     isAdded,
     primaryColor,
     accentColor,
+    showPrice,
     onClose,
     onSelectVariation,
     onAddToCart,
+    headingFont,
+    bodyFont,
 }: {
     product: Product | null;
     selectedValues: Record<string, string>;
     isAdded: boolean;
     primaryColor: string;
     accentColor: string;
+    showPrice: boolean;
     onClose: () => void;
     onSelectVariation: (variationName: string, value: string) => void;
     onAddToCart: (product: Product) => void;
+    headingFont?: string;
+    bodyFont?: string;
 }) {
     if (!product) {
         return null;
@@ -684,10 +844,14 @@ function ProductQuickViewModal({
             open={Boolean(product)}
             onOpenChange={(open) => !open && onClose()}
         >
-            <DialogContent className="max-h-[92vh] overflow-y-auto p-0 sm:max-w-5xl">
+            <DialogContent
+                className="max-h-[92vh] overflow-y-auto p-0 sm:max-w-5xl"
+                style={{ fontFamily: bodyFont }}
+            >
                 <div className="grid gap-0 lg:grid-cols-[minmax(0,1.08fr)_minmax(360px,0.92fr)]">
                     <ProductImageSlider
                         product={product}
+                        useThumbnails={false}
                         className="aspect-4/5 bg-gray-100 lg:min-h-[620px]"
                         imageClassName="h-full w-full object-cover"
                     />
@@ -704,7 +868,10 @@ function ProductQuickViewModal({
                                     <Badge variant="outline">Combo</Badge>
                                 )}
                             </div>
-                            <DialogTitle className="text-2xl font-semibold tracking-tight">
+                            <DialogTitle
+                                className="text-2xl font-semibold tracking-tight"
+                                style={{ fontFamily: headingFont }}
+                            >
                                 {product.name}
                             </DialogTitle>
                             <DialogDescription className="text-sm">
@@ -712,16 +879,18 @@ function ProductQuickViewModal({
                             </DialogDescription>
                         </DialogHeader>
 
-                        <p
-                            className={`text-lg font-semibold ${product.price_cents == null ? 'italic opacity-55' : ''}`}
-                            style={
-                                product.price_cents != null
-                                    ? { color: primaryColor }
-                                    : {}
-                            }
-                        >
-                            {formatPrice(product.price_cents)}
-                        </p>
+                        {showPrice && (
+                            <p
+                                className={`text-lg font-semibold ${product.price_cents == null ? 'italic opacity-55' : ''}`}
+                                style={
+                                    product.price_cents != null
+                                        ? { color: primaryColor }
+                                        : {}
+                                }
+                            >
+                                {formatPrice(product.price_cents)}
+                            </p>
+                        )}
 
                         {product.description && (
                             <div className="space-y-2 border-t pt-5">
@@ -811,10 +980,16 @@ function CatalogFiltersDrawer({
     catalogToken,
     filters,
     filterOptions,
+    compact = false,
+    headingFont,
+    bodyFont,
 }: {
     catalogToken: string;
     filters: CatalogFilters;
     filterOptions: CatalogFilterOptions;
+    compact?: boolean;
+    headingFont?: string;
+    bodyFont?: string;
 }) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState(filters.search ?? '');
@@ -916,15 +1091,25 @@ function CatalogFiltersDrawer({
     };
 
     return (
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white/55 p-3 shadow-sm ring-1 ring-black/5 backdrop-blur-md">
-            <div className="flex items-center gap-2 text-sm font-medium opacity-80">
-                <Filter className="h-4 w-4" />
-                <span>
-                    {appliedCount > 0
-                        ? `${appliedCount} filtros ativos`
-                        : 'Filtros'}
-                </span>
-            </div>
+        <div
+            data-testid="catalog-filters-drawer"
+            className={cn(
+                'flex flex-wrap items-center gap-3',
+                compact
+                    ? 'mb-0 justify-end'
+                    : 'mb-6 justify-between rounded-xl bg-white/55 p-3 shadow-sm ring-1 ring-black/5 backdrop-blur-md',
+            )}
+        >
+            {!compact && (
+                <div className="flex items-center gap-2 text-sm font-medium opacity-80">
+                    <Filter className="h-4 w-4" />
+                    <span>
+                        {appliedCount > 0
+                            ? `${appliedCount} filtros ativos`
+                            : 'Filtros'}
+                    </span>
+                </div>
+            )}
             <button
                 type="button"
                 onClick={() => setOpen(true)}
@@ -941,9 +1126,15 @@ function CatalogFiltersDrawer({
             </button>
 
             <Sheet open={open} onOpenChange={setOpen}>
-                <SheetContent side="left" className="w-[92vw] sm:max-w-md">
+                <SheetContent
+                    side="left"
+                    className="w-[92vw] sm:max-w-md"
+                    style={{ fontFamily: bodyFont }}
+                >
                     <SheetHeader>
-                        <SheetTitle>Filtros</SheetTitle>
+                        <SheetTitle style={{ fontFamily: headingFont }}>
+                            Filtros
+                        </SheetTitle>
                         <SheetDescription>
                             Refine os produtos do catálogo
                         </SheetDescription>
@@ -1117,13 +1308,17 @@ function CatalogCollections({
     filters,
     categories,
     variant,
+    display = 'chips',
+    trailingAction,
 }: {
     catalogToken: string;
     filters: CatalogFilters;
     categories: CatalogFilterOptions['categories'];
     variant: 'minimal' | 'playful' | 'boutique';
+    display?: string;
+    trailingAction?: ReactNode;
 }) {
-    if (categories.length === 0) {
+    if (categories.length === 0 && !trailingAction) {
         return null;
     }
 
@@ -1204,25 +1399,51 @@ function CatalogCollections({
     }
 
     return (
-        <section className="mb-6 flex flex-wrap items-center gap-2">
-            {categories.map((category) => {
-                const active = filters.category_id === String(category.id);
+        <section
+            data-testid="catalog-collection-navigation"
+            className={cn(
+                'mb-6 flex flex-col gap-3 sm:flex-row sm:items-center',
+                display === 'tabs' && 'border-b border-black/10',
+            )}
+        >
+            <div
+                className={cn(
+                    'flex min-w-0 flex-1 flex-wrap items-center',
+                    display === 'tabs' ? 'gap-x-6 gap-y-1' : 'gap-2',
+                )}
+            >
+                {categories.map((category) => {
+                    const active = filters.category_id === String(category.id);
 
-                return (
-                    <button
-                        key={category.id}
-                        type="button"
-                        onClick={() => selectCategory(category.id)}
-                        className={`rounded-full px-4 py-2 text-sm font-medium shadow-sm ring-1 transition ${
-                            active
-                                ? 'bg-[var(--brand-primary)] text-white ring-[var(--brand-primary)]'
-                                : 'bg-white/65 ring-black/10 hover:bg-white'
-                        }`}
-                    >
-                        {category.name}
-                    </button>
-                );
-            })}
+                    return (
+                        <button
+                            key={category.id}
+                            type="button"
+                            onClick={() => selectCategory(category.id)}
+                            className={cn(
+                                'text-sm font-medium transition',
+                                display === 'tabs'
+                                    ? '-mb-px border-b-2 px-0 py-3'
+                                    : 'rounded-full px-4 py-2 shadow-sm ring-1',
+                                display === 'tabs'
+                                    ? active
+                                        ? 'border-[var(--brand-primary)] opacity-100'
+                                        : 'border-transparent opacity-50 hover:opacity-80'
+                                    : active
+                                      ? 'bg-[var(--brand-primary)] text-white ring-[var(--brand-primary)]'
+                                      : 'bg-white/65 ring-black/10 hover:bg-white',
+                            )}
+                        >
+                            {category.name}
+                        </button>
+                    );
+                })}
+            </div>
+            {trailingAction && (
+                <div className="shrink-0 self-end py-2 sm:self-center">
+                    {trailingAction}
+                </div>
+            )}
         </section>
     );
 }
@@ -1284,6 +1505,107 @@ function ComboSummary({ product }: { product: Product }) {
     );
 }
 
+function comboPieceCount(product: Product): number {
+    if (product.product_type !== 'combo') {
+        return 1;
+    }
+
+    return product.combo_items.reduce(
+        (total, comboItem) => total + comboItem.quantity,
+        0,
+    );
+}
+
+function comboModelCount(product: Product): number {
+    return new Set(product.combo_items.map((comboItem) => comboItem.product_id))
+        .size;
+}
+
+function buildWhatsappCartMessage(
+    brandName: string,
+    cart: CartItem[],
+    cartSelectionLabel: string,
+    cartPieceLabel: string,
+    catalogUrl: string,
+): string {
+    const itemLines = cart.map((item) => {
+        const details = [
+            `SKU ${item.product.sku}`,
+            variationSummary(item.selected_variations ?? null),
+            item.product.product_type === 'combo'
+                ? `${comboPieceCount(item.product)} peças · ${comboModelCount(item.product)} modelos`
+                : null,
+        ].filter(Boolean);
+
+        return `• ${item.quantity}x ${item.product.name} — ${details.join(' · ')}`;
+    });
+
+    return [
+        `Olá! Montei uma seleção no catálogo da ${brandName} e gostaria de falar com o comercial.`,
+        '',
+        ...itemLines,
+        '',
+        `${cartSelectionLabel} · ${cartPieceLabel}`,
+        `Catálogo: ${catalogUrl}`,
+    ].join('\n');
+}
+
+function catalogUrlForWhatsapp(): string {
+    if (typeof window === 'undefined') {
+        return '';
+    }
+
+    const currentUrl = new URL(window.location.href);
+    const representativeReference = currentUrl.searchParams.get('ref');
+
+    currentUrl.search = '';
+    currentUrl.hash = '';
+
+    if (representativeReference) {
+        currentUrl.searchParams.set('ref', representativeReference);
+    }
+
+    return currentUrl.toString();
+}
+
+function CartComboSummary({ product }: { product: Product }) {
+    if (product.product_type !== 'combo' || product.combo_items.length === 0) {
+        return null;
+    }
+
+    return (
+        <details className="group mt-4 border-t border-[#d8d3cb] pt-3">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-[#18181f] transition-colors outline-none hover:text-[#ff4d3d] focus-visible:ring-1 focus-visible:ring-[#ff4d3d] focus-visible:ring-offset-1 [&::-webkit-details-marker]:hidden">
+                <span>Ver composição</span>
+                <span className="flex items-center gap-2 text-xs font-normal text-[#716f68]">
+                    <span className="hidden sm:inline">
+                        {comboPieceCount(product)} peças ·{' '}
+                        {comboModelCount(product)} modelos
+                    </span>
+                    <ChevronDown className="size-4 transition-transform duration-200 group-open:rotate-180" />
+                </span>
+            </summary>
+            <ul className="grid gap-2 pt-2 pb-1 text-xs leading-5 text-[#716f68]">
+                {product.combo_items.map((comboItem, index) => (
+                    <li
+                        key={`${comboItem.product_id}-${index}`}
+                        className="flex justify-between gap-4 border-t border-[#e7e3dc] pt-2 first:border-0 first:pt-0"
+                    >
+                        <span>
+                            {comboItem.quantity}x {comboItem.product_name}
+                        </span>
+                        {variationSummary(comboItem.variation_key) && (
+                            <span className="shrink-0 text-right">
+                                {variationSummary(comboItem.variation_key)}
+                            </span>
+                        )}
+                    </li>
+                ))}
+            </ul>
+        </details>
+    );
+}
+
 function ComboGridSection({
     combos,
     settings,
@@ -1291,6 +1613,8 @@ function ComboGridSection({
     onAddToCart,
     onOpenQuickView,
     addedProductId,
+    displayOptions,
+    headingFont,
 }: {
     combos: Product[];
     settings: CatalogSettings;
@@ -1298,9 +1622,148 @@ function ComboGridSection({
     onAddToCart: (product: Product) => void;
     onOpenQuickView: (product: Product) => void;
     addedProductId: number | null;
+    displayOptions?: ProductDisplayOptions;
+    headingFont?: string;
 }) {
     if (combos.length === 0) {
         return null;
+    }
+
+    const options: ProductDisplayOptions = displayOptions ?? {
+        presentation: 'commercial',
+        showPrice: !settings.hide_prices,
+        showSku: true,
+        showStock: true,
+        showVariations: true,
+        showAction: true,
+        showBadges: true,
+    };
+
+    if (variant === 'minimal' && options.presentation === 'editorial') {
+        return (
+            <section className="mb-12 border-b border-black/10 pb-12">
+                <div className="mb-6 flex items-end justify-between gap-6">
+                    <div>
+                        <p className="text-xs font-semibold tracking-[0.16em] uppercase opacity-45">
+                            Composições coordenadas
+                        </p>
+                        <h3
+                            className="mt-2 text-2xl font-semibold tracking-[-0.04em] sm:text-3xl"
+                            style={{ fontFamily: headingFont }}
+                        >
+                            Looks completos
+                        </h3>
+                    </div>
+                    <span className="text-xs opacity-45">
+                        {combos.length}{' '}
+                        {combos.length === 1 ? 'composição' : 'composições'}
+                    </span>
+                </div>
+
+                <div
+                    className="grid grid-cols-1 gap-x-5 gap-y-10 sm:grid-cols-2 md:grid-cols-3"
+                    style={{
+                        gap:
+                            settings.layout_density === 'compact'
+                                ? '1.5rem'
+                                : undefined,
+                    }}
+                >
+                    {combos.map((combo) => {
+                        const isAdded = addedProductId === combo.id;
+                        const availableStock = combo.total_stock;
+
+                        return (
+                            <article key={combo.id} className="group min-w-0">
+                                <ComboImageMosaic
+                                    product={combo}
+                                    className="aspect-4/5 bg-black/5"
+                                    onOpen={() => onOpenQuickView(combo)}
+                                />
+
+                                <div className="pt-4">
+                                    {options.showBadges && combo.category && (
+                                        <p className="mb-2 text-[0.67rem] font-semibold tracking-[0.14em] uppercase opacity-45">
+                                            {combo.category}
+                                        </p>
+                                    )}
+                                    <div className="flex items-start justify-between gap-4">
+                                        <h4
+                                            className="text-lg leading-tight font-semibold tracking-[-0.03em]"
+                                            style={{ fontFamily: headingFont }}
+                                        >
+                                            {combo.name}
+                                        </h4>
+                                        {options.showPrice && (
+                                            <p
+                                                className={cn(
+                                                    'shrink-0 text-sm font-semibold',
+                                                    combo.price_cents == null &&
+                                                        'italic opacity-50',
+                                                )}
+                                            >
+                                                {formatPrice(combo.price_cents)}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {(options.showSku || options.showStock) && (
+                                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[0.7rem] opacity-50">
+                                            {options.showSku && (
+                                                <span>SKU {combo.sku}</span>
+                                            )}
+                                            {options.showStock && (
+                                                <span>
+                                                    {combo.total_stock}{' '}
+                                                    {combo.total_stock === 1
+                                                        ? 'unidade'
+                                                        : 'unidades'}
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {options.showAction && (
+                                        <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-black/10 pt-3 text-xs font-semibold">
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    onAddToCart(combo)
+                                                }
+                                                disabled={availableStock === 0}
+                                                aria-live="polite"
+                                                className="inline-flex items-center gap-1.5 transition-opacity hover:opacity-60 disabled:cursor-not-allowed disabled:opacity-35"
+                                                style={{
+                                                    color: isAdded
+                                                        ? settings.accent_color
+                                                        : settings.primary_color,
+                                                }}
+                                            >
+                                                <AddToCartContent
+                                                    isAdded={isAdded}
+                                                    availableStock={
+                                                        availableStock
+                                                    }
+                                                />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    onOpenQuickView(combo)
+                                                }
+                                                className="opacity-55 transition-opacity hover:opacity-100"
+                                            >
+                                                Ver composição
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </article>
+                        );
+                    })}
+                </div>
+            </section>
+        );
     }
 
     const sectionClasses = {
@@ -1395,66 +1858,84 @@ function ComboGridSection({
                                                     ? 'font-serif text-lg font-light tracking-wide'
                                                     : 'text-base font-semibold'
                                             }
+                                            style={{ fontFamily: headingFont }}
                                         >
                                             {combo.name}
                                         </h3>
-                                        <p className="text-xs opacity-55">
-                                            SKU {combo.sku}
-                                        </p>
-                                    </div>
-
-                                    <p
-                                        className={`text-sm font-semibold ${combo.price_cents == null ? 'italic opacity-50' : ''}`}
-                                        style={
-                                            combo.price_cents != null
-                                                ? {
-                                                      color: settings.primary_color,
-                                                  }
-                                                : {}
-                                        }
-                                    >
-                                        {formatPrice(combo.price_cents)}
-                                    </p>
-
-                                    <div className="flex flex-wrap items-center gap-2 text-xs opacity-65">
-                                        {combo.category && (
-                                            <Badge variant="outline">
-                                                {combo.category}
-                                            </Badge>
+                                        {options.showSku && (
+                                            <p className="text-xs opacity-55">
+                                                SKU {combo.sku}
+                                            </p>
                                         )}
-                                        <span>
-                                            {combo.total_stock} disponível(is)
-                                        </span>
                                     </div>
 
-                                    <div className="flex flex-wrap gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => onAddToCart(combo)}
-                                            disabled={availableStock === 0}
-                                            aria-live="polite"
-                                            className="inline-flex min-w-28 items-center justify-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                                            style={{
-                                                backgroundColor: isAdded
-                                                    ? settings.accent_color
-                                                    : settings.primary_color,
-                                            }}
-                                        >
-                                            <AddToCartContent
-                                                isAdded={isAdded}
-                                                availableStock={availableStock}
-                                            />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                onOpenQuickView(combo)
+                                    {options.showPrice && (
+                                        <p
+                                            className={`text-sm font-semibold ${combo.price_cents == null ? 'italic opacity-50' : ''}`}
+                                            style={
+                                                combo.price_cents != null
+                                                    ? {
+                                                          color: settings.primary_color,
+                                                      }
+                                                    : {}
                                             }
-                                            className="inline-flex min-w-24 items-center justify-center rounded-md bg-white/70 px-3 py-1.5 text-xs font-semibold shadow-sm ring-1 ring-black/10 transition hover:bg-white"
                                         >
-                                            Ver combo
-                                        </button>
-                                    </div>
+                                            {formatPrice(combo.price_cents)}
+                                        </p>
+                                    )}
+
+                                    {(options.showBadges ||
+                                        options.showStock) && (
+                                        <div className="flex flex-wrap items-center gap-2 text-xs opacity-65">
+                                            {options.showBadges &&
+                                                combo.category && (
+                                                    <Badge variant="outline">
+                                                        {combo.category}
+                                                    </Badge>
+                                                )}
+                                            {options.showStock && (
+                                                <span>
+                                                    {combo.total_stock}{' '}
+                                                    disponível(is)
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {options.showAction && (
+                                        <div className="flex flex-wrap gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    onAddToCart(combo)
+                                                }
+                                                disabled={availableStock === 0}
+                                                aria-live="polite"
+                                                className="inline-flex min-w-28 items-center justify-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                                style={{
+                                                    backgroundColor: isAdded
+                                                        ? settings.accent_color
+                                                        : settings.primary_color,
+                                                }}
+                                            >
+                                                <AddToCartContent
+                                                    isAdded={isAdded}
+                                                    availableStock={
+                                                        availableStock
+                                                    }
+                                                />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    onOpenQuickView(combo)
+                                                }
+                                                className="inline-flex min-w-24 items-center justify-center rounded-md bg-white/70 px-3 py-1.5 text-xs font-semibold shadow-sm ring-1 ring-black/10 transition hover:bg-white"
+                                            >
+                                                Ver combo
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </article>
                         );
@@ -1495,6 +1976,8 @@ function formatZipCode(value: string): string {
 }
 
 const fontMap: Record<string, string> = {
+    sora: '"Sora", "Helvetica Neue", Arial, sans-serif',
+    manrope: '"Manrope", "Helvetica Neue", Arial, sans-serif',
     'space-grotesk': '"Space Grotesk", "Helvetica Neue", Arial, sans-serif',
     fraunces: '"Fraunces", "Times New Roman", serif',
     'ibm-plex': '"IBM Plex Sans", "Helvetica Neue", Arial, sans-serif',
@@ -1516,25 +1999,116 @@ function MinimalLayout({
     filterOptions,
     onSelectVariation,
 }: LayoutProps) {
-    const heroEnabled =
-        settings.sections?.find((s) => s.type === 'hero')?.enabled ?? true;
-    const productGridEnabled =
-        settings.sections?.find((s) => s.type === 'product_grid')?.enabled ??
-        true;
-    const collectionsEnabled =
-        settings.sections?.find((s) => s.type === 'collections')?.enabled ??
-        true;
+    const heroSection = settings.sections?.find((s) => s.type === 'hero');
+    const collectionsSection = settings.sections?.find(
+        (s) => s.type === 'collections',
+    );
+    const productGridSection = settings.sections?.find(
+        (s) => s.type === 'product_grid',
+    );
+    const heroEnabled = heroSection?.enabled ?? true;
+    const productGridEnabled = productGridSection?.enabled ?? true;
+    const collectionsEnabled = collectionsSection?.enabled ?? true;
     const showBrandName = settings.show_brand_name;
     const showLogo = settings.show_logo && Boolean(settings.logo_url);
+    const headingFont =
+        fontMap[settings.heading_font_family ?? settings.font_family] ??
+        fontMap['space-grotesk'];
+    const bodyFont =
+        fontMap[settings.body_font_family ?? settings.font_family] ??
+        fontMap['manrope'];
+    const heroHeadline =
+        (heroSection?.props?.headline as string | undefined) ||
+        settings.tagline ||
+        settings.brand_name ||
+        manufacturer.name;
+    const heroSubtitle =
+        (heroSection?.props?.subtitle as string | undefined) ||
+        settings.description;
+    const heroAlign =
+        (heroSection?.props?.align as string | undefined) ?? 'left';
+    const heroEyebrow =
+        (heroSection?.props?.eyebrow as string | undefined) ?? 'Nova coleção';
+    const showProductCount = booleanSetting(
+        heroSection?.props?.show_product_count,
+        false,
+    );
+    const showHeroCta = booleanSetting(heroSection?.props?.show_cta, true);
+    const heroCtaText =
+        (heroSection?.props?.cta_text as string | undefined) ||
+        'Conheça a coleção';
+    const collectionsDisplay =
+        (collectionsSection?.props?.display as string | undefined) ?? 'tabs';
+    const productColumns = Number(
+        productGridSection?.props?.columns_desktop ?? 3,
+    );
+    const productColumnsMobile = Number(
+        productGridSection?.props?.columns_mobile ?? 1,
+    );
+    const productPresentation: ProductPresentation =
+        productGridSection?.props?.presentation === 'editorial'
+            ? 'editorial'
+            : 'commercial';
+    const productDisplayOptions: ProductDisplayOptions = {
+        presentation: productPresentation,
+        showPrice:
+            !settings.hide_prices &&
+            booleanSetting(productGridSection?.props?.show_price, true),
+        showSku: booleanSetting(productGridSection?.props?.show_sku, true),
+        showStock: booleanSetting(productGridSection?.props?.show_stock, false),
+        showVariations: booleanSetting(
+            productGridSection?.props?.show_variations,
+            true,
+        ),
+        showAction: booleanSetting(
+            productGridSection?.props?.show_action,
+            true,
+        ),
+        showBadges: booleanSetting(
+            productGridSection?.props?.show_badges,
+            true,
+        ),
+    };
+    const comboDisplayOptions: ProductDisplayOptions = {
+        ...productDisplayOptions,
+        showStock: booleanSetting(productGridSection?.props?.show_stock, true),
+    };
+    const heroProduct = products.data.find((product) => product.primary_image);
+    const heroImage =
+        settings.cover_image_url ??
+        settings.cover_thumbnail_url ??
+        heroProduct?.primary_image ??
+        null;
+    const heroImagePosition = `${percentageSetting(settings.cover_image_focal_x)}% ${percentageSetting(settings.cover_image_focal_y)}%`;
+    const productCount = products.meta?.total ?? products.data.length;
+    const sectionOrder = (type: string): number => {
+        const index = settings.sections?.findIndex(
+            (section) => section.type === type,
+        );
+
+        if (index === undefined || index < 0) {
+            return type === 'hero' ? 0 : type === 'collections' ? 1 : 2;
+        }
+
+        return index;
+    };
 
     return (
-        <>
-            {/* Header compacto e minimalista */}
+        <div
+            className="flex flex-col"
+            style={{
+                fontFamily: bodyFont,
+                gap: settings.layout_density === 'compact' ? '2.5rem' : '4rem',
+            }}
+        >
             {heroEnabled && (
-                <header className="relative">
+                <header
+                    className="relative -mx-6 -mt-12"
+                    style={{ order: sectionOrder('hero') }}
+                >
                     <div
-                        className={`flex flex-col gap-4 pb-8 sm:flex-row sm:items-center ${
-                            showBrandName
+                        className={`absolute inset-x-0 top-0 z-20 flex flex-col gap-4 px-8 pt-8 sm:flex-row sm:items-center sm:px-10 sm:pt-10 ${
+                            showBrandName || showLogo || showProductCount
                                 ? 'sm:justify-between'
                                 : 'justify-center'
                         }`}
@@ -1559,12 +2133,15 @@ function MinimalLayout({
                                     />
                                 </div>
                             )}
-                            <div>
+                            <div className="min-w-0">
                                 {showBrandName && (
-                                    <h1 className="text-3xl font-bold tracking-tight">
+                                    <p
+                                        className="text-2xl font-semibold tracking-[-0.04em]"
+                                        style={{ fontFamily: headingFont }}
+                                    >
                                         {settings.brand_name ??
                                             manufacturer.name}
-                                    </h1>
+                                    </p>
                                 )}
                                 {settings.tagline && (
                                     <p className="mt-1 text-sm opacity-70">
@@ -1573,178 +2150,463 @@ function MinimalLayout({
                                 )}
                             </div>
                         </div>
-                        {showBrandName && (
+                        {showProductCount && (
                             <Badge className="bg-[var(--brand-primary)] text-white">
-                                {products.data.length} produtos
+                                {productCount}{' '}
+                                {productCount === 1 ? 'produto' : 'produtos'}
                             </Badge>
                         )}
                     </div>
-                    {settings.description && (
-                        <p className="max-w-3xl text-base opacity-80">
-                            {settings.description}
-                        </p>
-                    )}
+
+                    <div
+                        className={cn(
+                            'relative grid overflow-hidden bg-white/45',
+                            heroAlign === 'center'
+                                ? heroImage
+                                    ? 'min-h-[clamp(32rem,72vw,48rem)] place-items-center text-center text-white'
+                                    : 'text-center'
+                                : 'md:grid-cols-[0.8fr_1.2fr]',
+                        )}
+                    >
+                        {heroAlign === 'center' && heroImage && (
+                            <>
+                                <img
+                                    src={heroImage}
+                                    alt=""
+                                    loading="eager"
+                                    fetchPriority="high"
+                                    className="absolute inset-0 h-full w-full object-cover"
+                                    style={{
+                                        objectPosition: heroImagePosition,
+                                    }}
+                                />
+                                <div className="absolute inset-0 bg-black/35" />
+                            </>
+                        )}
+                        <div
+                            className={cn(
+                                'relative z-10 flex min-h-[24rem] flex-col justify-center px-8 pt-24 pb-10 sm:px-10 md:min-h-72 md:py-10',
+                                heroAlign === 'center' &&
+                                    'mx-auto max-w-4xl items-center py-16 sm:py-24',
+                            )}
+                        >
+                            <p
+                                className="text-xs font-semibold tracking-[0.16em] uppercase"
+                                style={{
+                                    color:
+                                        heroAlign === 'center' && heroImage
+                                            ? 'currentColor'
+                                            : 'var(--brand-accent)',
+                                }}
+                            >
+                                {heroEyebrow}
+                            </p>
+                            <h1
+                                className="mt-4 text-4xl leading-[0.98] font-semibold tracking-[-0.05em] sm:text-5xl lg:text-7xl"
+                                style={{ fontFamily: headingFont }}
+                            >
+                                {heroHeadline}
+                            </h1>
+                            {heroSubtitle && (
+                                <p className="mt-5 max-w-xl text-sm leading-6 opacity-65">
+                                    {heroSubtitle}
+                                </p>
+                            )}
+                            {showHeroCta &&
+                                productGridEnabled &&
+                                heroCtaText.trim() !== '' && (
+                                    <a
+                                        href="#catalog-products"
+                                        className="group mt-7 inline-flex min-h-10 w-fit items-center gap-2 border-b pb-1 text-xs font-semibold transition-opacity hover:opacity-70"
+                                        style={{
+                                            borderColor:
+                                                heroAlign === 'center' &&
+                                                heroImage
+                                                    ? 'currentColor'
+                                                    : 'var(--brand-accent)',
+                                            color:
+                                                heroAlign === 'center' &&
+                                                heroImage
+                                                    ? 'currentColor'
+                                                    : 'var(--brand-accent)',
+                                        }}
+                                    >
+                                        {heroCtaText}
+                                        <ChevronRight className="size-4 transition-transform group-hover:translate-x-1" />
+                                    </a>
+                                )}
+                        </div>
+                        {heroAlign !== 'center' && heroImage && (
+                            <div className="min-h-80 overflow-hidden md:min-h-[40rem]">
+                                <img
+                                    src={heroImage}
+                                    alt={heroHeadline}
+                                    loading="eager"
+                                    fetchPriority="high"
+                                    className="h-full min-h-80 w-full object-cover md:min-h-[40rem]"
+                                    style={{
+                                        objectPosition: heroImagePosition,
+                                    }}
+                                />
+                            </div>
+                        )}
+                    </div>
                 </header>
             )}
 
             {collectionsEnabled && (
-                <CatalogCollections
-                    catalogToken={catalogToken}
-                    filters={filters}
-                    categories={filterOptions.categories}
-                    variant="minimal"
-                />
+                <section style={{ order: sectionOrder('collections') }}>
+                    <CatalogCollections
+                        catalogToken={catalogToken}
+                        filters={filters}
+                        categories={filterOptions.categories}
+                        variant="minimal"
+                        display={collectionsDisplay}
+                        trailingAction={
+                            productGridEnabled ? (
+                                <CatalogFiltersDrawer
+                                    catalogToken={catalogToken}
+                                    filters={filters}
+                                    filterOptions={filterOptions}
+                                    compact
+                                    headingFont={headingFont}
+                                    bodyFont={bodyFont}
+                                />
+                            ) : undefined
+                        }
+                    />
+                </section>
             )}
 
             {productGridEnabled && (
-                <CatalogFiltersDrawer
-                    catalogToken={catalogToken}
-                    filters={filters}
-                    filterOptions={filterOptions}
-                />
-            )}
+                <section
+                    id="catalog-products"
+                    style={{ order: sectionOrder('product_grid') }}
+                >
+                    {!collectionsEnabled && (
+                        <div className="mb-6 flex justify-end border-b border-black/10 pb-4">
+                            <CatalogFiltersDrawer
+                                catalogToken={catalogToken}
+                                filters={filters}
+                                filterOptions={filterOptions}
+                                compact
+                                headingFont={headingFont}
+                                bodyFont={bodyFont}
+                            />
+                        </div>
+                    )}
 
-            <ComboGridSection
-                combos={combos}
-                settings={settings}
-                variant="minimal"
-                onAddToCart={onAddToCart}
-                onOpenQuickView={onOpenQuickView}
-                addedProductId={addedProductId}
-            />
+                    <ComboGridSection
+                        combos={combos}
+                        settings={settings}
+                        variant="minimal"
+                        onAddToCart={onAddToCart}
+                        onOpenQuickView={onOpenQuickView}
+                        addedProductId={addedProductId}
+                        displayOptions={comboDisplayOptions}
+                        headingFont={headingFont}
+                    />
 
-            {/* Grid de produtos minimalista */}
-            {productGridEnabled &&
-                (products.data.length === 0 ? (
-                    <div className="flex min-h-[400px] flex-col items-center justify-center gap-4 opacity-60">
-                        <Package className="h-16 w-16" />
-                        <p className="text-lg">Nenhum produto disponível</p>
-                    </div>
-                ) : (
-                    <div
-                        className="grid md:grid-cols-2 lg:grid-cols-3"
-                        style={{
-                            gap:
-                                settings.layout_density === 'compact'
-                                    ? '1.5rem'
-                                    : '2.5rem',
-                        }}
-                    >
-                        {products.data.map((product) => {
-                            const isAdded = addedProductId === product.id;
-                            const selectedValues =
-                                selectedVariations[product.id] ?? {};
-                            const availableStock = availableStockForSelection(
-                                product,
-                                selectedValues,
-                            );
-                            const canAdd =
-                                availableStock !== null && availableStock > 0;
+                    {products.data.length === 0 ? (
+                        <div className="flex min-h-[400px] flex-col items-center justify-center gap-4 border border-black/10 bg-white/30 opacity-60">
+                            <Package className="h-16 w-16" />
+                            <p className="text-lg">Nenhum produto disponível</p>
+                        </div>
+                    ) : (
+                        <div
+                            className={cn(
+                                'grid',
+                                productPresentation === 'editorial'
+                                    ? 'grid-cols-1'
+                                    : productColumnsMobile === 2
+                                      ? 'grid-cols-2'
+                                      : 'grid-cols-1',
+                                productColumns === 4
+                                    ? 'md:grid-cols-3 lg:grid-cols-4'
+                                    : 'md:grid-cols-3',
+                                productPresentation === 'editorial'
+                                    ? settings.layout_density === 'compact'
+                                        ? 'gap-x-3 gap-y-7 sm:gap-x-5 sm:gap-y-9'
+                                        : 'gap-x-4 gap-y-10 sm:gap-x-8 sm:gap-y-14'
+                                    : settings.layout_density === 'compact'
+                                      ? 'gap-5'
+                                      : 'gap-7 lg:gap-10',
+                            )}
+                        >
+                            {products.data.map((product) => {
+                                const isAdded = addedProductId === product.id;
+                                const selectedValues =
+                                    selectedVariations[product.id] ?? {};
+                                const availableStock =
+                                    availableStockForSelection(
+                                        product,
+                                        selectedValues,
+                                    );
+                                const canAdd =
+                                    availableStock !== null &&
+                                    availableStock > 0;
+                                const visibleStock =
+                                    availableStock ?? product.total_stock;
+                                const openOptionsInsteadOfAdding =
+                                    productPresentation === 'editorial' &&
+                                    product.variations.length > 0 &&
+                                    !canAdd;
 
-                            return (
-                                <article
-                                    key={product.id}
-                                    className="group overflow-hidden bg-white/50 backdrop-blur-sm transition-all hover:bg-white/70"
-                                    style={{
-                                        borderRadius: tokens.radius,
-                                        border:
-                                            settings.card_style === 'flat'
-                                                ? '2px solid rgba(0,0,0,0.08)'
-                                                : '1px solid rgba(0,0,0,0.05)',
-                                        boxShadow:
-                                            settings.card_style === 'soft'
-                                                ? '0 2px 8px rgba(0,0,0,0.04)'
-                                                : 'none',
-                                    }}
-                                >
-                                    <ProductImageSlider
-                                        product={product}
-                                        className="aspect-4/5 bg-gray-100"
-                                        imageClassName="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                                        onOpen={() => onOpenQuickView(product)}
-                                    />
-                                    <div
-                                        style={{ padding: tokens.cardPadding }}
-                                        className="space-y-2"
-                                    >
-                                        <h3 className="font-semibold">
-                                            {product.name}
-                                        </h3>
-                                        <p className="text-xs opacity-60">
-                                            SKU {product.sku}
-                                        </p>
-                                        <p
-                                            className={`text-sm font-semibold ${product.price_cents == null ? 'italic opacity-50' : ''}`}
-                                            style={
-                                                product.price_cents != null
-                                                    ? {
-                                                          color: 'var(--brand-primary)',
-                                                      }
-                                                    : {}
-                                            }
-                                        >
-                                            {formatPrice(product.price_cents)}
-                                        </p>
-                                        {product.product_type === 'combo' && (
-                                            <Badge variant="outline">
-                                                Combo
-                                            </Badge>
+                                return (
+                                    <article
+                                        key={product.id}
+                                        className={cn(
+                                            'group min-w-0',
+                                            productPresentation ===
+                                                'commercial' &&
+                                                'overflow-hidden bg-white/50 backdrop-blur-sm transition-all hover:bg-white/70',
                                         )}
-                                        <ComboSummary product={product} />
-                                        <ProductVariations
+                                        style={
+                                            productPresentation === 'commercial'
+                                                ? {
+                                                      border:
+                                                          settings.card_style ===
+                                                          'flat'
+                                                              ? '1px solid rgba(0,0,0,0.14)'
+                                                              : '1px solid rgba(0,0,0,0.05)',
+                                                      boxShadow:
+                                                          settings.card_style ===
+                                                          'soft'
+                                                              ? '0 10px 24px rgba(0,0,0,0.08)'
+                                                              : 'none',
+                                                  }
+                                                : undefined
+                                        }
+                                    >
+                                        <ProductImageSlider
                                             product={product}
-                                            selectedValues={selectedValues}
-                                            onSelect={(variationName, value) =>
-                                                onSelectVariation(
-                                                    product.id,
-                                                    variationName,
-                                                    value,
-                                                )
+                                            className="aspect-4/5 bg-black/5"
+                                            imageClassName="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                            onOpen={() =>
+                                                onOpenQuickView(product)
                                             }
                                         />
-                                        <div className="flex items-center justify-between">
-                                            {product.category && (
-                                                <Badge
-                                                    variant="outline"
-                                                    className="text-xs"
-                                                >
-                                                    {product.category}
-                                                </Badge>
+                                        <div
+                                            style={
+                                                productPresentation ===
+                                                'commercial'
+                                                    ? {
+                                                          padding:
+                                                              settings.layout_density ===
+                                                              'compact'
+                                                                  ? '1rem'
+                                                                  : tokens.cardPadding,
+                                                      }
+                                                    : undefined
+                                            }
+                                            className={cn(
+                                                'space-y-2',
+                                                productPresentation ===
+                                                    'editorial' && 'pt-4',
                                             )}
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    canAdd &&
-                                                    onAddToCart(product)
-                                                }
-                                                disabled={!canAdd}
-                                                aria-live="polite"
-                                                className={`inline-flex min-w-28 items-center justify-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${isAdded ? 'scale-[1.02] shadow-md' : ''}`}
+                                        >
+                                            {productDisplayOptions.showBadges &&
+                                                product.category &&
+                                                productPresentation ===
+                                                    'editorial' && (
+                                                    <p className="text-[0.67rem] font-semibold tracking-[0.14em] uppercase opacity-45">
+                                                        {product.category}
+                                                    </p>
+                                                )}
+                                            <h3
+                                                className={cn(
+                                                    'font-semibold tracking-[-0.025em]',
+                                                    productPresentation ===
+                                                        'editorial' &&
+                                                        'text-base leading-tight sm:text-lg',
+                                                )}
                                                 style={{
-                                                    backgroundColor: isAdded
-                                                        ? 'var(--brand-accent)'
-                                                        : 'var(--brand-primary)',
+                                                    fontFamily: headingFont,
                                                 }}
                                             >
-                                                <AddToCartContent
-                                                    isAdded={isAdded}
-                                                    availableStock={
-                                                        availableStock
+                                                {product.name}
+                                            </h3>
+                                            {productDisplayOptions.showSku && (
+                                                <p className="text-xs opacity-50">
+                                                    SKU {product.sku}
+                                                </p>
+                                            )}
+                                            {productDisplayOptions.showPrice && (
+                                                <p
+                                                    className={`text-sm font-semibold ${product.price_cents == null ? 'italic opacity-50' : ''}`}
+                                                    style={
+                                                        product.price_cents !=
+                                                        null
+                                                            ? {
+                                                                  color:
+                                                                      productPresentation ===
+                                                                      'editorial'
+                                                                          ? 'inherit'
+                                                                          : 'var(--brand-primary)',
+                                                              }
+                                                            : {}
+                                                    }
+                                                >
+                                                    {formatPrice(
+                                                        product.price_cents,
+                                                    )}
+                                                </p>
+                                            )}
+                                            {productDisplayOptions.showBadges &&
+                                                product.product_type ===
+                                                    'combo' && (
+                                                    <Badge variant="outline">
+                                                        Combo
+                                                    </Badge>
+                                                )}
+                                            {productPresentation ===
+                                                'commercial' && (
+                                                <ComboSummary
+                                                    product={product}
+                                                />
+                                            )}
+                                            {productDisplayOptions.showVariations && (
+                                                <ProductVariations
+                                                    product={product}
+                                                    selectedValues={
+                                                        selectedValues
+                                                    }
+                                                    onSelect={(
+                                                        variationName,
+                                                        value,
+                                                    ) =>
+                                                        onSelectVariation(
+                                                            product.id,
+                                                            variationName,
+                                                            value,
+                                                        )
                                                     }
                                                 />
-                                            </button>
+                                            )}
+                                            {(productDisplayOptions.showStock ||
+                                                productDisplayOptions.showAction ||
+                                                (productDisplayOptions.showBadges &&
+                                                    product.category &&
+                                                    productPresentation ===
+                                                        'commercial')) && (
+                                                <div
+                                                    className={cn(
+                                                        'flex items-center justify-between gap-3',
+                                                        productPresentation ===
+                                                            'editorial' &&
+                                                            'mt-4 border-t border-black/10 pt-3',
+                                                    )}
+                                                >
+                                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                                        {productDisplayOptions.showBadges &&
+                                                            product.category &&
+                                                            productPresentation ===
+                                                                'commercial' && (
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="text-xs"
+                                                                >
+                                                                    {
+                                                                        product.category
+                                                                    }
+                                                                </Badge>
+                                                            )}
+                                                        {productDisplayOptions.showStock && (
+                                                            <span className="text-[0.7rem] opacity-50">
+                                                                {visibleStock}{' '}
+                                                                {visibleStock ===
+                                                                1
+                                                                    ? 'unidade'
+                                                                    : 'unidades'}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {productDisplayOptions.showAction &&
+                                                        (productPresentation ===
+                                                        'editorial' ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    openOptionsInsteadOfAdding
+                                                                        ? onOpenQuickView(
+                                                                              product,
+                                                                          )
+                                                                        : canAdd &&
+                                                                          onAddToCart(
+                                                                              product,
+                                                                          )
+                                                                }
+                                                                disabled={
+                                                                    availableStock ===
+                                                                    0
+                                                                }
+                                                                aria-live="polite"
+                                                                className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold transition-opacity hover:opacity-60 disabled:cursor-not-allowed disabled:opacity-35"
+                                                                style={{
+                                                                    color: isAdded
+                                                                        ? 'var(--brand-accent)'
+                                                                        : 'var(--brand-primary)',
+                                                                }}
+                                                            >
+                                                                {openOptionsInsteadOfAdding ? (
+                                                                    'Ver opções'
+                                                                ) : (
+                                                                    <AddToCartContent
+                                                                        isAdded={
+                                                                            isAdded
+                                                                        }
+                                                                        availableStock={
+                                                                            availableStock
+                                                                        }
+                                                                    />
+                                                                )}
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    canAdd &&
+                                                                    onAddToCart(
+                                                                        product,
+                                                                    )
+                                                                }
+                                                                disabled={
+                                                                    !canAdd
+                                                                }
+                                                                aria-live="polite"
+                                                                className={`inline-flex min-w-28 items-center justify-center gap-1 px-3 py-2 text-xs font-medium text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${isAdded ? 'scale-[1.02]' : ''}`}
+                                                                style={{
+                                                                    backgroundColor:
+                                                                        isAdded
+                                                                            ? 'var(--brand-accent)'
+                                                                            : 'var(--brand-primary)',
+                                                                }}
+                                                            >
+                                                                <AddToCartContent
+                                                                    isAdded={
+                                                                        isAdded
+                                                                    }
+                                                                    availableStock={
+                                                                        availableStock
+                                                                    }
+                                                                />
+                                                            </button>
+                                                        ))}
+                                                </div>
+                                            )}
                                         </div>
-                                    </div>
-                                </article>
-                            );
-                        })}
-                    </div>
-                ))}
+                                    </article>
+                                );
+                            })}
+                        </div>
+                    )}
 
-            {productGridEnabled && (
-                <Pagination links={products.meta?.links ?? products.links} />
+                    <Pagination
+                        links={products.meta?.links ?? products.links}
+                    />
+                </section>
             )}
-        </>
+        </div>
     );
 }
 
@@ -1979,18 +2841,22 @@ function PlayfulLayout({
                                         <p className="text-xs font-semibold tracking-wide uppercase opacity-50">
                                             SKU {product.sku}
                                         </p>
-                                        <p
-                                            className={`text-base font-bold ${product.price_cents == null ? 'italic opacity-50' : ''}`}
-                                            style={
-                                                product.price_cents != null
-                                                    ? {
-                                                          color: settings.accent_color,
-                                                      }
-                                                    : {}
-                                            }
-                                        >
-                                            {formatPrice(product.price_cents)}
-                                        </p>
+                                        {!settings.hide_prices && (
+                                            <p
+                                                className={`text-base font-bold ${product.price_cents == null ? 'italic opacity-50' : ''}`}
+                                                style={
+                                                    product.price_cents != null
+                                                        ? {
+                                                              color: settings.accent_color,
+                                                          }
+                                                        : {}
+                                                }
+                                            >
+                                                {formatPrice(
+                                                    product.price_cents,
+                                                )}
+                                            </p>
+                                        )}
                                         {product.product_type === 'combo' && (
                                             <Badge variant="outline">
                                                 Combo
@@ -2261,20 +3127,23 @@ function BoutiqueLayout({
                                             <h3 className="font-serif text-xl font-light tracking-wide">
                                                 {product.name}
                                             </h3>
-                                            <p
-                                                className={`mt-1 text-base font-semibold ${product.price_cents == null ? 'font-light italic opacity-50' : ''}`}
-                                                style={
-                                                    product.price_cents != null
-                                                        ? {
-                                                              color: 'var(--brand-primary)',
-                                                          }
-                                                        : {}
-                                                }
-                                            >
-                                                {formatPrice(
-                                                    product.price_cents,
-                                                )}
-                                            </p>
+                                            {!settings.hide_prices && (
+                                                <p
+                                                    className={`mt-1 text-base font-semibold ${product.price_cents == null ? 'font-light italic opacity-50' : ''}`}
+                                                    style={
+                                                        product.price_cents !=
+                                                        null
+                                                            ? {
+                                                                  color: 'var(--brand-primary)',
+                                                              }
+                                                            : {}
+                                                    }
+                                                >
+                                                    {formatPrice(
+                                                        product.price_cents,
+                                                    )}
+                                                </p>
+                                            )}
                                         </div>
                                         {product.product_type === 'combo' && (
                                             <Badge variant="outline">
@@ -2339,13 +3208,19 @@ export default function PublicCatalog({
     catalog_token,
     filters,
     filter_options,
+    order_rules,
+    whatsapp_checkout,
 }: Props) {
-    const brandFont =
-        fontMap[catalog_settings.font_family] ?? fontMap['space-grotesk'];
-    const preset = catalog_settings.layout_preset ?? 'minimal';
-    const tokens =
-        LAYOUT_TOKENS[preset as keyof typeof LAYOUT_TOKENS] ??
-        LAYOUT_TOKENS.minimal;
+    const headingFont =
+        fontMap[
+            catalog_settings.heading_font_family ?? catalog_settings.font_family
+        ] ?? fontMap['space-grotesk'];
+    const bodyFont =
+        fontMap[
+            catalog_settings.body_font_family ?? catalog_settings.font_family
+        ] ?? fontMap['manrope'];
+    const preset: string = 'minimal';
+    const tokens = LAYOUT_TOKENS.minimal;
 
     // Cart state
     const [cart, setCart] = useState<CartItem[]>([]);
@@ -2387,13 +3262,88 @@ export default function PublicCatalog({
     const [copied, setCopied] = useState(false);
 
     const cartTotal = cart.reduce((sum, item) => sum + item.quantity, 0);
+    const cartPieceTotal = cart.reduce(
+        (sum, item) => sum + comboPieceCount(item.product) * item.quantity,
+        0,
+    );
+    const cartCompositionTotal = cart.reduce(
+        (sum, item) =>
+            item.product.product_type === 'combo' ? sum + item.quantity : sum,
+        0,
+    );
+    const hasOnlyCompositions =
+        cart.length > 0 &&
+        cart.every((item) => item.product.product_type === 'combo');
+    const cartSelectionLabel = hasOnlyCompositions
+        ? `${cartCompositionTotal} ${cartCompositionTotal === 1 ? 'composição' : 'composições'}`
+        : `${cartTotal} ${cartTotal === 1 ? 'seleção' : 'seleções'}`;
+    const cartPieceLabel = `${cartPieceTotal} ${cartPieceTotal === 1 ? 'peça' : 'peças'}`;
+    const whatsappMessage = whatsapp_checkout.enabled
+        ? buildWhatsappCartMessage(
+              catalog_settings.brand_name ?? manufacturer.name,
+              cart,
+              cartSelectionLabel,
+              cartPieceLabel,
+              catalogUrlForWhatsapp(),
+          )
+        : '';
+    const whatsappCheckoutUrl =
+        whatsapp_checkout.enabled &&
+        whatsapp_checkout.available &&
+        whatsapp_checkout.base_url
+            ? `${whatsapp_checkout.base_url}?text=${encodeURIComponent(whatsappMessage)}`
+            : null;
 
-    const cartPriceTotal = cart.reduce((sum, item) => {
-        if (item.unit_price_cents == null) return sum;
-        return sum + item.unit_price_cents * item.quantity;
-    }, 0);
-
-    const hasAnyPriced = cart.some((item) => item.unit_price_cents != null);
+    const hasAnyPriced =
+        !whatsapp_checkout.enabled &&
+        cart.some((item) => item.unit_price_cents != null);
+    const hasItemsUnderConsultation = cart.some(
+        (item) => item.unit_price_cents == null,
+    );
+    const orderRuleEvaluation = evaluateOrderRules(
+        order_rules,
+        cart.map((item) => ({
+            product_id: item.product.id,
+            product_category_id: item.product.category_id ?? null,
+            quantity: item.quantity,
+            unit_price_cents: item.unit_price_cents ?? null,
+        })),
+    );
+    const pendingBenefit = orderRuleEvaluation.evaluations
+        .filter(
+            (evaluation) =>
+                evaluation.rule.action.type !== 'block_checkout' &&
+                !evaluation.matched,
+        )
+        .map((evaluation) => ({
+            evaluation,
+            progress: pendingRuleProgress(evaluation),
+        }))
+        .filter(
+            (
+                candidate,
+            ): candidate is typeof candidate & {
+                progress: NonNullable<typeof candidate.progress>;
+            } => candidate.progress !== null,
+        )
+        .sort(
+            (a, b) =>
+                a.progress.remaining / a.progress.target -
+                b.progress.remaining / b.progress.target,
+        )[0];
+    const pendingRequirements = orderRuleEvaluation.evaluations
+        .filter(
+            (evaluation) =>
+                evaluation.rule.action.type === 'block_checkout' &&
+                evaluation.matched,
+        )
+        .map((evaluation) => ({
+            evaluation,
+            remaining: blockingRuleRemaining(
+                evaluation.rule,
+                evaluation.current_values,
+            ),
+        }));
 
     useEffect(() => {
         if (addedProductId === null) {
@@ -2506,6 +3456,10 @@ export default function PublicCatalog({
     };
 
     const handleCheckout = () => {
+        if (whatsapp_checkout.enabled) {
+            return;
+        }
+
         setCheckoutErrors({});
         setSubmitting(true);
 
@@ -2592,7 +3546,7 @@ export default function PublicCatalog({
         <div
             className="relative min-h-screen text-[var(--brand-secondary)]"
             style={{
-                fontFamily: brandFont,
+                fontFamily: bodyFont,
                 ['--brand-primary' as string]: catalog_settings.primary_color,
                 ['--brand-secondary' as string]:
                     catalog_settings.secondary_color,
@@ -2602,6 +3556,8 @@ export default function PublicCatalog({
                 ['--gap' as string]: tokens.gap,
                 ['--card-padding' as string]: tokens.cardPadding,
                 ['--shadow' as string]: tokens.shadow,
+                ['--brand-heading-font' as string]: headingFont,
+                ['--brand-body-font' as string]: bodyFont,
                 ...backgroundStyle,
             }}
         >
@@ -2636,7 +3592,7 @@ export default function PublicCatalog({
             >
                 <link rel="preconnect" href="https://fonts.bunny.net" />
                 <link
-                    href="https://fonts.bunny.net/css?family=space-grotesk:400,500,600,700|fraunces:400,600,700|ibm-plex-sans:400,500,600,700"
+                    href="https://fonts.bunny.net/css?family=sora:400,500,600,700|manrope:400,500,600,700|space-grotesk:400,500,600,700|fraunces:400,600,700|ibm-plex-sans:400,500,600,700"
                     rel="stylesheet"
                 />
             </Head>
@@ -2709,6 +3665,7 @@ export default function PublicCatalog({
                 }
                 primaryColor={catalog_settings.primary_color}
                 accentColor={catalog_settings.accent_color}
+                showPrice={!whatsapp_checkout.enabled}
                 onClose={() => setQuickViewProduct(null)}
                 onSelectVariation={(variationName, value) => {
                     if (!quickViewProduct) {
@@ -2718,6 +3675,8 @@ export default function PublicCatalog({
                     selectVariation(quickViewProduct.id, variationName, value);
                 }}
                 onAddToCart={addToCart}
+                headingFont={headingFont}
+                bodyFont={bodyFont}
             />
 
             {/* Floating cart button */}
@@ -2729,7 +3688,11 @@ export default function PublicCatalog({
                     style={{ backgroundColor: catalog_settings.primary_color }}
                 >
                     <ShoppingCart className="h-5 w-5" />
-                    <span>Ver pedido</span>
+                    <span>
+                        {whatsapp_checkout.enabled
+                            ? 'Ver seleção'
+                            : 'Ver pedido'}
+                    </span>
                     <span className="rounded-full bg-white/20 px-2 py-0.5 font-bold">
                         {cartTotal}
                     </span>
@@ -2738,156 +3701,485 @@ export default function PublicCatalog({
 
             {/* Cart Sheet */}
             <Sheet open={cartOpen} onOpenChange={setCartOpen}>
-                <SheetContent side="right" className="flex flex-col">
-                    <SheetHeader>
-                        <SheetTitle>Seu pedido ({cartTotal} itens)</SheetTitle>
-                        <SheetDescription>
-                            Revise os itens selecionados antes de finalizar o
-                            pedido.
+                <SheetContent
+                    side="right"
+                    overlayClassName="bg-[#18181f]/72 backdrop-blur-[1px]"
+                    className="flex w-full gap-0 border-l border-[#cac4ba] bg-[#f6f4f0] shadow-none ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:duration-200 data-[state=open]:duration-300 sm:max-w-[34rem] [&_[data-slot=sheet-close]]:top-5 [&_[data-slot=sheet-close]]:right-4 sm:[&_[data-slot=sheet-close]]:top-7 sm:[&_[data-slot=sheet-close]]:right-6"
+                    style={{
+                        fontFamily: bodyFont,
+                        color: '#18181f',
+                    }}
+                >
+                    <SheetHeader className="sticky top-0 z-20 gap-2 border-b border-[#d8d3cb] bg-[#f6f4f0]/96 px-6 pt-7 pb-6 backdrop-blur-sm sm:px-8 sm:pt-9 sm:pb-7">
+                        <p
+                            className="pr-12 text-[11px] font-semibold tracking-[0.18em] uppercase"
+                            style={{ color: catalog_settings.accent_color }}
+                        >
+                            {whatsapp_checkout.enabled
+                                ? 'Seleção em construção'
+                                : 'Pedido em construção'}
+                        </p>
+                        <SheetTitle
+                            className="pr-12 text-[2.35rem] leading-[0.98] font-semibold tracking-[-0.04em] sm:text-[2.75rem]"
+                            style={{ fontFamily: headingFont }}
+                        >
+                            Sua seleção
+                            <span
+                                aria-hidden="true"
+                                style={{ color: catalog_settings.accent_color }}
+                            >
+                                .
+                            </span>
+                        </SheetTitle>
+                        <SheetDescription className="text-sm text-[#716f68]">
+                            {cartSelectionLabel} · {cartPieceLabel}
                         </SheetDescription>
                     </SheetHeader>
 
-                    <div className="flex-1 overflow-y-auto">
+                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                         {cart.length === 0 ? (
-                            <p className="px-4 text-sm text-muted-foreground">
-                                Nenhum item adicionado.
-                            </p>
-                        ) : (
-                            <div className="space-y-3 px-4">
-                                {cart.map((item) => (
-                                    <div
-                                        key={item.key}
-                                        className="flex items-center gap-3 rounded-lg border p-3"
+                            <div className="grid min-h-72 place-items-center px-6 text-center">
+                                <div className="max-w-64">
+                                    <Package className="mx-auto size-6 text-[#98968d]" />
+                                    <p
+                                        className="mt-4 text-xl font-semibold"
+                                        style={{ fontFamily: headingFont }}
                                     >
-                                        <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-md bg-gray-100">
-                                            {item.product.primary_image ? (
-                                                <img
-                                                    src={
-                                                        item.product
-                                                            .primary_image
-                                                    }
-                                                    alt={item.product.name}
-                                                    className="h-full w-full object-cover"
-                                                />
-                                            ) : (
-                                                <div className="flex h-full items-center justify-center">
-                                                    <Package className="h-4 w-4 text-gray-400" />
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="truncate text-sm font-medium">
-                                                {item.product.name}
-                                            </p>
-                                            <p className="text-xs text-muted-foreground">
-                                                SKU {item.product.sku}
-                                            </p>
-                                            {item.selected_variations && (
-                                                <p className="text-xs text-muted-foreground">
-                                                    {variationSummary(
-                                                        item.selected_variations,
-                                                    )}
-                                                </p>
-                                            )}
-                                            <p className="text-xs font-medium">
-                                                {formatPrice(
-                                                    item.unit_price_cents,
-                                                )}
-                                            </p>
-                                            <ComboSummary
-                                                product={item.product}
-                                            />
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <Button
-                                                variant="outline"
-                                                size="icon"
-                                                className="h-7 w-7"
-                                                disabled={
-                                                    item.quantity >=
-                                                    (availableStockForSelection(
-                                                        item.product,
-                                                        item.selected_variations ??
-                                                            {},
-                                                    ) ?? 0)
-                                                }
-                                                onClick={() =>
-                                                    updateQuantity(
-                                                        item.key,
-                                                        item.quantity - 1,
-                                                    )
-                                                }
-                                            >
-                                                <Minus className="h-3 w-3" />
-                                            </Button>
-                                            <span className="w-8 text-center text-sm font-medium">
-                                                {item.quantity}
-                                            </span>
-                                            <Button
-                                                variant="outline"
-                                                size="icon"
-                                                className="h-7 w-7"
-                                                onClick={() =>
-                                                    updateQuantity(
-                                                        item.key,
-                                                        item.quantity + 1,
-                                                    )
-                                                }
-                                            >
-                                                <Plus className="h-3 w-3" />
-                                            </Button>
-                                        </div>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 text-destructive"
-                                            onClick={() =>
-                                                removeFromCart(item.key)
-                                            }
+                                        Sua seleção começa no catálogo.
+                                    </p>
+                                    <p className="mt-2 text-sm leading-6 text-[#716f68]">
+                                        Escolha as peças e composições que fazem
+                                        sentido para a sua loja.
+                                    </p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-[#d8d3cb] px-6 sm:px-8">
+                                {cart.map((item) => {
+                                    const availableStock =
+                                        availableStockForSelection(
+                                            item.product,
+                                            item.selected_variations ?? {},
+                                        );
+
+                                    return (
+                                        <article
+                                            key={item.key}
+                                            className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-4 py-6 sm:grid-cols-[6rem_minmax(0,1fr)] sm:gap-5 sm:py-7"
                                         >
-                                            <Trash2 className="h-3 w-3" />
-                                        </Button>
-                                    </div>
-                                ))}
+                                            <div className="h-[112px] w-[88px] overflow-hidden bg-[#e7e3dc] sm:h-[120px] sm:w-[96px]">
+                                                {item.product.primary_image ? (
+                                                    <img
+                                                        src={
+                                                            item.product
+                                                                .primary_image
+                                                        }
+                                                        alt={item.product.name}
+                                                        className="h-full w-full object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="flex h-full items-center justify-center">
+                                                        <Package className="size-5 text-[#98968d]" />
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="min-w-0">
+                                                <h3
+                                                    className="text-lg leading-6 font-semibold tracking-[-0.02em]"
+                                                    style={{
+                                                        fontFamily: headingFont,
+                                                    }}
+                                                >
+                                                    {item.product.name}
+                                                </h3>
+                                                <p className="mt-1 text-[11px] tracking-[0.08em] text-[#98968d] uppercase">
+                                                    {item.product.sku}
+                                                </p>
+                                                {!whatsapp_checkout.enabled && (
+                                                    <p
+                                                        className="mt-3 text-base font-semibold"
+                                                        style={{
+                                                            fontFamily:
+                                                                headingFont,
+                                                        }}
+                                                    >
+                                                        {formatPrice(
+                                                            item.unit_price_cents,
+                                                        )}
+                                                    </p>
+                                                )}
+
+                                                {item.product.product_type ===
+                                                'combo' ? (
+                                                    <p className="mt-1 text-xs text-[#716f68]">
+                                                        {comboPieceCount(
+                                                            item.product,
+                                                        )}{' '}
+                                                        peças ·{' '}
+                                                        {comboModelCount(
+                                                            item.product,
+                                                        )}{' '}
+                                                        modelos
+                                                    </p>
+                                                ) : (
+                                                    item.selected_variations && (
+                                                        <p className="mt-1 text-xs text-[#716f68]">
+                                                            {variationSummary(
+                                                                item.selected_variations,
+                                                            )}
+                                                        </p>
+                                                    )
+                                                )}
+
+                                                <CartComboSummary
+                                                    product={item.product}
+                                                />
+
+                                                <div className="mt-4 flex items-center justify-between gap-3">
+                                                    <div
+                                                        className="flex h-11 items-center border border-[#cac4ba] bg-[#f6f4f0]"
+                                                        aria-label={`Quantidade de ${item.product.name}`}
+                                                    >
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="size-10 rounded-none hover:bg-[#e7e3dc]"
+                                                            disabled={
+                                                                item.quantity <=
+                                                                1
+                                                            }
+                                                            aria-label={`Diminuir quantidade de ${item.product.name}`}
+                                                            onClick={() =>
+                                                                updateQuantity(
+                                                                    item.key,
+                                                                    item.quantity -
+                                                                        1,
+                                                                )
+                                                            }
+                                                        >
+                                                            <Minus className="size-4" />
+                                                        </Button>
+                                                        <span
+                                                            className="w-10 text-center text-sm font-semibold"
+                                                            aria-live="polite"
+                                                        >
+                                                            {item.quantity}
+                                                        </span>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="size-10 rounded-none hover:bg-[#e7e3dc]"
+                                                            disabled={
+                                                                availableStock !==
+                                                                    null &&
+                                                                item.quantity >=
+                                                                    availableStock
+                                                            }
+                                                            aria-label={`Aumentar quantidade de ${item.product.name}`}
+                                                            onClick={() =>
+                                                                updateQuantity(
+                                                                    item.key,
+                                                                    item.quantity +
+                                                                        1,
+                                                                )
+                                                            }
+                                                        >
+                                                            <Plus className="size-4" />
+                                                        </Button>
+                                                    </div>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="size-11 rounded-none text-[#716f68] hover:bg-[#e7e3dc] hover:text-[#ff4d3d]"
+                                                        aria-label={`Remover ${item.product.name} do pedido`}
+                                                        onClick={() =>
+                                                            removeFromCart(
+                                                                item.key,
+                                                            )
+                                                        }
+                                                    >
+                                                        <Trash2 className="size-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </article>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {cart.length > 0 && (
+                            <div className="border-t border-[#d8d3cb] px-6 py-6 sm:px-8 sm:py-7">
+                                {whatsapp_checkout.enabled ? (
+                                    <p className="mb-6 border-l-2 border-[#ff4d3d] pl-4 text-xs leading-5 text-[#716f68]">
+                                        Nenhum valor aparece nesta seleção. O
+                                        comercial confirma preços, condições e
+                                        disponibilidade durante a conversa.
+                                    </p>
+                                ) : hasItemsUnderConsultation ? (
+                                    <p className="mb-6 border-l-2 border-[#98968d] pl-4 text-xs leading-5 text-[#716f68]">
+                                        Itens sob consulta entram no pedido, mas
+                                        não participam do total estimado nem dos
+                                        descontos por valor.
+                                    </p>
+                                ) : null}
+
+                                {pendingRequirements.length > 0 && (
+                                    <section aria-labelledby="cart-requirements-title">
+                                        <h3
+                                            id="cart-requirements-title"
+                                            className="text-xl font-semibold tracking-[-0.025em]"
+                                            style={{ fontFamily: headingFont }}
+                                        >
+                                            {whatsapp_checkout.enabled
+                                                ? 'Antes de conversar'
+                                                : 'O que falta para fechar'}
+                                        </h3>
+                                        <div className="mt-3 divide-y divide-[#d8d3cb] border-y border-[#d8d3cb]">
+                                            {pendingRequirements.map(
+                                                ({ evaluation, remaining }) => (
+                                                    <div
+                                                        key={evaluation.rule.id}
+                                                        className="flex min-h-14 items-center gap-3 py-3 text-sm leading-5"
+                                                        role="status"
+                                                    >
+                                                        <Circle
+                                                            className="size-4 shrink-0"
+                                                            style={{
+                                                                color: catalog_settings.accent_color,
+                                                            }}
+                                                            aria-hidden="true"
+                                                        />
+                                                        <span>
+                                                            {remaining !== null
+                                                                ? orderRuleRequirementLabel(
+                                                                      evaluation.rule,
+                                                                      remaining,
+                                                                  )
+                                                                : (evaluation
+                                                                      .rule
+                                                                      .public_message ??
+                                                                  'Este pedido ainda não atende a uma condição comercial.')}
+                                                        </span>
+                                                    </div>
+                                                ),
+                                            )}
+                                        </div>
+                                    </section>
+                                )}
+
+                                {orderRuleEvaluation.best_discount_rule &&
+                                    orderRuleEvaluation.discount_cents > 0 && (
+                                        <div
+                                            className="mt-6 flex gap-3 border-l-2 px-4 py-3 text-sm leading-5"
+                                            style={{
+                                                borderColor:
+                                                    catalog_settings.accent_color,
+                                                backgroundColor: `${catalog_settings.accent_color}12`,
+                                            }}
+                                            role="status"
+                                        >
+                                            <Check className="mt-0.5 size-4 shrink-0" />
+                                            <span>
+                                                {orderRuleEvaluation
+                                                    .best_discount_rule
+                                                    .public_message ??
+                                                    `${orderRuleEvaluation.best_discount_rule.name} liberado neste pedido.`}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                {pendingBenefit && (
+                                    <section className="mt-7">
+                                        <div className="flex items-center justify-between gap-4 text-[11px] font-semibold tracking-[0.14em] text-[#98968d] uppercase">
+                                            <span>Próxima vantagem</span>
+                                            <span>
+                                                {Math.round(
+                                                    pendingBenefit.progress
+                                                        .ratio * 100,
+                                                )}
+                                                %
+                                            </span>
+                                        </div>
+                                        <progress
+                                            value={
+                                                pendingBenefit.progress.current
+                                            }
+                                            max={pendingBenefit.progress.target}
+                                            className="order-rule-progress mt-3 h-[3px] w-full"
+                                            style={
+                                                {
+                                                    '--order-rule-progress-color':
+                                                        catalog_settings.accent_color,
+                                                } as CSSProperties
+                                            }
+                                            aria-label={`Progresso para ${pendingBenefit.evaluation.rule.name}`}
+                                        />
+                                        <p className="mt-3 text-sm leading-6 font-medium">
+                                            Faltam{' '}
+                                            {orderRuleRemainingLabel(
+                                                pendingBenefit.evaluation.rule,
+                                                pendingBenefit.progress
+                                                    .remaining,
+                                            )}{' '}
+                                            para liberar{' '}
+                                            {orderRuleBenefitLabel(
+                                                pendingBenefit.evaluation.rule,
+                                            )}
+                                            .
+                                        </p>
+                                    </section>
+                                )}
                             </div>
                         )}
                     </div>
 
                     {cart.length > 0 && (
-                        <SheetFooter className="flex-col gap-2">
+                        <SheetFooter className="mt-0 shrink-0 gap-4 border-t border-[#cac4ba] bg-[#f6f4f0] px-6 py-5 sm:px-8 sm:py-6">
                             {hasAnyPriced && (
-                                <div className="flex w-full items-center justify-between px-1 text-sm">
-                                    <span className="font-medium">
-                                        Total estimado:
-                                    </span>
-                                    <span className="font-bold">
-                                        {formatPrice(cartPriceTotal)}
-                                    </span>
+                                <div className="grid w-full gap-2 text-sm">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[#716f68]">
+                                            Subtotal
+                                        </span>
+                                        <span>
+                                            {formatPrice(
+                                                orderRuleEvaluation.subtotal_cents,
+                                            )}
+                                        </span>
+                                    </div>
+                                    {orderRuleEvaluation.discount_cents > 0 && (
+                                        <div className="flex items-center justify-between text-green-700">
+                                            <span>Desconto liberado</span>
+                                            <span>
+                                                −{' '}
+                                                {formatPrice(
+                                                    orderRuleEvaluation.discount_cents,
+                                                )}
+                                            </span>
+                                        </div>
+                                    )}
+                                    <div
+                                        className="flex items-baseline justify-between border-t border-[#d8d3cb] pt-3 text-xl font-semibold tracking-[-0.025em]"
+                                        style={{ fontFamily: headingFont }}
+                                    >
+                                        <span className="text-lg">
+                                            Total estimado
+                                        </span>
+                                        <span className="text-2xl">
+                                            {formatPrice(
+                                                orderRuleEvaluation.total_cents,
+                                            )}
+                                        </span>
+                                    </div>
                                 </div>
                             )}
-                            <Button
-                                className="w-full"
-                                onClick={() => {
-                                    setCartOpen(false);
-                                    setCheckoutOpen(true);
-                                }}
-                                style={{
-                                    backgroundColor:
-                                        catalog_settings.primary_color,
-                                }}
-                            >
-                                Finalizar pedido
-                            </Button>
+                            {whatsapp_checkout.enabled && (
+                                <div className="w-full border-l-2 border-[#ff4d3d] pl-4 text-sm leading-6">
+                                    <p
+                                        className="font-semibold"
+                                        style={{ fontFamily: headingFont }}
+                                    >
+                                        Sua seleção está pronta para conversar.
+                                    </p>
+                                    <p className="mt-1 text-xs text-[#716f68]">
+                                        O WhatsApp abre com todos os itens
+                                        preenchidos. Revise e toque em enviar.
+                                    </p>
+                                </div>
+                            )}
+
+                            {whatsapp_checkout.enabled ? (
+                                whatsappCheckoutUrl ? (
+                                    <Button
+                                        asChild
+                                        className="h-[52px] w-full rounded-[2px] text-sm font-semibold shadow-none transition-transform duration-200 hover:-translate-y-px"
+                                        style={{
+                                            backgroundColor:
+                                                catalog_settings.primary_color,
+                                        }}
+                                    >
+                                        <a
+                                            href={whatsappCheckoutUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            onClick={() => setCartOpen(false)}
+                                        >
+                                            <MessageCircle className="mr-2 size-4" />
+                                            Falar com o comercial
+                                            <ArrowRight className="ml-2 size-4" />
+                                        </a>
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        type="button"
+                                        disabled
+                                        className="h-[52px] w-full rounded-[2px] text-sm font-semibold shadow-none"
+                                    >
+                                        Atendimento temporariamente indisponível
+                                    </Button>
+                                )
+                            ) : (
+                                <Button
+                                    type="button"
+                                    className="h-[52px] w-full rounded-[2px] text-sm font-semibold shadow-none transition-transform duration-200 hover:-translate-y-px"
+                                    onClick={() => {
+                                        if (orderRuleEvaluation.is_blocked) {
+                                            setCartOpen(false);
+
+                                            return;
+                                        }
+
+                                        setCartOpen(false);
+                                        setCheckoutOpen(true);
+                                    }}
+                                    style={{
+                                        backgroundColor:
+                                            catalog_settings.primary_color,
+                                    }}
+                                >
+                                    {orderRuleEvaluation.is_blocked
+                                        ? 'Continuar escolhendo peças'
+                                        : 'Finalizar pedido'}
+                                    <ArrowRight className="ml-2 size-4" />
+                                </Button>
+                            )}
+
+                            {whatsapp_checkout.enabled &&
+                            !whatsapp_checkout.available ? (
+                                <p className="text-center text-xs leading-5 text-[#716f68]">
+                                    O canal comercial está offline. Sua seleção
+                                    permanece salva neste navegador.
+                                </p>
+                            ) : !whatsapp_checkout.enabled &&
+                              orderRuleEvaluation.is_blocked ? (
+                                <p className="text-center text-xs leading-5 text-[#716f68]">
+                                    Sua seleção fica salva enquanto você
+                                    continua no catálogo.
+                                </p>
+                            ) : null}
                         </SheetFooter>
                     )}
                 </SheetContent>
             </Sheet>
 
             {/* Checkout Dialog */}
-            <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
-                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+            <Dialog
+                open={!whatsapp_checkout.enabled && checkoutOpen}
+                onOpenChange={setCheckoutOpen}
+            >
+                <DialogContent
+                    className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
+                    style={{ fontFamily: bodyFont }}
+                >
                     <DialogHeader>
-                        <DialogTitle>Finalizar pedido</DialogTitle>
+                        <DialogTitle style={{ fontFamily: headingFont }}>
+                            Finalizar pedido
+                        </DialogTitle>
                         <DialogDescription>
                             Preencha seus dados para enviar o pedido.
                         </DialogDescription>
@@ -3232,16 +4524,50 @@ export default function PublicCatalog({
                             </Alert>
                         )}
 
+                        {checkoutErrors.order_rules && (
+                            <Alert variant="destructive">
+                                <AlertCircle className="size-4" />
+                                <AlertDescription>
+                                    {checkoutErrors.order_rules}
+                                </AlertDescription>
+                            </Alert>
+                        )}
+
                         <div className="rounded-md bg-muted p-3">
                             <p className="text-xs text-muted-foreground">
                                 {cart.length} produto(s) - {cartTotal} item(ns)
                                 no total
                             </p>
                             {hasAnyPriced && (
-                                <p className="mt-1 text-sm font-semibold">
-                                    Total estimado:{' '}
-                                    {formatPrice(cartPriceTotal)}
-                                </p>
+                                <div className="mt-3 grid gap-1.5 text-sm">
+                                    <p className="flex justify-between">
+                                        <span>Subtotal</span>
+                                        <span>
+                                            {formatPrice(
+                                                orderRuleEvaluation.subtotal_cents,
+                                            )}
+                                        </span>
+                                    </p>
+                                    {orderRuleEvaluation.discount_cents > 0 && (
+                                        <p className="flex justify-between text-green-700">
+                                            <span>Desconto</span>
+                                            <span>
+                                                −{' '}
+                                                {formatPrice(
+                                                    orderRuleEvaluation.discount_cents,
+                                                )}
+                                            </span>
+                                        </p>
+                                    )}
+                                    <p className="flex justify-between border-t pt-1.5 font-semibold">
+                                        <span>Total estimado</span>
+                                        <span>
+                                            {formatPrice(
+                                                orderRuleEvaluation.total_cents,
+                                            )}
+                                        </span>
+                                    </p>
+                                </div>
                             )}
                             <p className="mt-2 text-xs text-muted-foreground">
                                 O estoque e reservado quando o pedido e enviado.
@@ -3258,7 +4584,11 @@ export default function PublicCatalog({
                         </Button>
                         <Button
                             onClick={handleCheckout}
-                            disabled={submitting || !customerName.trim()}
+                            disabled={
+                                submitting ||
+                                !customerName.trim() ||
+                                orderRuleEvaluation.is_blocked
+                            }
                             style={{
                                 backgroundColor: catalog_settings.primary_color,
                             }}
@@ -3274,9 +4604,15 @@ export default function PublicCatalog({
                 open={!!orderSuccess}
                 onOpenChange={() => setOrderSuccess(null)}
             >
-                <DialogContent className="sm:max-w-md">
+                <DialogContent
+                    className="sm:max-w-md"
+                    style={{ fontFamily: bodyFont }}
+                >
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
+                        <DialogTitle
+                            className="flex items-center gap-2"
+                            style={{ fontFamily: headingFont }}
+                        >
                             <Check className="h-5 w-5 text-green-600" />
                             Pedido enviado!
                         </DialogTitle>

@@ -21,17 +21,17 @@ class EnsureManufacturerTenant
         $user = $request->user();
 
         if (! $user || ! $user->isManufacturerUser()) {
-            abort(403, 'Access denied. Manufacturer user only.');
+            abort(403, 'Acesso exclusivo para usuários da fabricante.');
         }
 
         if (! $user->current_manufacturer_id) {
-            abort(403, 'No manufacturer assigned. Please contact support.');
+            abort(403, 'Nenhuma fabricante está vinculada a este acesso.');
         }
 
         $manufacturer = $user->currentManufacturer;
 
         if (! $manufacturer || ! $manufacturer->is_active) {
-            abort(403, 'Your manufacturer account is not active.');
+            abort(403, 'A conta desta fabricante não está ativa.');
         }
 
         // Verify active membership exists
@@ -41,7 +41,7 @@ class EnsureManufacturerTenant
             ->first();
 
         if (! $membership) {
-            abort(403, 'Your membership is not active.');
+            abort(403, 'Seu acesso à fabricante não está ativo.');
         }
 
         // Set tenant in TenantManager

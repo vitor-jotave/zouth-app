@@ -34,7 +34,7 @@ it('serializes public catalog product images from the s3 disk', function () {
         ->and($payload['images']->all())->toBe(['https://cdn.zouth.app/products/10/photo.jpg']);
 });
 
-it('serializes catalog logo and background images from the catalog media disk', function () {
+it('serializes catalog identity images from the catalog media disk', function () {
     config([
         'filesystems.default' => 's3',
         'filesystems.catalog_media_disk' => 's3',
@@ -45,12 +45,21 @@ it('serializes catalog logo and background images from the catalog media disk', 
     $setting = CatalogSetting::factory()->create([
         'logo_path' => 'catalog-logos/logo.png',
         'background_image_path' => 'catalog-backgrounds/background.jpg',
+        'cover_image_path' => 'manufacturers/10/catalog/covers/cover.jpg',
+        'cover_thumbnail_path' => 'manufacturers/10/catalog/covers/thumbnails/cover.jpg',
+        'font_family' => 'sora',
+        'heading_font_family' => null,
+        'body_font_family' => null,
     ]);
 
     $payload = (new CatalogSettingResource($setting))->resolve(request());
 
     expect($payload['logo_url'])->toBe('https://cdn.zouth.app/catalog-logos/logo.png')
-        ->and($payload['background_image_url'])->toBe('https://cdn.zouth.app/catalog-backgrounds/background.jpg');
+        ->and($payload['background_image_url'])->toBe('https://cdn.zouth.app/catalog-backgrounds/background.jpg')
+        ->and($payload['cover_image_url'])->toBe('https://cdn.zouth.app/manufacturers/10/catalog/covers/cover.jpg')
+        ->and($payload['cover_thumbnail_url'])->toBe('https://cdn.zouth.app/manufacturers/10/catalog/covers/thumbnails/cover.jpg')
+        ->and($payload['heading_font_family'])->toBe('sora')
+        ->and($payload['body_font_family'])->toBe('sora');
 });
 
 it('allows configured s3 media hosts in the production content security policy', function () {

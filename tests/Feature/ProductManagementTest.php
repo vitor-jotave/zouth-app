@@ -160,6 +160,93 @@ it('creates multi-type matrix variants with stock rows', function () {
     expect($product->productVariations)->toHaveCount(2);
 });
 
+it('reopens only variation values that are actually used by stock combinations', function () {
+    $sizeType = VariationType::factory()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'name' => 'Tamanho',
+    ]);
+    VariationValue::factory()->create([
+        'variation_type_id' => $sizeType->id,
+        'value' => 'P',
+        'display_order' => 10,
+    ]);
+    VariationValue::factory()->create([
+        'variation_type_id' => $sizeType->id,
+        'value' => 'M',
+        'display_order' => 20,
+    ]);
+    VariationValue::factory()->create([
+        'variation_type_id' => $sizeType->id,
+        'value' => 'G',
+        'display_order' => 30,
+    ]);
+
+    $product = Product::factory()->forManufacturer($this->manufacturer)->withoutCategory()->create([
+        'base_quantity' => 0,
+    ]);
+    $product->productVariations()->create(['variation_type_id' => $sizeType->id]);
+    $product->variantStocks()->createMany([
+        ['variation_key' => ['Tamanho' => 'G'], 'quantity' => 2],
+        ['variation_key' => ['Tamanho' => 'P'], 'quantity' => 4],
+    ]);
+
+    $response = $this->get(route('manufacturer.products.edit', $product))
+        ->assertSuccessful();
+
+    expect(collect($response->inertiaProps('stock_structure.variations.0.values'))->pluck('value')->all())
+        ->toBe(['P', 'G']);
+});
+
+it('preserves an existing variant stock id when updating the same combination', function () {
+    $sizeType = VariationType::factory()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'name' => 'Tamanho',
+    ]);
+    VariationValue::factory()->create(['variation_type_id' => $sizeType->id, 'value' => 'P']);
+
+    $colorType = VariationType::factory()->colorType()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'name' => 'Cor',
+    ]);
+    VariationValue::factory()->create(['variation_type_id' => $colorType->id, 'value' => 'Azul']);
+
+    $product = Product::factory()->forManufacturer($this->manufacturer)->withoutCategory()->create([
+        'base_quantity' => 0,
+    ]);
+    $product->productVariations()->createMany([
+        ['variation_type_id' => $sizeType->id],
+        ['variation_type_id' => $colorType->id],
+    ]);
+    $stock = $product->variantStocks()->create([
+        'variation_key' => ['Cor' => 'Azul', 'Tamanho' => 'P'],
+        'quantity' => 3,
+        'price_cents' => 1290,
+        'sku_variant' => 'AZ-P',
+    ]);
+
+    $this->put(route('manufacturer.products.update', $product), [
+        'name' => $product->name,
+        'sku' => $product->sku,
+        'base_quantity' => 0,
+        'variations' => [
+            ['variation_type_id' => $sizeType->id, 'values' => ['P']],
+            ['variation_type_id' => $colorType->id, 'values' => ['Azul']],
+        ],
+        'variant_stocks' => [[
+            'variation_key' => ['Tamanho' => 'P', 'Cor' => 'Azul'],
+            'quantity' => 8,
+            'price_cents' => 1490,
+            'sku_variant' => 'AZ-P-NEW',
+        ]],
+    ])->assertRedirect();
+
+    expect($product->variantStocks()->sole())
+        ->id->toBe($stock->id)
+        ->quantity->toBe(8)
+        ->price_cents->toBe(1490)
+        ->sku_variant->toBe('AZ-P-NEW');
+});
+
 it('rejects variant stocks when no variations are selected', function () {
     $payload = [
         'name' => 'Produto Invalido',
@@ -200,4 +287,56 @@ it('prevents cross-tenant product access', function () {
     ]);
 
     $response->assertForbidden();
+});
+
+it('filters products by active status without treating an empty value as inactive', function () {
+    $activeProduct = Product::factory()->forManufacturer($this->manufacturer)->withoutCategory()->create([
+        'name' => 'Produto ativo',
+        'is_active' => true,
+        'sort_order' => 1,
+    ]);
+    $inactiveProduct = Product::factory()->forManufacturer($this->manufacturer)->withoutCategory()->create([
+        'name' => 'Produto inativo',
+        'is_active' => false,
+        'sort_order' => 2,
+    ]);
+
+    $otherManufacturer = Manufacturer::factory()->create(['is_active' => true]);
+    $otherProduct = Product::factory()->forManufacturer($otherManufacturer)->withoutCategory()->create([
+        'is_active' => true,
+        'sort_order' => 0,
+    ]);
+
+    $allResponse = $this->get(route('manufacturer.products.index', ['is_active' => '']))
+        ->assertSuccessful()
+        ->assertInertia(fn ($page) => $page
+            ->component('manufacturer/products/index')
+            ->has('products.data', 2)
+        );
+
+    $activeResponse = $this->get(route('manufacturer.products.index', ['is_active' => 'true']))
+        ->assertSuccessful()
+        ->assertInertia(fn ($page) => $page
+            ->component('manufacturer/products/index')
+            ->has('products.data', 1)
+            ->where('products.data.0.id', $activeProduct->id)
+            ->where('products.data.0.is_active', true)
+        );
+
+    $inactiveResponse = $this->get(route('manufacturer.products.index', ['is_active' => 'false']))
+        ->assertSuccessful()
+        ->assertInertia(fn ($page) => $page
+            ->component('manufacturer/products/index')
+            ->has('products.data', 1)
+            ->where('products.data.0.id', $inactiveProduct->id)
+            ->where('products.data.0.is_active', false)
+        );
+
+    expect(collect($allResponse->inertiaProps('products.data'))->pluck('id')->all())
+        ->toBe([$activeProduct->id, $inactiveProduct->id])
+        ->not->toContain($otherProduct->id)
+        ->and(collect($activeResponse->inertiaProps('products.data'))->pluck('id'))
+        ->not->toContain($otherProduct->id)
+        ->and(collect($inactiveResponse->inertiaProps('products.data'))->pluck('id'))
+        ->not->toContain($otherProduct->id);
 });

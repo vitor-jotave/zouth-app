@@ -165,6 +165,43 @@ it('only reuses audio paths already owned by the funnel being edited', function 
         ->toBe('whatsapp-funnels/audio/owned.mp3');
 });
 
+it('loads a secured voice preview with the connected number profile', function () {
+    Storage::fake('s3');
+    [$user, $manufacturer, $instance] = createWhatsappFunnelTestContext();
+    $instance->update([
+        'profile_name' => 'Atendimento Zouth',
+        'profile_picture_url' => 'https://example.com/profile.jpg',
+    ]);
+
+    $funnel = WhatsappFunnel::factory()->forManufacturer($manufacturer)->create();
+    $step = WhatsappFunnelStep::factory()->forFunnel($funnel)->create([
+        'type' => 'audio',
+        'payload' => [
+            'media_path' => 'whatsapp-funnels/audio/voice.ogg',
+            'file_name' => 'voice.ogg',
+            'mimetype' => 'audio/ogg',
+        ],
+    ]);
+    Storage::disk('s3')->put('whatsapp-funnels/audio/voice.ogg', 'voice-content');
+
+    $audioUrl = route('manufacturer.atendimento.funis.steps.audio', [$funnel, $step]);
+
+    $this->actingAs($user)
+        ->get(route('manufacturer.atendimento.funis.edit', $funnel))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('manufacturer/atendimento/funis/edit')
+            ->where('funnel.steps.0.payload.audio_url', $audioUrl)
+            ->where('sender_profile.name', 'Atendimento Zouth')
+            ->where('sender_profile.picture_url', 'https://example.com/profile.jpg')
+        );
+
+    $this->actingAs($user)
+        ->get($audioUrl)
+        ->assertOk()
+        ->assertHeader('content-type', 'audio/ogg');
+});
+
 it('lists only funnels from the current manufacturer and exposes active funnels in chat order', function () {
     [$user, $manufacturer] = createWhatsappFunnelTestContext();
 
@@ -174,11 +211,16 @@ it('lists only funnels from the current manufacturer and exposes active funnels 
         'is_active' => true,
         'sort_order' => 2,
     ]);
-    WhatsappFunnel::factory()->forManufacturer($manufacturer)->create([
+    $greetingFunnel = WhatsappFunnel::factory()->forManufacturer($manufacturer)->create([
         'name' => 'Saudações',
         'code' => 'SAUDACOES-01',
         'is_active' => true,
         'sort_order' => 1,
+    ]);
+    WhatsappFunnelStep::factory()->forFunnel($greetingFunnel)->create([
+        'type' => 'text',
+        'sort_order' => 1,
+        'payload' => ['body' => 'Olá, tudo bem?'],
     ]);
     WhatsappFunnel::factory()->forManufacturer($manufacturer)->create([
         'name' => 'Rascunho',
@@ -194,6 +236,8 @@ it('lists only funnels from the current manufacturer and exposes active funnels 
         ->assertInertia(fn ($page) => $page
             ->component('manufacturer/atendimento/funis/index')
             ->has('funnels.data', 3)
+            ->where('funnels.data.0.steps.0.type', 'text')
+            ->where('funnels.data.0.steps.0.payload.body', 'Olá, tudo bem?')
         );
 
     $response = $this->actingAs($user)

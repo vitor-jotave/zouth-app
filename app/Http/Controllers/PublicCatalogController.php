@@ -2,14 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\WhatsappInstanceStatus;
 use App\Http\Resources\CatalogSettingResource;
 use App\Http\Resources\ProductCatalogResource;
 use App\Models\CatalogSetting;
 use App\Models\CatalogVisit;
+use App\Models\OrderRule;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\ProductVariantStock;
 use App\Models\VariationType;
+use App\Services\PlanLimitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -18,6 +21,8 @@ use Inertia\Response;
 
 class PublicCatalogController extends Controller
 {
+    public function __construct(private PlanLimitService $planLimitService) {}
+
     public function show(Request $request, string $token): Response
     {
         $setting = CatalogSetting::query()
@@ -26,6 +31,14 @@ class PublicCatalogController extends Controller
             ->where('public_link_active', true)
             ->whereHas('manufacturer', fn ($query) => $query->where('is_active', true))
             ->firstOrFail();
+
+        if (! $this->planLimitService->hasOperationalAccess($setting->manufacturer)) {
+            return Inertia::render('public/catalog-unavailable', [
+                'manufacturer' => [
+                    'name' => $setting->manufacturer->name,
+                ],
+            ]);
+        }
 
         // Track visit without breaking the render if it fails
         try {
@@ -114,10 +127,42 @@ class PublicCatalogController extends Controller
                 ->where('is_active', true)
                 ->where('product_type', 'combo')
         )
-            ->with(['category', 'media', 'comboItems.componentProduct', 'comboItems.componentVariantStock'])
+            ->with(['category', 'media', 'comboItems.componentProduct.media', 'comboItems.componentVariantStock'])
             ->orderBy('sort_order')
             ->orderBy('name')
             ->get();
+
+        $request->attributes->set('catalog_hide_prices', (bool) $setting->hide_prices);
+
+        $orderRules = OrderRule::query()
+            ->where('manufacturer_id', $setting->manufacturer_id)
+            ->where('is_active', true)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        if ($setting->hide_prices) {
+            $orderRules = $orderRules
+                ->filter(function (OrderRule $rule): bool {
+                    if (($rule->action['type'] ?? null) !== 'block_checkout') {
+                        return false;
+                    }
+
+                    return collect($rule->conditions)->every(
+                        fn (array $condition): bool => ($condition['metric'] ?? null) !== 'subtotal_cents',
+                    );
+                })
+                ->values();
+        }
+
+        $whatsappChannel = $setting->manufacturer->whatsappInstances()
+            ->where('status', WhatsappInstanceStatus::Connected->value)
+            ->whereNotNull('phone_number')
+            ->where('phone_number', '!=', '')
+            ->first();
+        $whatsappPhoneNumber = (string) preg_replace('/\D/', '', (string) $whatsappChannel?->phone_number);
+        $whatsappAvailable = $whatsappChannel !== null
+            && preg_match('/^\d{8,15}$/', $whatsappPhoneNumber) === 1;
 
         return Inertia::render('public/catalog', [
             'manufacturer' => [
@@ -129,6 +174,16 @@ class PublicCatalogController extends Controller
             'products' => ProductCatalogResource::collection($products),
             'combos' => ProductCatalogResource::collection($combos)->resolve($request),
             'catalog_token' => $setting->public_token,
+            'order_rules' => $orderRules
+                ->map(fn (OrderRule $rule): array => $rule->publicRepresentation())
+                ->values(),
+            'whatsapp_checkout' => [
+                'enabled' => (bool) $setting->hide_prices,
+                'available' => $whatsappAvailable,
+                'base_url' => $whatsappAvailable
+                    ? "https://wa.me/{$whatsappPhoneNumber}"
+                    : null,
+            ],
             'filters' => [
                 'search' => $search,
                 'category_id' => $categoryId,
@@ -275,7 +330,9 @@ class PublicCatalogController extends Controller
                     ->map(fn ($value) => [
                         'value' => $value->value,
                         'hex' => $value->hex,
-                        'image_url' => $value->image_path ? Storage::disk('s3')->url($value->image_path) : null,
+                        'image_url' => ($value->thumbnail_path ?: $value->image_path)
+                            ? Storage::disk('s3')->url($value->thumbnail_path ?: $value->image_path)
+                            : null,
                     ])
                     ->values()
                     ->all();

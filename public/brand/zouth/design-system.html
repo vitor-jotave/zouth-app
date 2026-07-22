@@ -1,0 +1,1383 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#18181F">
+    <title>Zouth — Design System</title>
+    <script>document.documentElement.classList.add('js');</script>
+    <style>
+        @font-face {
+            font-family: "Sora";
+            src: url("assets/sora-variable.ttf") format("truetype");
+            font-style: normal;
+            font-weight: 100 800;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: "Manrope";
+            src: url("assets/manrope-variable.ttf") format("truetype");
+            font-style: normal;
+            font-weight: 200 800;
+            font-display: swap;
+        }
+
+        :root {
+            --charcoal: #18181f;
+            --ivory: #f6f4f0;
+            --sand: #e7e3dc;
+            --stone: #cac4ba;
+            --warm-gray: #98968d;
+            --coral: #ff4d3d;
+            --plum: #5a2a4f;
+            --mineral: #2e705a;
+            --page-gutter: clamp(1.5rem, 5vw, 5rem);
+            --content: 90rem;
+            --ease: cubic-bezier(.22, 1, .36, 1);
+            --hairline: rgba(24, 24, 31, .16);
+        }
+
+        *, *::before, *::after { box-sizing: border-box; }
+
+        html {
+            scroll-behavior: smooth;
+            background: var(--ivory);
+        }
+
+        body {
+            margin: 0;
+            color: var(--charcoal);
+            background: var(--ivory);
+            font-family: "Manrope", sans-serif;
+            font-size: 1rem;
+            line-height: 1.6;
+            text-rendering: optimizeLegibility;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        img { display: block; max-width: 100%; }
+        button, input { font: inherit; }
+        button, a { -webkit-tap-highlight-color: transparent; }
+        a { color: inherit; }
+
+        :focus-visible {
+            outline: 2px solid var(--ivory);
+            outline-offset: 4px;
+            box-shadow: 0 0 0 4px var(--charcoal);
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        .skip-link {
+            position: fixed;
+            z-index: 100;
+            top: 1rem;
+            left: 1rem;
+            padding: .8rem 1rem;
+            color: var(--ivory);
+            background: var(--charcoal);
+            transform: translateY(-180%);
+            transition: transform 180ms var(--ease);
+        }
+
+        .skip-link:focus { transform: translateY(0); }
+
+        .shell {
+            width: min(100%, var(--content));
+            margin-inline: auto;
+            padding-inline: var(--page-gutter);
+        }
+
+        .site-header {
+            position: sticky;
+            z-index: 40;
+            top: 0;
+            border-bottom: 1px solid var(--hairline);
+            background: rgba(246, 244, 240, .94);
+            backdrop-filter: blur(16px);
+        }
+
+        .site-header__inner {
+            min-height: 4.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 2rem;
+        }
+
+        .site-header__logo { width: 8.6rem; }
+        .site-header__inner > a { min-height: 45px; display: inline-flex; align-items: center; }
+
+        .site-nav {
+            min-width: 0;
+            flex: 1 1 auto;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: clamp(1rem, 2.4vw, 2rem);
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+
+        .site-nav::-webkit-scrollbar { display: none; }
+
+        .site-nav a {
+            position: relative;
+            min-height: 45px;
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            padding-inline: .45rem;
+            color: rgba(24, 24, 31, .68);
+            font-family: "Sora", sans-serif;
+            font-size: .71rem;
+            font-weight: 600;
+            letter-spacing: .1em;
+            text-decoration: none;
+            text-transform: uppercase;
+            transition: color 180ms ease;
+        }
+
+        .site-nav a::after {
+            position: absolute;
+            right: 0;
+            bottom: -.65rem;
+            left: 0;
+            height: 2px;
+            content: "";
+            background: var(--coral);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 220ms var(--ease);
+        }
+
+        .site-nav a:hover,
+        .site-nav a.is-active { color: var(--charcoal); }
+        .site-nav a.is-active::after { transform: scaleX(1); }
+
+        .hero {
+            min-height: min(56rem, calc(100svh - 4.75rem));
+            display: grid;
+            align-items: end;
+            overflow: hidden;
+            color: var(--ivory);
+            background: var(--charcoal);
+        }
+
+        .hero__inner {
+            padding-top: clamp(5rem, 9vw, 9rem);
+            padding-bottom: clamp(4rem, 7vw, 7rem);
+        }
+
+        .hero__topline {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 2rem;
+            margin-bottom: clamp(5rem, 11vw, 10rem);
+        }
+
+        .hero__logo { width: clamp(12rem, 23vw, 21rem); }
+
+        .eyebrow {
+            margin: 0;
+            color: var(--coral);
+            font-family: "Sora", sans-serif;
+            font-size: .72rem;
+            font-weight: 700;
+            letter-spacing: .13em;
+            text-transform: uppercase;
+        }
+
+        .hero__edition {
+            color: rgba(246, 244, 240, .68);
+            font-family: "Sora", sans-serif;
+            font-size: .72rem;
+            font-weight: 600;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        .hero h1 {
+            max-width: 13ch;
+            margin: 0;
+            font-family: "Sora", sans-serif;
+            font-size: clamp(4rem, 10vw, 9.5rem);
+            font-weight: 800;
+            letter-spacing: -.072em;
+            line-height: .9;
+        }
+
+        .hero h1 span { color: var(--coral); }
+
+        .hero__bottom {
+            display: grid;
+            grid-template-columns: minmax(0, 1.5fr) minmax(17rem, .5fr);
+            gap: 4rem;
+            align-items: end;
+            margin-top: clamp(3rem, 6vw, 5.5rem);
+        }
+
+        .hero__bottom p {
+            max-width: 36rem;
+            margin: 0;
+            color: rgba(246, 244, 240, .72);
+            font-size: clamp(1.05rem, 1.6vw, 1.35rem);
+        }
+
+        .hero__signal {
+            padding-top: 1.5rem;
+            border-top: 1px solid rgba(246, 244, 240, .25);
+            font-family: "Sora", sans-serif;
+            font-size: .78rem;
+            font-weight: 600;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        .manifesto-strip {
+            color: var(--charcoal);
+            background: var(--coral);
+        }
+
+        .manifesto-strip__inner {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .manifesto-step {
+            min-height: 13rem;
+            padding: 2.5rem clamp(1.5rem, 3vw, 3rem);
+            border-right: 1px solid rgba(24, 24, 31, .25);
+        }
+
+        .manifesto-step:last-child { border-right: 0; }
+
+        .manifesto-step__number {
+            display: block;
+            margin-bottom: 2rem;
+            font-family: "Sora", sans-serif;
+            font-size: .75rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+        }
+
+        .manifesto-step h2 {
+            margin: 0 0 .65rem;
+            font-family: "Sora", sans-serif;
+            font-size: clamp(1.45rem, 2.5vw, 2.2rem);
+            font-weight: 700;
+            letter-spacing: -.04em;
+            line-height: 1.05;
+        }
+
+        .manifesto-step p { max-width: 26rem; margin: 0; }
+
+        .section {
+            padding-block: clamp(6rem, 11vw, 10rem);
+            border-bottom: 1px solid var(--hairline);
+            scroll-margin-top: 4.75rem;
+        }
+
+        .section--sand { background: var(--sand); }
+        .section--dark { color: var(--ivory); background: var(--charcoal); }
+        .section--coral { color: var(--charcoal); background: var(--coral); }
+
+        .section-heading {
+            display: grid;
+            grid-template-columns: minmax(15rem, .72fr) minmax(0, 1.28fr);
+            gap: clamp(3rem, 8vw, 9rem);
+            align-items: start;
+            margin-bottom: clamp(4rem, 8vw, 7rem);
+        }
+
+        .section-kicker {
+            display: flex;
+            align-items: center;
+            gap: .85rem;
+            font-family: "Sora", sans-serif;
+            font-size: .74rem;
+            font-weight: 700;
+            letter-spacing: .11em;
+            text-transform: uppercase;
+        }
+
+        .section-kicker span { color: inherit; }
+        .section--dark .section-kicker span { color: var(--coral); }
+
+        .section-title {
+            max-width: 12ch;
+            margin: 0;
+            font-family: "Sora", sans-serif;
+            font-size: clamp(3.25rem, 7vw, 7.5rem);
+            font-weight: 800;
+            letter-spacing: -.064em;
+            line-height: .91;
+        }
+
+        .section-title .point { color: var(--coral); }
+
+        .section-lead {
+            max-width: 44rem;
+            margin: 2rem 0 0;
+            font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+            line-height: 1.55;
+        }
+
+        .section--dark .section-lead { color: rgba(246, 244, 240, .72); }
+
+        .rule {
+            width: 4.5rem;
+            height: 2px;
+            margin-top: 1.8rem;
+            background: var(--coral);
+        }
+
+        .logo-showcase {
+            display: grid;
+            grid-template-columns: 1.25fr .75fr;
+            border-top: 1px solid var(--hairline);
+            border-left: 1px solid var(--hairline);
+        }
+
+        .logo-panel {
+            min-height: 25rem;
+            display: grid;
+            place-items: center;
+            padding: clamp(3rem, 7vw, 7rem);
+            border-right: 1px solid var(--hairline);
+            border-bottom: 1px solid var(--hairline);
+        }
+
+        .logo-panel--dark { background: var(--charcoal); }
+        .logo-panel__logo { width: min(100%, 36rem); }
+        .logo-panel__symbol { width: min(55%, 12rem); }
+
+        .logo-notes {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            margin-top: 3rem;
+            border-top: 1px solid var(--hairline);
+        }
+
+        .logo-note {
+            padding: 2rem 2rem 2rem 0;
+            border-right: 1px solid var(--hairline);
+        }
+
+        .logo-note + .logo-note { padding-left: 2rem; }
+        .logo-note:last-child { border-right: 0; }
+
+        .logo-note__label,
+        .type-role__label,
+        .token-label {
+            display: block;
+            margin-bottom: .8rem;
+            font-family: "Sora", sans-serif;
+            font-size: .69rem;
+            font-weight: 700;
+            letter-spacing: .11em;
+            text-transform: uppercase;
+        }
+
+        .logo-note p { margin: 0; color: rgba(24, 24, 31, .7); }
+
+        .palette-grid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            border-top: 1px solid var(--hairline);
+            border-left: 1px solid var(--hairline);
+        }
+
+        .swatch {
+            min-width: 0;
+            border-right: 1px solid var(--hairline);
+            border-bottom: 1px solid var(--hairline);
+        }
+
+        .swatch__color { min-height: 13rem; }
+        .swatch__meta { padding: 1.4rem; }
+
+        .swatch__meta strong {
+            display: block;
+            font-family: "Sora", sans-serif;
+            font-size: 1rem;
+        }
+
+        .swatch__meta code {
+            color: rgba(24, 24, 31, .62);
+            font-family: "Manrope", sans-serif;
+            font-size: .82rem;
+        }
+
+        .copy-token {
+            width: 100%;
+            min-height: 45px;
+            display: flex;
+            align-items: center;
+            margin-top: 1rem;
+            padding: .55rem 0 0;
+            border: 0;
+            border-top: 1px solid var(--hairline);
+            color: var(--charcoal);
+            background: transparent;
+            font-family: "Sora", sans-serif;
+            font-size: .68rem;
+            font-weight: 600;
+            letter-spacing: .08em;
+            text-align: left;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+
+        .copy-token:hover {
+            color: var(--charcoal);
+            text-decoration: underline;
+            text-decoration-color: var(--coral);
+            text-decoration-thickness: 2px;
+            text-underline-offset: .3rem;
+        }
+
+        .ratio {
+            display: grid;
+            grid-template-columns: 7fr 2fr 1fr;
+            min-height: 6rem;
+            margin-top: 4rem;
+        }
+
+        .ratio > div {
+            display: flex;
+            align-items: end;
+            padding: 1rem;
+            font-family: "Sora", sans-serif;
+            font-size: .72rem;
+            font-weight: 600;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        .ratio__base { background: var(--sand); }
+        .ratio__structure { color: var(--ivory); background: var(--charcoal); }
+        .ratio__interest { background: var(--coral); }
+
+        .type-intro {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            border-top: 1px solid var(--hairline);
+            border-left: 1px solid var(--hairline);
+        }
+
+        .type-family {
+            min-height: 28rem;
+            padding: clamp(2rem, 5vw, 4rem);
+            border-right: 1px solid var(--hairline);
+            border-bottom: 1px solid var(--hairline);
+        }
+
+        .type-family__name {
+            margin: 0 0 3rem;
+            font-family: "Sora", sans-serif;
+            font-size: clamp(2.2rem, 4vw, 4rem);
+            font-weight: 600;
+            letter-spacing: -.045em;
+        }
+
+        .type-family--manrope .type-family__name { font-family: "Manrope", sans-serif; }
+
+        .type-family__sample {
+            margin: 0;
+            font-family: "Sora", sans-serif;
+            font-size: clamp(7rem, 14vw, 13rem);
+            font-weight: 600;
+            letter-spacing: -.075em;
+            line-height: .78;
+        }
+
+        .type-family--manrope .type-family__sample { font-family: "Manrope", sans-serif; }
+
+        .type-family__weights {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .5rem 1rem;
+            margin-top: 4rem;
+            color: rgba(24, 24, 31, .62);
+            font-size: .78rem;
+        }
+
+        .type-scale {
+            margin-top: 5rem;
+            border-top: 1px solid var(--hairline);
+        }
+
+        .type-role {
+            display: grid;
+            grid-template-columns: 12rem minmax(0, 1fr) 9rem;
+            gap: 2rem;
+            align-items: baseline;
+            padding-block: 2.5rem;
+            border-bottom: 1px solid var(--hairline);
+        }
+
+        .type-role__spec { color: rgba(24, 24, 31, .72); font-size: .8rem; }
+        .type-display { font-family: "Sora", sans-serif; font-size: clamp(3.6rem, 8vw, 8rem); font-weight: 800; letter-spacing: -.065em; line-height: .88; }
+        .type-title { font-family: "Sora", sans-serif; font-size: clamp(2.3rem, 5vw, 4.8rem); font-weight: 700; letter-spacing: -.05em; line-height: .95; }
+        .type-subtitle { font-family: "Sora", sans-serif; font-size: clamp(1.35rem, 3vw, 2.5rem); font-weight: 500; letter-spacing: -.03em; line-height: 1.12; }
+        .type-body { max-width: 48rem; font-size: clamp(1rem, 1.5vw, 1.25rem); }
+        .coral { color: var(--coral); }
+
+        .graphic-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            border-top: 1px solid rgba(246, 244, 240, .18);
+            border-left: 1px solid rgba(246, 244, 240, .18);
+        }
+
+        .graphic-card {
+            min-height: 23rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 3rem;
+            padding: clamp(2rem, 4vw, 3.5rem);
+            border-right: 1px solid rgba(246, 244, 240, .18);
+            border-bottom: 1px solid rgba(246, 244, 240, .18);
+        }
+
+        .graphic-card__asset {
+            min-height: 8rem;
+            display: grid;
+            place-items: center;
+            padding: 1.5rem;
+            background: var(--ivory);
+        }
+
+        .graphic-card__asset img { max-height: 7rem; width: auto; }
+
+        .graphic-card h3 {
+            margin: 0 0 .6rem;
+            font-family: "Sora", sans-serif;
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: -.025em;
+        }
+
+        .graphic-card p { margin: 0; color: rgba(246, 244, 240, .65); }
+
+        .photo-layout {
+            display: grid;
+            grid-template-columns: .9fr 1.1fr 1.1fr;
+            grid-template-rows: repeat(2, minmax(15rem, 23rem));
+            gap: 1rem;
+        }
+
+        .photo-card {
+            position: relative;
+            min-height: 0;
+            overflow: hidden;
+            border-radius: 1.15rem;
+            background: var(--sand);
+        }
+
+        .photo-card:first-child { grid-row: 1 / 3; }
+        .photo-card:nth-child(4) { grid-column: 2 / 4; }
+
+        .photo-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 800ms var(--ease);
+        }
+
+        .photo-card:hover img { transform: scale(1.025); }
+
+        .photo-card__label {
+            position: absolute;
+            right: 1rem;
+            bottom: 1rem;
+            left: 1rem;
+            padding: .85rem 1rem;
+            color: var(--ivory);
+            background: var(--charcoal);
+            font-family: "Sora", sans-serif;
+            font-size: .69rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+        }
+
+        .photo-principles {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            margin-top: 4rem;
+            border-top: 1px solid var(--hairline);
+        }
+
+        .photo-principle {
+            padding: 2rem 2rem 0 0;
+            border-right: 1px solid var(--hairline);
+        }
+
+        .photo-principle + .photo-principle { padding-left: 2rem; }
+        .photo-principle:last-child { border-right: 0; }
+
+        .photo-principle strong {
+            display: block;
+            margin-bottom: .65rem;
+            font-family: "Sora", sans-serif;
+            text-transform: uppercase;
+        }
+
+        .operational-note {
+            max-width: 52rem;
+            margin: -2.5rem 0 3rem;
+            padding-left: 1rem;
+            border-left: 2px solid var(--coral);
+            color: rgba(24, 24, 31, .72);
+            font-size: .82rem;
+        }
+
+        .section--dark .operational-note { color: rgba(246, 244, 240, .72); }
+        .section--coral .operational-note { border-left-color: var(--charcoal); color: rgba(24, 24, 31, .78); }
+
+        .motion-controls {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 1.5rem;
+        }
+
+        .motion-toggle {
+            min-height: 3rem;
+            padding: .75rem 1.15rem;
+            border: 1px solid rgba(246, 244, 240, .38);
+            color: var(--ivory);
+            background: transparent;
+            font-family: "Sora", sans-serif;
+            font-size: .7rem;
+            font-weight: 600;
+            letter-spacing: .09em;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+
+        .motion-lab {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            border-top: 1px solid rgba(246, 244, 240, .18);
+            border-left: 1px solid rgba(246, 244, 240, .18);
+        }
+
+        .motion-card {
+            min-height: 22rem;
+            padding: 2.2rem;
+            border-right: 1px solid rgba(246, 244, 240, .18);
+            border-bottom: 1px solid rgba(246, 244, 240, .18);
+        }
+
+        .motion-card__stage {
+            height: 10rem;
+            display: grid;
+            place-items: center;
+            margin-bottom: 2rem;
+            overflow: hidden;
+            background: var(--ivory);
+        }
+
+        .motion-card__stage img { max-width: 7rem; max-height: 6rem; }
+        .motion-card h3 { margin: 0 0 .5rem; font-family: "Sora", sans-serif; font-size: 1.2rem; }
+        .motion-card p { margin: 0; color: rgba(246, 244, 240, .62); }
+
+        .motion-entry { animation: enter 2.8s var(--ease) infinite; }
+        .motion-continuity { width: 15rem; max-width: none !important; animation: continuity 3.4s cubic-bezier(.65, 0, .35, 1) infinite; }
+        .motion-expansion { animation: expansion 2.8s var(--ease) infinite; }
+        .motion-focus { animation: focus 3.2s var(--ease) infinite; }
+        .motion-recurrence { animation: recurrence 3.6s cubic-bezier(.65, 0, .35, 1) infinite; }
+        .motion-return { animation: return-cycle 3.2s var(--ease) infinite; }
+        .motion-paused * { animation-play-state: paused !important; }
+
+        @keyframes enter {
+            0%, 16% { opacity: 0; transform: translateX(-28px) scale(.94); }
+            38%, 78% { opacity: 1; transform: translateX(0) scale(1); }
+            100% { opacity: 0; transform: translateX(18px) scale(1); }
+        }
+
+        @keyframes continuity {
+            0%, 12% { transform: translateX(-36px); }
+            45%, 72% { transform: translateX(0); }
+            100% { transform: translateX(36px); }
+        }
+
+        @keyframes expansion {
+            0%, 16% { transform: scale(.55); opacity: .4; }
+            52%, 78% { transform: scale(1.06); opacity: 1; }
+            100% { transform: scale(.55); opacity: .4; }
+        }
+
+        @keyframes focus {
+            0%, 14% { transform: translate(22px, -12px); opacity: .3; }
+            48%, 78% { transform: translate(0, 0); opacity: 1; }
+            100% { transform: translate(-18px, 12px); opacity: .3; }
+        }
+
+        @keyframes recurrence {
+            0%, 12% { opacity: .1; transform: scale(.75); }
+            30%, 62% { opacity: 1; transform: scale(1); }
+            80%, 100% { opacity: .1; transform: scale(.75); }
+        }
+
+        @keyframes return-cycle {
+            0%, 14% { transform: translateX(-26px) scale(.9); opacity: .3; }
+            48%, 70% { transform: translateX(18px) scale(1); opacity: 1; }
+            100% { transform: translateX(-26px) scale(.9); opacity: .3; }
+        }
+
+        .component-board {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            border-top: 1px solid var(--hairline);
+            border-left: 1px solid var(--hairline);
+        }
+
+        .component-block {
+            padding: clamp(2rem, 4vw, 3.5rem);
+            border-right: 1px solid var(--hairline);
+            border-bottom: 1px solid var(--hairline);
+        }
+
+        .component-block--actions { grid-column: span 7; }
+        .component-block--input { grid-column: span 5; }
+        .component-block--editorial { grid-column: span 5; }
+        .component-block--signal { grid-column: span 7; }
+
+        .component-title {
+            margin: 0 0 2.5rem;
+            font-family: "Sora", sans-serif;
+            font-size: .72rem;
+            font-weight: 700;
+            letter-spacing: .11em;
+            text-transform: uppercase;
+        }
+
+        .action-row { display: flex; flex-wrap: wrap; gap: 1rem; }
+
+        .support-example {
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--hairline);
+        }
+
+        .support-example .token-label { margin-bottom: 1rem; color: rgba(24, 24, 31, .72); }
+
+        .button {
+            min-height: 3.25rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: .8rem 1.5rem;
+            border: 1px solid transparent;
+            border-radius: 2px;
+            font-family: "Sora", sans-serif;
+            font-size: .78rem;
+            font-weight: 700;
+            letter-spacing: -.01em;
+            text-decoration: none;
+            cursor: pointer;
+            transition: transform 180ms var(--ease), background 180ms ease, color 180ms ease;
+        }
+
+        .button:hover { transform: translateY(-1px); }
+        .button--primary { color: var(--charcoal); background: var(--coral); }
+        .button--primary:hover { background: var(--coral); }
+        .button--secondary { color: var(--ivory); background: var(--charcoal); }
+        .button--secondary:hover { background: var(--charcoal); }
+        .button--support { color: var(--ivory); background: var(--mineral); }
+        .button--support:hover { background: var(--mineral); }
+        .button--quiet { border-color: var(--charcoal); color: var(--charcoal); background: transparent; }
+
+        .field { display: grid; gap: .7rem; }
+        .field label {
+            font-family: "Sora", sans-serif;
+            font-size: .68rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+        }
+
+        .field input {
+            width: 100%;
+            min-height: 3.4rem;
+            padding: .85rem 1rem;
+            border: 1px solid var(--stone);
+            border-radius: 0;
+            color: var(--charcoal);
+            background: var(--ivory);
+        }
+
+        .field input:focus { border-color: var(--charcoal); outline: 2px solid var(--coral); outline-offset: 2px; }
+
+        .editorial-card {
+            max-width: 26rem;
+            padding: 2rem;
+            background: var(--sand);
+        }
+
+        .editorial-card__eyebrow {
+            padding-left: .65rem;
+            border-left: 2px solid var(--coral);
+            color: var(--charcoal);
+        }
+        .editorial-card h3 {
+            margin: .8rem 0 1rem;
+            font-family: "Sora", sans-serif;
+            font-size: clamp(2rem, 4vw, 3.4rem);
+            font-weight: 700;
+            letter-spacing: -.055em;
+            line-height: .94;
+        }
+
+        .editorial-card p { margin: 0 0 2rem; }
+
+        .text-link {
+            min-height: 45px;
+            display: inline-flex;
+            align-items: center;
+            padding-bottom: .25rem;
+            border-bottom: 2px solid var(--coral);
+            font-family: "Sora", sans-serif;
+            font-size: .72rem;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-decoration: none;
+            text-transform: uppercase;
+        }
+
+        .signal-card {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 8rem;
+            gap: 2rem;
+            align-items: end;
+            padding: 2.5rem;
+            color: var(--ivory);
+            background: var(--charcoal);
+        }
+
+        .signal-card__value {
+            display: block;
+            color: var(--coral);
+            font-family: "Sora", sans-serif;
+            font-size: clamp(4.2rem, 8vw, 8rem);
+            font-weight: 700;
+            letter-spacing: -.075em;
+            line-height: .82;
+        }
+
+        .signal-card h3 {
+            max-width: 12ch;
+            margin: 1rem 0 .55rem;
+            font-family: "Sora", sans-serif;
+            font-size: 1.35rem;
+            line-height: 1.1;
+        }
+
+        .signal-card p { margin: 0; color: rgba(246, 244, 240, .6); }
+        .signal-card img { width: 100%; }
+
+        .sample-note {
+            margin: 1rem 0 0;
+            color: rgba(24, 24, 31, .72);
+            font-size: .76rem;
+        }
+
+        .asset-list {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            border-top: 1px solid rgba(246, 244, 240, .18);
+            border-left: 1px solid rgba(246, 244, 240, .18);
+        }
+
+        .asset-item {
+            min-height: 13rem;
+            display: grid;
+            grid-template-columns: minmax(8rem, .65fr) 1fr;
+            gap: 2rem;
+            align-items: center;
+            padding: 2rem;
+            border-right: 1px solid rgba(246, 244, 240, .18);
+            border-bottom: 1px solid rgba(246, 244, 240, .18);
+        }
+
+        .asset-item__preview {
+            min-height: 7rem;
+            display: grid;
+            place-items: center;
+            padding: 1rem;
+            background: var(--ivory);
+        }
+
+        .asset-item__preview--dark { background: var(--charcoal); border: 1px solid rgba(246, 244, 240, .18); }
+        .asset-item__preview img { max-height: 5rem; }
+
+        .asset-item h3 { margin: 0 0 .5rem; font-family: "Sora", sans-serif; font-size: 1rem; }
+        .asset-item p { margin: 0 0 1rem; color: rgba(246, 244, 240, .62); font-size: .86rem; }
+        .asset-download { min-height: 45px; display: inline-flex; align-items: center; color: var(--coral); font-family: "Sora", sans-serif; font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+
+        .asset-status {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            margin-top: 3rem;
+            border-top: 1px solid rgba(246, 244, 240, .18);
+            border-left: 1px solid rgba(246, 244, 240, .18);
+        }
+
+        .asset-status__item {
+            padding: 2rem;
+            border-right: 1px solid rgba(246, 244, 240, .18);
+            border-bottom: 1px solid rgba(246, 244, 240, .18);
+        }
+
+        .asset-status__item strong {
+            display: block;
+            margin-bottom: .7rem;
+            color: var(--coral);
+            font-family: "Sora", sans-serif;
+            font-size: .72rem;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+        }
+
+        .asset-status__item p { margin: 0; color: rgba(246, 244, 240, .64); }
+
+        .closing {
+            min-height: 42rem;
+            display: grid;
+            place-items: center;
+            padding-block: 7rem;
+            color: var(--ivory);
+            background: var(--charcoal);
+            text-align: center;
+        }
+
+        .closing img { width: min(25rem, 68vw); margin-inline: auto; }
+        .closing h2 {
+            max-width: 12ch;
+            margin: 4rem auto 1.5rem;
+            font-family: "Sora", sans-serif;
+            font-size: clamp(3rem, 7vw, 7rem);
+            font-weight: 800;
+            letter-spacing: -.065em;
+            line-height: .9;
+        }
+
+        .closing h2 span { color: var(--coral); }
+
+        .closing p { max-width: 33rem; margin: 0 auto; color: rgba(246, 244, 240, .66); font-size: 1.1rem; }
+
+        .site-footer {
+            padding-block: 2rem;
+            color: rgba(246, 244, 240, .58);
+            background: var(--charcoal);
+            font-size: .78rem;
+        }
+
+        .site-footer__inner { display: flex; justify-content: space-between; gap: 2rem; }
+
+        .js .reveal {
+            opacity: 0;
+            transform: translateY(22px);
+            transition: opacity 620ms var(--ease), transform 620ms var(--ease);
+        }
+
+        .js .reveal.is-visible { opacity: 1; transform: translateY(0); }
+
+        @media (max-width: 68rem) {
+            .site-header__inner { align-items: flex-start; flex-direction: column; gap: 1rem; padding-block: 1rem; }
+            .site-nav { width: 100%; justify-content: flex-start; padding-bottom: .35rem; }
+            .hero { min-height: auto; }
+            .hero__bottom, .section-heading { grid-template-columns: 1fr; }
+            .hero__topline { margin-bottom: 7rem; }
+            .manifesto-strip__inner, .palette-grid { grid-template-columns: repeat(2, 1fr); }
+            .manifesto-step:nth-child(2) { border-right: 0; }
+            .manifesto-step:last-child { grid-column: 1 / -1; border-top: 1px solid rgba(24, 24, 31, .25); }
+            .logo-showcase, .type-intro { grid-template-columns: 1fr; }
+            .graphic-grid, .motion-lab { grid-template-columns: repeat(2, 1fr); }
+            .photo-layout { grid-template-columns: 1fr 1fr; grid-template-rows: 27rem 18rem 18rem; }
+            .photo-card:first-child { grid-row: 1 / 2; }
+            .photo-card:nth-child(4) { grid-column: 1 / 3; }
+            .photo-principles { grid-template-columns: repeat(2, 1fr); }
+            .photo-principle:nth-child(2) { border-right: 0; }
+            .photo-principle:nth-child(n+3) { border-top: 1px solid var(--hairline); }
+            .component-block--actions, .component-block--input, .component-block--editorial, .component-block--signal { grid-column: span 12; }
+            .asset-list { grid-template-columns: 1fr; }
+            .asset-status { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 46rem) {
+            .site-header__logo { width: 7.4rem; }
+            .hero__topline { align-items: flex-start; flex-direction: column; margin-bottom: 5rem; }
+            .hero__bottom { gap: 2.5rem; }
+            .manifesto-strip__inner, .palette-grid, .graphic-grid, .motion-lab { grid-template-columns: 1fr; }
+            .manifesto-step { border-right: 0; border-bottom: 1px solid rgba(24, 24, 31, .25); }
+            .manifesto-step:last-child { grid-column: auto; border-top: 0; border-bottom: 0; }
+            .logo-panel { min-height: 18rem; }
+            .logo-notes { grid-template-columns: 1fr; }
+            .logo-note { padding: 1.5rem 0; border-right: 0; border-bottom: 1px solid var(--hairline); }
+            .logo-note + .logo-note { padding-left: 0; }
+            .ratio { grid-template-columns: 1fr; }
+            .ratio > div { min-height: 5rem; }
+            .type-family { min-height: 22rem; }
+            .type-role { grid-template-columns: 1fr; gap: 1rem; }
+            .photo-layout { display: grid; grid-template-columns: 1fr; grid-template-rows: repeat(5, 22rem); }
+            .photo-card:first-child, .photo-card:nth-child(4) { grid-column: auto; grid-row: auto; }
+            .photo-principles { grid-template-columns: 1fr; }
+            .photo-principle, .photo-principle + .photo-principle { padding: 1.5rem 0; border-right: 0; border-top: 1px solid var(--hairline); }
+            .motion-controls { justify-content: flex-start; }
+            #movimento .operational-note { margin-top: 0; }
+            .field input { padding-inline: .8rem; font-size: .9rem; }
+            .signal-card { grid-template-columns: 1fr; }
+            .signal-card img { max-width: 7rem; }
+            .asset-item { grid-template-columns: 1fr; }
+            .site-footer__inner { flex-direction: column; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            html { scroll-behavior: auto; }
+            *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+            .js .reveal { opacity: 1; transform: none; }
+        }
+
+        @media print {
+            .site-header, .motion-controls, .copy-token { display: none; }
+            .section { break-inside: avoid; }
+            .js .reveal { opacity: 1; transform: none; }
+        }
+    </style>
+</head>
+<body>
+    <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
+
+    <header class="site-header">
+        <div class="shell site-header__inner">
+            <a href="#inicio" aria-label="Zouth Design System — início">
+                <img class="site-header__logo" src="assets/logo-duotone-dark.png" alt="Zouth">
+            </a>
+            <nav class="site-nav" aria-label="Seções do design system">
+                <a href="#marca">Marca</a>
+                <a href="#cor">Cor</a>
+                <a href="#tipo">Tipo</a>
+                <a href="#grafismos">Grafismos</a>
+                <a href="#fotografia">Fotografia</a>
+                <a href="#movimento">Movimento</a>
+                <a href="#componentes">Componentes</a>
+                <a href="#assets">Assets</a>
+            </nav>
+        </div>
+    </header>
+
+    <main id="conteudo">
+        <section class="hero" id="inicio">
+            <div class="shell hero__inner">
+                <div class="hero__topline">
+                    <img class="hero__logo" src="assets/logo-duotone-light.png" alt="Zouth">
+                    <span class="hero__edition">Design System · 2026</span>
+                </div>
+                <p class="eyebrow">Conceito central</p>
+                <h1>Da coleção ao <span>interesse.</span></h1>
+                <div class="hero__bottom">
+                    <p>A identidade que preserva a força de cada coleção, acompanha sua passagem pelo mercado e sinaliza onde o interesse começa a aparecer.</p>
+                    <div class="hero__signal">Sua coleção em movimento.</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="manifesto-strip" aria-label="Narrativa da marca">
+            <div class="manifesto-strip__inner">
+                <article class="manifesto-step">
+                    <span class="manifesto-step__number">01</span>
+                    <h2>A coleção nasce.</h2>
+                    <p>Criada com identidade, intenção e desejo de ser vista.</p>
+                </article>
+                <article class="manifesto-step">
+                    <span class="manifesto-step__number">02</span>
+                    <h2>A coleção circula.</h2>
+                    <p>A mesma força acompanha cada apresentação e cada representante.</p>
+                </article>
+                <article class="manifesto-step">
+                    <span class="manifesto-step__number">03</span>
+                    <h2>O interesse aparece.</h2>
+                    <p>Sinais mostram onde existe oportunidade de ação.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="section" id="marca">
+            <div class="shell">
+                <div class="section-heading reveal">
+                    <div>
+                        <div class="section-kicker"><span>01</span> Logotipo e símbolo</div>
+                        <div class="rule"></div>
+                    </div>
+                    <div>
+                        <h2 class="section-title">Presença que direciona<span class="point">.</span></h2>
+                        <p class="section-lead">O logotipo concentra clareza comercial e um ponto de interesse que encerra a assinatura com intenção. O símbolo reduz essa lógica a direção, enquadramento e foco.</p>
+                    </div>
+                </div>
+
+                <div class="logo-showcase reveal">
+                    <div class="logo-panel">
+                        <img class="logo-panel__logo" src="assets/logo-duotone-dark.png" alt="Logotipo Zouth para fundos claros">
+                    </div>
+                    <div class="logo-panel logo-panel--dark">
+                        <img class="logo-panel__symbol" src="assets/symbol-duotone-light.png" alt="Símbolo Zouth para fundos escuros">
+                    </div>
+                    <div class="logo-panel logo-panel--dark">
+                        <img class="logo-panel__logo" src="assets/logo-duotone-light.png" alt="Logotipo Zouth para fundos escuros">
+                    </div>
+                    <div class="logo-panel">
+                        <img class="logo-panel__symbol" src="assets/symbol-duotone-dark.png" alt="Símbolo Zouth para fundos claros">
+                    </div>
+                </div>
+
+                <div class="logo-notes reveal">
+                    <article class="logo-note">
+                        <span class="logo-note__label">Assinatura principal</span>
+                        <p>Use o logotipo completo em peças institucionais e comunicação principal. Reserve o símbolo a contextos compactos.</p>
+                    </article>
+                    <article class="logo-note">
+                        <span class="logo-note__label">Área de proteção</span>
+                        <p>Preserve ao redor da assinatura um respiro equivalente à altura da letra Z.</p>
+                    </article>
+                    <article class="logo-note">
+                        <span class="logo-note__label">Ponto de interesse</span>
+                        <p>O ponto faz parte da marca. Nunca remover ou deslocar; use sempre a cor da versão oficial escolhida.</p>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <section class="section section--sand" id="cor">
+            <div class="shell">
+                <div class="section-heading reveal">
+                    <div>
+                        <div class="section-kicker"><span>02</span> Paleta</div>
+                        <div class="rule"></div>
+                    </div>
+                    <div>
+                        <h2 class="section-title">Neutra para receber. Expressiva para sinalizar<span class="point">.</span></h2>
+                        <p class="section-lead">A base é silenciosa, calorosa e editorial. O coral destaca o que importa sem competir com a coleção do cliente. Ameixa e verde mineral criam profundidade controlada.</p>
+                    </div>
+                </div>
+
+                <div class="palette-grid reveal">
+                    <article class="swatch"><div class="swatch__color" style="background:#18181f"></div><div class="swatch__meta"><strong>Carvão</strong><code>#18181F</code><button type="button" class="copy-token" data-copy="#18181F">Copiar hex</button></div></article>
+                    <article class="swatch"><div class="swatch__color" style="background:#f6f4f0"></div><div class="swatch__meta"><strong>Marfim</strong><code>#F6F4F0</code><button type="button" class="copy-token" data-copy="#F6F4F0">Copiar hex</button></div></article>
+                    <article class="swatch"><div class="swatch__color" style="background:#e7e3dc"></div><div class="swatch__meta"><strong>Areia</strong><code>#E7E3DC</code><button type="button" class="copy-token" data-copy="#E7E3DC">Copiar hex</button></div></article>
+                    <article class="swatch"><div class="swatch__color" style="background:#cac4ba"></div><div class="swatch__meta"><strong>Pedra</strong><code>#CAC4BA</code><button type="button" class="copy-token" data-copy="#CAC4BA">Copiar hex</button></div></article>
+                    <article class="swatch"><div class="swatch__color" style="background:#98968d"></div><div class="swatch__meta"><strong>Cinza quente</strong><code>#98968D</code><button type="button" class="copy-token" data-copy="#98968D">Copiar hex</button></div></article>
+                    <article class="swatch"><div class="swatch__color" style="background:#ff4d3d"></div><div class="swatch__meta"><strong>Coral de interesse</strong><code>#FF4D3D</code><button type="button" class="copy-token" data-copy="#FF4D3D">Copiar hex</button></div></article>
+                    <article class="swatch"><div class="swatch__color" style="background:#5a2a4f"></div><div class="swatch__meta"><strong>Ameixa</strong><code>#5A2A4F</code><button type="button" class="copy-token" data-copy="#5A2A4F">Copiar hex</button></div></article>
+                    <article class="swatch"><div class="swatch__color" style="background:#2e705a"></div><div class="swatch__meta"><strong>Verde mineral</strong><code>#2E705A</code><button type="button" class="copy-token" data-copy="#2E705A">Copiar hex</button></div></article>
+                </div>
+
+                <div class="ratio reveal" aria-label="Proporção recomendada de cores">
+                    <div class="ratio__base">70% base clara</div>
+                    <div class="ratio__structure">20% estrutura</div>
+                    <div class="ratio__interest">10% interesse</div>
+                </div>
+                <p class="sample-note">Escopo operacional: a proporção orienta peças informativas. Aplicações de impacto podem reproduzir o coral dominante já mostrado no manual.</p>
+            </div>
+        </section>
+
+        <section class="section" id="tipo">
+            <div class="shell">
+                <div class="section-heading reveal">
+                    <div><div class="section-kicker"><span>03</span> Tipografia</div><div class="rule"></div></div>
+                    <div><h2 class="section-title">Editorial no desejo. Precisa na informação<span class="point">.</span></h2><p class="section-lead">Sora dá presença à voz de destaque. Manrope sustenta a leitura com clareza, leveza e ritmo.</p></div>
+                </div>
+
+                <div class="type-intro reveal">
+                    <article class="type-family"><h3 class="type-family__name">Sora</h3><p class="type-family__sample">Aa</p><div class="type-family__weights"><span>Light</span><span>Regular</span><span>Medium</span><span>SemiBold</span><span>Bold</span><span>ExtraBold</span></div></article>
+                    <article class="type-family type-family--manrope"><h3 class="type-family__name">Manrope</h3><p class="type-family__sample">Aa</p><div class="type-family__weights"><span>Light</span><span>Regular</span><span>Medium</span><span>SemiBold</span><span>Bold</span></div></article>
+                </div>
+
+                <div class="type-scale reveal">
+                    <div class="type-role"><span class="type-role__label">Display</span><div class="type-display">Desejo que veste<span class="coral">.</span></div><span class="type-role__spec">Sora ExtraBold</span></div>
+                    <div class="type-role"><span class="type-role__label">Título</span><div class="type-title">Coleções autênticas<span class="coral">.</span></div><span class="type-role__spec">Sora Bold</span></div>
+                    <div class="type-role"><span class="type-role__label">Subtítulo</span><div class="type-subtitle">Estética com intenção e propósito.</div><span class="type-role__spec">Sora Medium</span></div>
+                    <div class="type-role"><span class="type-role__label">Texto corrido</span><div class="type-body">Peças criadas para quem valoriza design, qualidade e autenticidade em cada detalhe.</div><span class="type-role__spec">Manrope Regular</span></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section section--dark" id="grafismos">
+            <div class="shell">
+                <div class="section-heading reveal">
+                    <div><div class="section-kicker"><span>04</span> Elementos gráficos</div><div class="rule"></div></div>
+                    <div><h2 class="section-title">Ativos que mantêm a coleção em movimento<span class="point">.</span></h2><p class="section-lead">Poucos sinais proprietários organizam presença, foco, continuidade e interesse. Cada composição escolhe um protagonista.</p></div>
+                </div>
+
+                <div class="graphic-grid reveal">
+                    <article class="graphic-card"><div class="graphic-card__asset"><img src="assets/graphic-frame-of-interest.png" alt="Moldura de interesse"></div><div><h3>01. Moldura de interesse</h3><p>Enquadra e destaca o que importa.</p></div></article>
+                    <article class="graphic-card"><div class="graphic-card__asset"><img src="assets/graphic-point-of-interest.png" alt="Ponto de interesse"></div><div><h3>02. Ponto de interesse</h3><p>Cria foco e sinaliza o essencial.</p></div></article>
+                    <article class="graphic-card"><div class="graphic-card__asset"><img src="assets/graphic-continuity-line.png" alt="Linha de continuidade"></div><div><h3>03. Linha de continuidade</h3><p>Conecta momentos e orienta o olhar.</p></div></article>
+                    <article class="graphic-card"><div class="graphic-card__asset"><img src="assets/graphic-planes-levels.png" alt="Planos e níveis"></div><div><h3>04. Planos e níveis</h3><p>Sobreposição que cria hierarquia e profundidade.</p></div></article>
+                    <article class="graphic-card"><div class="graphic-card__asset"><img src="assets/graphic-modular-pattern.png" alt="Padrão modular"></div><div><h3>05. Padrão modular</h3><p>Repetição controlada que cria ritmo e estrutura.</p></div></article>
+                    <article class="graphic-card"><div class="graphic-card__asset"><img src="assets/graphic-progressive-crop.png" alt="Recorte progressivo"></div><div><h3>06. Recorte progressivo</h3><p>Cortes que crescem ou se deslocam para gerar progressão.</p></div></article>
+                </div>
+            </div>
+        </section>
+
+        <section class="section section--coral" id="fotografia">
+            <div class="shell">
+                <div class="section-heading reveal">
+                    <div><div class="section-kicker"><span style="color:#18181f">05</span> Fotografia</div><div class="rule" style="background:#18181f"></div></div>
+                    <div><h2 class="section-title">Moda infantil em contexto comercial<span>.</span></h2><p class="section-lead">Pessoas reais, movimento natural e ambientes que aproximam coleção e lojista.</p></div>
+                </div>
+                <p class="operational-note reveal">Este campo usa o coral oficial <strong>#FF4D3D</strong>. O tom mais escuro visto na página 9 permanece pendente de confirmação e não foi transformado em um novo token.</p>
+
+                <div class="photo-layout reveal">
+                    <figure class="photo-card"><img src="assets/photo-retail-child.png" alt="Criança observando peças em uma loja de moda infantil"><figcaption class="photo-card__label">Produto em contexto real</figcaption></figure>
+                    <figure class="photo-card"><img src="assets/photo-selection.png" alt="Criança escolhendo uma peça ao lado de uma pessoa adulta"><figcaption class="photo-card__label">Interação autêntica</figcaption></figure>
+                    <figure class="photo-card"><img src="assets/photo-rack.png" alt="Arara com coleção de roupas infantis"><figcaption class="photo-card__label">Coleção e ambiente</figcaption></figure>
+                    <figure class="photo-card"><img src="assets/photo-buyer-conversation.png" alt="Duas pessoas adultas conversando enquanto observam uma peça infantil"><figcaption class="photo-card__label">Experiência comercial</figcaption></figure>
+                    <figure class="photo-card"><img src="assets/photo-mobile-catalog.png" alt="Catálogo de moda infantil sendo visto no celular"><figcaption class="photo-card__label">Coleção em movimento</figcaption></figure>
+                </div>
+
+                <div class="photo-principles reveal">
+                    <div class="photo-principle"><strong>Real</strong><span>Pessoas e ambientes verdadeiros.</span></div>
+                    <div class="photo-principle"><strong>Comercial</strong><span>Loja, contexto de lojista e experiência de compra.</span></div>
+                    <div class="photo-principle"><strong>Natural</strong><span>Movimento espontâneo e interação autêntica.</span></div>
+                    <div class="photo-principle"><strong>Calorosa</strong><span>Luz natural, tons quentes e atmosfera acolhedora.</span></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section section--dark" id="movimento">
+            <div class="shell">
+                <div class="section-heading reveal">
+                    <div><div class="section-kicker"><span>06</span> Motion principles</div><div class="rule"></div></div>
+                    <div><h2 class="section-title">O movimento tem direção<span class="point">.</span></h2><p class="section-lead">Sutil, contínuo e significativo. Cada gesto guia o olhar, preserva o contexto e transforma a coleção em algo que se sente em movimento.</p></div>
+                </div>
+
+                <div class="motion-controls"><button class="motion-toggle" type="button" aria-pressed="false">Pausar movimento</button></div>
+                <p class="operational-note reveal">As animações abaixo são interpretações operacionais para este espécime. Os seis princípios são aprovados; tempos e sequências visuais ainda não são masters oficiais.</p>
+                <div class="motion-lab reveal">
+                    <article class="motion-card"><div class="motion-card__stage"><img class="motion-entry" src="assets/symbol-duotone-dark.png" alt=""></div><h3>01. Entrada</h3><p>O elemento parece vir de um quadro anterior.</p></article>
+                    <article class="motion-card"><div class="motion-card__stage"><img class="motion-continuity" src="assets/graphic-continuity-line.png" alt=""></div><h3>02. Continuidade</h3><p>Imagem, palavra ou moldura atravessa a transição.</p></article>
+                    <article class="motion-card"><div class="motion-card__stage"><img class="motion-expansion" src="assets/graphic-point-of-interest.png" alt=""></div><h3>03. Expansão</h3><p>O produto ganha escala e presença.</p></article>
+                    <article class="motion-card"><div class="motion-card__stage"><img class="motion-focus" src="assets/graphic-frame-of-interest.png" alt=""></div><h3>04. Foco</h3><p>A moldura encontra e acompanha o que importa.</p></article>
+                    <article class="motion-card"><div class="motion-card__stage"><img class="motion-recurrence" src="assets/graphic-modular-pattern.png" alt=""></div><h3>05. Recorrência</h3><p>O sinal reaparece e sugere interesse acumulado.</p></article>
+                    <article class="motion-card"><div class="motion-card__stage"><img class="motion-return" src="assets/symbol-duotone-dark.png" alt=""></div><h3>06. Retorno</h3><p>A informação volta ao comercial e fecha o ciclo.</p></article>
+                </div>
+            </div>
+        </section>
+
+        <section class="section" id="componentes">
+            <div class="shell">
+                <div class="section-heading reveal">
+                    <div><div class="section-kicker"><span>07</span> Componentes digitais</div><div class="rule"></div></div>
+                    <div><h2 class="section-title">Editorial para desejar. Claro para agir<span class="point">.</span></h2><p class="section-lead">Os componentes digitais mantêm a força da identidade sem cair na estética genérica de software. Estrutura aberta, imagens protagonistas e coral reservado ao foco.</p></div>
+                </div>
+                <p class="operational-note reveal">Os textos, CTAs e conteúdos abaixo são exemplos de aplicação visual. Não constituem copy comercial, oferta ou promessa aprovada da Zouth.</p>
+
+                <div class="component-board reveal">
+                    <section class="component-block component-block--actions"><h3 class="component-title">Ações</h3><div class="action-row"><a class="button button--primary" href="#assets">Explorar a coleção</a><a class="button button--secondary" href="#assets">Falar com especialista</a><a class="button button--quiet" href="#tipo">Ver diretrizes</a></div><div class="support-example"><span class="token-label">Variação contextual · usar sem ação coral concorrente</span><a class="button button--support" href="#fotografia">Ver coleção</a></div></section>
+                    <section class="component-block component-block--input"><h3 class="component-title">Campo</h3><div class="field"><label for="busca">Buscar na coleção</label><input id="busca" type="search" placeholder="Nome, referência ou categoria"></div></section>
+                    <section class="component-block component-block--editorial"><h3 class="component-title">Chamada editorial</h3><article class="editorial-card"><span class="eyebrow editorial-card__eyebrow">Nova coleção</span><h3>Presença que fica<span class="coral">.</span></h3><p>Peças que traduzem leveza, intenção e identidade.</p><a class="text-link" href="#fotografia">Ver coleção</a></article></section>
+                    <section class="component-block component-block--signal"><h3 class="component-title">Sinal de interesse</h3><article class="signal-card"><div><span class="signal-card__value">+27%</span><h3>Interesse na nova coleção.</h3><p>Um dado em destaque, contexto claro e uma próxima leitura possível.</p></div><img src="assets/symbol-duotone-light.png" alt="Símbolo Zouth"></article><p class="sample-note">Exemplo exclusivamente visual. O número não representa um resultado real da Zouth ou de seus clientes.</p></section>
+                </div>
+            </div>
+        </section>
+
+        <section class="section section--dark" id="assets">
+            <div class="shell">
+                <div class="section-heading reveal">
+                    <div><div class="section-kicker"><span>08</span> Assets oficiais</div><div class="rule"></div></div>
+                    <div><h2 class="section-title">A marca pronta para ocupar seu espaço<span class="point">.</span></h2><p class="section-lead">Use sempre os arquivos oficiais. Não redesenhe o logotipo, o símbolo ou suas proporções em código.</p></div>
+                </div>
+
+                <div class="asset-list reveal">
+                    <article class="asset-item"><div class="asset-item__preview"><img src="assets/logo-duotone-dark.png" alt="Logo Zouth escuro"></div><div><h3>Logo · fundo claro</h3><p>Assinatura principal em carvão e coral.</p><a class="asset-download" href="assets/logo-duotone-dark.png" download>Baixar PNG</a></div></article>
+                    <article class="asset-item"><div class="asset-item__preview asset-item__preview--dark"><img src="assets/logo-duotone-light.png" alt="Logo Zouth claro"></div><div><h3>Logo · fundo escuro</h3><p>Assinatura reversa em areia e coral.</p><a class="asset-download" href="assets/logo-duotone-light.png" download>Baixar PNG</a></div></article>
+                    <article class="asset-item"><div class="asset-item__preview"><img src="assets/symbol-duotone-dark.png" alt="Símbolo Zouth escuro"></div><div><h3>Símbolo · fundo claro</h3><p>Redução gráfica para espaços compactos.</p><a class="asset-download" href="assets/symbol-duotone-dark.png" download>Baixar PNG</a></div></article>
+                    <article class="asset-item"><div class="asset-item__preview asset-item__preview--dark"><img src="assets/symbol-duotone-light.png" alt="Símbolo Zouth claro"></div><div><h3>Símbolo · fundo escuro</h3><p>Redução reversa para superfícies escuras.</p><a class="asset-download" href="assets/symbol-duotone-light.png" download>Baixar PNG</a></div></article>
+                </div>
+
+                <div class="asset-status reveal" aria-label="Status dos arquivos da identidade">
+                    <article class="asset-status__item"><strong>Oficial e disponível</strong><p>Quatro PNGs duotone: logo e símbolo para fundos claros e escuros.</p></article>
+                    <article class="asset-status__item"><strong>Referência, não master</strong><p>Fotografias e grafismos exibidos neste guia foram extraídos do PDF apenas para demonstrar a direção visual.</p></article>
+                    <article class="asset-status__item"><strong>Exportação pendente</strong><p>Versões para fundo coral, monocromáticas e vetoriais precisam ser exportadas da identidade original antes de uso produtivo.</p></article>
+                </div>
+            </div>
+        </section>
+
+        <section class="closing">
+            <div class="shell">
+                <img src="assets/logo-duotone-light.png" alt="Zouth">
+                <h2>Sua coleção em movimento<span>.</span></h2>
+                <p>Uma identidade neutra para receber, expressiva para sinalizar e precisa para transformar interesse em direção.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="shell site-footer__inner"><span>Zouth Design System · versão 1.0</span><span>Fonte de verdade: Brand ID Final · julho de 2026</span></div>
+    </footer>
+    <span class="sr-only" id="copy-status" aria-live="polite"></span>
+
+    <script>
+        const copyButtons = document.querySelectorAll('[data-copy]');
+        const copyStatus = document.querySelector('#copy-status');
+        copyButtons.forEach((button) => {
+            button.addEventListener('click', async () => {
+                const original = button.textContent;
+                try {
+                    await navigator.clipboard.writeText(button.dataset.copy);
+                    button.textContent = 'Copiado';
+                    copyStatus.textContent = `${button.dataset.copy} copiado para a área de transferência.`;
+                } catch {
+                    button.textContent = button.dataset.copy;
+                    copyStatus.textContent = `Não foi possível copiar automaticamente. Código ${button.dataset.copy}.`;
+                }
+                window.setTimeout(() => { button.textContent = original; }, 1400);
+            });
+        });
+
+        const revealObserver = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-visible');
+                    revealObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.12 });
+        document.querySelectorAll('.reveal').forEach((element) => revealObserver.observe(element));
+
+        const navLinks = [...document.querySelectorAll('.site-nav a')];
+        const sectionObserver = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (!entry.isIntersecting) return;
+                navLinks.forEach((link) => link.classList.toggle('is-active', link.getAttribute('href') === `#${entry.target.id}`));
+            });
+        }, { rootMargin: '-30% 0px -60% 0px' });
+        document.querySelectorAll('main section[id]').forEach((section) => sectionObserver.observe(section));
+
+        const motionToggle = document.querySelector('.motion-toggle');
+        const motionLab = document.querySelector('.motion-lab');
+        motionToggle.addEventListener('click', () => {
+            const paused = motionLab.classList.toggle('motion-paused');
+            motionToggle.setAttribute('aria-pressed', String(paused));
+            motionToggle.textContent = paused ? 'Retomar movimento' : 'Pausar movimento';
+        });
+    </script>
+</body>
+</html>

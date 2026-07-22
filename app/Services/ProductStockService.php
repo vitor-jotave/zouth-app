@@ -25,20 +25,37 @@ class ProductStockService
     {
         $product->load(['productVariations.variationType.values', 'variantStocks']);
 
-        $variations = $product->productVariations->map(fn ($pv) => [
-            'id' => $pv->id,
-            'type' => [
-                'id' => $pv->variationType->id,
-                'name' => $pv->variationType->name,
-                'is_color_type' => $pv->variationType->is_color_type,
-            ],
-            'values' => $pv->variationType->values->map(fn ($val) => [
-                'id' => $val->id,
-                'value' => $val->value,
-                'hex' => $val->hex,
-                'image_url' => $val->image_path ? Storage::disk('s3')->url($val->image_path) : null,
-            ])->values()->all(),
-        ])->values()->all();
+        $usedValuesByType = [];
+
+        foreach ($product->variantStocks as $stock) {
+            foreach ($stock->variation_key as $typeName => $value) {
+                $usedValuesByType[$typeName][(string) $value] = true;
+            }
+        }
+
+        $variations = $product->productVariations->map(function ($productVariation) use ($usedValuesByType) {
+            $variationType = $productVariation->variationType;
+            $usedValues = $usedValuesByType[$variationType->name] ?? [];
+
+            return [
+                'id' => $productVariation->id,
+                'type' => [
+                    'id' => $variationType->id,
+                    'name' => $variationType->name,
+                    'is_color_type' => $variationType->is_color_type,
+                ],
+                'values' => $variationType->values
+                    ->filter(fn ($value) => isset($usedValues[(string) $value->value]))
+                    ->map(fn ($value) => [
+                        'id' => $value->id,
+                        'value' => $value->value,
+                        'hex' => $value->hex,
+                        'image_url' => $value->image_path ? Storage::disk('s3')->url($value->image_path) : null,
+                    ])
+                    ->values()
+                    ->all(),
+            ];
+        })->values()->all();
 
         $stocks = $product->variantStocks->map(fn ($stock) => [
             'id' => $stock->id,

@@ -3,21 +3,22 @@ import {
     AlertCircle,
     Bot,
     Check,
-    CheckCheck,
-    Clock,
     FileText,
+    LoaderCircle,
     MessageSquare,
-    Mic,
     Play,
+    RadioTower,
     Search,
-    Send,
-    Settings,
     Shirt,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState,
+} from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -31,13 +32,17 @@ import {
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import AppLayout from '@/layouts/app-layout';
+import atendimento from '@/routes/manufacturer/atendimento';
+import { reaction as messageReactionRoute } from '@/routes/manufacturer/atendimento/messages';
 import type { BreadcrumbItem } from '@/types';
+import { AtendimentoWorkspace } from './components/atendimento-workspace';
+import type { QuickReply } from './quick-reply-types';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Atendimento', href: '/manufacturer/atendimento' },
+    { title: 'Chat', href: '/manufacturer/atendimento' },
 ];
 
-interface Conversation {
+export interface Conversation {
     id: number;
     remote_jid: string;
     is_group: boolean;
@@ -51,7 +56,13 @@ interface Conversation {
     unread_count: number;
 }
 
-interface Message {
+export interface MessageReaction {
+    actor: string;
+    from_me: boolean;
+    emoji: string;
+}
+
+export interface Message {
     id: number;
     message_id: string;
     from_me: boolean;
@@ -60,6 +71,7 @@ interface Message {
     media_url: string | null;
     media_mimetype: string | null;
     media_file_name: string | null;
+    reactions: MessageReaction[];
     status: 'pending' | 'sent' | 'delivered' | 'read' | 'error';
     message_timestamp: string | null;
 }
@@ -80,27 +92,35 @@ interface ProductSendOptions {
     include_sku: boolean;
 }
 
-interface WhatsappFunnelStep {
+export interface WhatsappFunnelStep {
     id: number;
     type: 'wait' | 'text' | 'audio' | 'product';
     sort_order: number;
     payload: Record<string, string | number | boolean | null | undefined>;
 }
 
-interface WhatsappFunnel {
+export interface WhatsappFunnel {
     id: number;
     name: string;
     code: string;
     steps: WhatsappFunnelStep[];
 }
 
-interface WhatsappFunnelRunStep extends WhatsappFunnelStep {
+export type FunnelTriggerLocation = 'composer' | 'sidebar';
+
+export interface FunnelActionFeedback {
+    funnelId: number;
+    trigger: FunnelTriggerLocation;
+    status: 'sending' | 'sent';
+}
+
+export interface WhatsappFunnelRunStep extends WhatsappFunnelStep {
     status: 'pending' | 'waiting' | 'sending' | 'sent' | 'failed';
     message_id: number | null;
     error_message: string | null;
 }
 
-interface WhatsappFunnelRun {
+export interface WhatsappFunnelRun {
     id: number;
     status: 'pending' | 'running' | 'completed' | 'failed';
     funnel: {
@@ -111,7 +131,7 @@ interface WhatsappFunnelRun {
     steps: WhatsappFunnelRunStep[];
 }
 
-interface ActiveConversation {
+export interface ActiveConversation {
     id: number;
     remote_jid: string;
     is_group: boolean;
@@ -127,53 +147,7 @@ interface Props {
     active_conversation: ActiveConversation | null;
     messages: Message[];
     funnels: WhatsappFunnel[];
-}
-
-function formatTime(dateStr: string | null): string {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) {
-        return date.toLocaleTimeString('pt-BR', {
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-    }
-    if (diffDays === 1) return 'Ontem';
-    if (diffDays < 7) {
-        return date.toLocaleDateString('pt-BR', { weekday: 'short' });
-    }
-    return date.toLocaleDateString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-    });
-}
-
-function getInitials(name: string): string {
-    return name
-        .split(' ')
-        .slice(0, 2)
-        .map((w) => w[0])
-        .join('')
-        .toUpperCase();
-}
-
-function StatusIcon({ status }: { status: Message['status'] }) {
-    switch (status) {
-        case 'pending':
-            return <Clock className="size-3.5 text-gray-400" />;
-        case 'sent':
-            return <Check className="size-3.5 text-gray-400" />;
-        case 'delivered':
-            return <CheckCheck className="size-3.5 text-gray-400" />;
-        case 'read':
-            return <CheckCheck className="size-3.5 text-blue-500" />;
-        default:
-            return null;
-    }
+    quick_replies: QuickReply[];
 }
 
 function xsrfToken(): string {
@@ -233,21 +207,27 @@ function funnelStepLabel(step: WhatsappFunnelStep): string {
     }
 }
 
-function funnelStepStatusLabel(
-    status: WhatsappFunnelRunStep['status'],
-): string {
-    switch (status) {
-        case 'waiting':
-            return 'Aguardando';
-        case 'sending':
-            return 'Enviando';
-        case 'sent':
-            return 'Enviado';
-        case 'failed':
-            return 'Erro';
-        default:
-            return 'Pendente';
-    }
+function messageCollectionsAreEqual(
+    current: Message[],
+    incoming: Message[],
+): boolean {
+    return (
+        current.length === incoming.length &&
+        current.every((message, index) => {
+            const nextMessage = incoming[index];
+
+            return (
+                message.id === nextMessage.id &&
+                message.status === nextMessage.status &&
+                message.body === nextMessage.body &&
+                message.media_type === nextMessage.media_type &&
+                message.media_url === nextMessage.media_url &&
+                JSON.stringify(message.reactions) ===
+                    JSON.stringify(nextMessage.reactions) &&
+                message.message_timestamp === nextMessage.message_timestamp
+            );
+        })
+    );
 }
 
 export default function AtendimentoIndex({
@@ -256,6 +236,7 @@ export default function AtendimentoIndex({
     active_conversation,
     messages: initialMessages,
     funnels,
+    quick_replies,
 }: Props) {
     const [conversations, setConversations] = useState(initialConversations);
     const [messages, setMessages] = useState(initialMessages);
@@ -279,14 +260,25 @@ export default function AtendimentoIndex({
         include_sku: false,
     });
     const [sendingProduct, setSendingProduct] = useState(false);
+    const [reactingMessageId, setReactingMessageId] = useState<number | null>(
+        null,
+    );
     const [selectedFunnel, setSelectedFunnel] = useState<WhatsappFunnel | null>(
         null,
     );
+    const [selectedFunnelTrigger, setSelectedFunnelTrigger] =
+        useState<FunnelTriggerLocation | null>(null);
+    const [funnelActionFeedback, setFunnelActionFeedback] =
+        useState<FunnelActionFeedback | null>(null);
     const [funnelDialogOpen, setFunnelDialogOpen] = useState(false);
     const [startingFunnel, setStartingFunnel] = useState(false);
     const [activeRun, setActiveRun] = useState<WhatsappFunnelRun | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const inputRef = useRef<HTMLInputElement>(null);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
+    const funnelFeedbackTimeoutRef = useRef<number | null>(null);
+    const shouldScrollMessagesRef = useRef(true);
+    const messageScrollBehaviorRef = useRef<ScrollBehavior>('auto');
+    const previousConversationIdRef = useRef(active_conversation?.id ?? null);
     const funnelRunning =
         activeRun?.status === 'pending' || activeRun?.status === 'running';
     const selectedProductIds = selectedProducts.map((product) => product.id);
@@ -297,19 +289,96 @@ export default function AtendimentoIndex({
         setConversations(initialConversations);
     }, [initialConversations]);
 
-    useEffect(() => {
-        setMessages(initialMessages);
-    }, [initialMessages]);
+    const isNearMessagesEnd = useCallback((): boolean => {
+        const viewport = messagesEndRef.current?.closest<HTMLElement>(
+            '[data-slot="scroll-area-viewport"]',
+        );
 
-    // Scroll to bottom when messages change
+        if (!viewport) {
+            return true;
+        }
+
+        return (
+            viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <
+            120
+        );
+    }, []);
+
+    const replacePolledMessages = useCallback(
+        (incomingMessages: Message[]) => {
+            setMessages((currentMessages) => {
+                if (
+                    messageCollectionsAreEqual(
+                        currentMessages,
+                        incomingMessages,
+                    )
+                ) {
+                    return currentMessages;
+                }
+
+                shouldScrollMessagesRef.current = isNearMessagesEnd();
+                messageScrollBehaviorRef.current = 'smooth';
+
+                return incomingMessages;
+            });
+        },
+        [isNearMessagesEnd],
+    );
+
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        const activeConversationId = active_conversation?.id ?? null;
+        const conversationChanged =
+            previousConversationIdRef.current !== activeConversationId;
+
+        if (conversationChanged) {
+            shouldScrollMessagesRef.current = true;
+            messageScrollBehaviorRef.current = 'auto';
+            previousConversationIdRef.current = activeConversationId;
+        } else {
+            shouldScrollMessagesRef.current = isNearMessagesEnd();
+        }
+
+        setMessages((currentMessages) =>
+            messageCollectionsAreEqual(currentMessages, initialMessages)
+                ? currentMessages
+                : initialMessages,
+        );
+    }, [active_conversation?.id, initialMessages, isNearMessagesEnd]);
+
+    useEffect(() => {
+        const previousDocumentOverflow =
+            document.documentElement.style.overflow;
+        const previousBodyOverflow = document.body.style.overflow;
+
+        document.documentElement.style.overflow = 'hidden';
+        document.body.style.overflow = 'hidden';
+
+        return () => {
+            document.documentElement.style.overflow = previousDocumentOverflow;
+            document.body.style.overflow = previousBodyOverflow;
+        };
+    }, []);
+
+    useLayoutEffect(() => {
+        if (!shouldScrollMessagesRef.current) {
+            return;
+        }
+
+        const frame = window.requestAnimationFrame(() => {
+            messagesEndRef.current?.scrollIntoView({
+                behavior: messageScrollBehaviorRef.current,
+                block: 'end',
+            });
+            shouldScrollMessagesRef.current = false;
+        });
+
+        return () => window.cancelAnimationFrame(frame);
     }, [messages]);
 
     // Focus input when a conversation is selected
     useEffect(() => {
         if (active_conversation) {
-            inputRef.current?.focus();
+            inputRef.current?.focus({ preventScroll: true });
         }
     }, [active_conversation]);
 
@@ -391,7 +460,7 @@ export default function AtendimentoIndex({
 
                     if (res.ok) {
                         const data = await res.json();
-                        setMessages(data.messages);
+                        replacePolledMessages(data.messages);
                     }
                 } catch {
                     // Ignore
@@ -400,7 +469,57 @@ export default function AtendimentoIndex({
         }, 2000);
 
         return () => window.clearInterval(interval);
-    }, [activeRun, funnelRunning, active_conversation]);
+    }, [activeRun, funnelRunning, active_conversation, replacePolledMessages]);
+
+    useEffect(() => {
+        if (
+            !activeRun ||
+            !funnelActionFeedback ||
+            funnelActionFeedback.status !== 'sending' ||
+            activeRun.funnel.id !== funnelActionFeedback.funnelId
+        ) {
+            return;
+        }
+
+        if (activeRun.status === 'failed') {
+            setFunnelActionFeedback(null);
+
+            return;
+        }
+
+        if (activeRun.status !== 'completed') {
+            return;
+        }
+
+        const completedFeedback = {
+            ...funnelActionFeedback,
+            status: 'sent' as const,
+        };
+
+        setFunnelActionFeedback(completedFeedback);
+        funnelFeedbackTimeoutRef.current = window.setTimeout(() => {
+            setFunnelActionFeedback((current) => {
+                if (
+                    current?.funnelId !== completedFeedback.funnelId ||
+                    current.trigger !== completedFeedback.trigger ||
+                    current.status !== 'sent'
+                ) {
+                    return current;
+                }
+
+                return null;
+            });
+            funnelFeedbackTimeoutRef.current = null;
+        }, 2000);
+    }, [activeRun, funnelActionFeedback]);
+
+    useEffect(() => {
+        return () => {
+            if (funnelFeedbackTimeoutRef.current !== null) {
+                window.clearTimeout(funnelFeedbackTimeoutRef.current);
+            }
+        };
+    }, []);
 
     // Poll for new messages every 5s
     useEffect(() => {
@@ -440,7 +559,7 @@ export default function AtendimentoIndex({
                     );
                     if (res.ok) {
                         const data = await res.json();
-                        setMessages(data.messages);
+                        replacePolledMessages(data.messages);
                     }
                 } catch {
                     // Ignore
@@ -449,7 +568,7 @@ export default function AtendimentoIndex({
         }, 5000);
 
         return () => clearInterval(interval);
-    }, [instance_connected, active_conversation]);
+    }, [instance_connected, active_conversation, replacePolledMessages]);
 
     const selectConversation = useCallback((conv: Conversation) => {
         router.visit(`/manufacturer/atendimento?conversation=${conv.id}`, {
@@ -485,9 +604,11 @@ export default function AtendimentoIndex({
 
             if (res.ok) {
                 const data = await res.json();
+                shouldScrollMessagesRef.current = true;
+                messageScrollBehaviorRef.current = 'smooth';
                 setMessages((prev) => [...prev, data.message]);
                 setMessageInput('');
-                inputRef.current?.focus();
+                inputRef.current?.focus({ preventScroll: true });
             }
         } catch {
             // Ignore
@@ -495,6 +616,86 @@ export default function AtendimentoIndex({
             setSending(false);
         }
     }, [active_conversation, messageInput, sending, funnelRunning]);
+
+    const reactToMessage = useCallback(
+        async (message: Message, reaction: string) => {
+            if (reactingMessageId !== null) {
+                return;
+            }
+
+            const previousReactions = message.reactions;
+            const ownReaction = previousReactions.find(
+                (messageReaction) => messageReaction.from_me,
+            )?.emoji;
+            const optimisticReactions = previousReactions.filter(
+                (messageReaction) => !messageReaction.from_me,
+            );
+
+            if (ownReaction !== reaction) {
+                optimisticReactions.push({
+                    actor: 'self',
+                    from_me: true,
+                    emoji: reaction,
+                });
+            }
+
+            setReactingMessageId(message.id);
+            setMessages((currentMessages) =>
+                currentMessages.map((currentMessage) =>
+                    currentMessage.id === message.id
+                        ? {
+                              ...currentMessage,
+                              reactions: optimisticReactions,
+                          }
+                        : currentMessage,
+                ),
+            );
+
+            try {
+                const endpoint = messageReactionRoute(message.id);
+                const response = await fetch(endpoint.url, {
+                    method: endpoint.method.toUpperCase(),
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-XSRF-TOKEN': xsrfToken(),
+                    },
+                    body: JSON.stringify({ reaction }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('Reaction request failed.');
+                }
+
+                const data = await response.json();
+                setMessages((currentMessages) =>
+                    currentMessages.map((currentMessage) =>
+                        currentMessage.id === message.id
+                            ? {
+                                  ...currentMessage,
+                                  reactions: data.reactions,
+                              }
+                            : currentMessage,
+                    ),
+                );
+            } catch {
+                setMessages((currentMessages) =>
+                    currentMessages.map((currentMessage) =>
+                        currentMessage.id === message.id
+                            ? {
+                                  ...currentMessage,
+                                  reactions: previousReactions,
+                              }
+                            : currentMessage,
+                    ),
+                );
+            } finally {
+                setReactingMessageId(null);
+            }
+        },
+        [reactingMessageId],
+    );
 
     const selectProduct = useCallback(
         (product: WhatsappProduct) => {
@@ -579,12 +780,14 @@ export default function AtendimentoIndex({
                 return;
             }
 
+            shouldScrollMessagesRef.current = true;
+            messageScrollBehaviorRef.current = 'smooth';
             setMessages((prev) => [...prev, data.message]);
             setProductDialogOpen(false);
             setSelectedProduct(null);
             setSelectedProducts([]);
             setProductSearch('');
-            inputRef.current?.focus();
+            inputRef.current?.focus({ preventScroll: true });
         } catch {
             setProductError(
                 'Não foi possível enviar os produtos. Tente novamente.',
@@ -600,21 +803,38 @@ export default function AtendimentoIndex({
         funnelRunning,
     ]);
 
-    const openFunnelPreview = useCallback((funnel: WhatsappFunnel) => {
-        setSelectedFunnel(funnel);
-        setFunnelDialogOpen(true);
-    }, []);
+    const openFunnelPreview = useCallback(
+        (funnel: WhatsappFunnel, trigger: FunnelTriggerLocation) => {
+            setSelectedFunnel(funnel);
+            setSelectedFunnelTrigger(trigger);
+            setFunnelDialogOpen(true);
+        },
+        [],
+    );
 
     const startFunnel = useCallback(async () => {
         if (
             !active_conversation ||
             !selectedFunnel ||
+            !selectedFunnelTrigger ||
             startingFunnel ||
             funnelRunning
         ) {
             return;
         }
 
+        const feedback: FunnelActionFeedback = {
+            funnelId: selectedFunnel.id,
+            trigger: selectedFunnelTrigger,
+            status: 'sending',
+        };
+
+        if (funnelFeedbackTimeoutRef.current !== null) {
+            window.clearTimeout(funnelFeedbackTimeoutRef.current);
+            funnelFeedbackTimeoutRef.current = null;
+        }
+
+        setFunnelActionFeedback(feedback);
         setStartingFunnel(true);
 
         try {
@@ -630,18 +850,29 @@ export default function AtendimentoIndex({
                 },
             );
 
-            if (res.ok) {
-                const data = await res.json();
-                setActiveRun(data.run);
-                setFunnelDialogOpen(false);
-                setSelectedFunnel(null);
+            if (!res.ok) {
+                setFunnelActionFeedback(null);
+
+                return;
             }
+
+            const data = await res.json();
+            setActiveRun(data.run);
+            setFunnelDialogOpen(false);
+            setSelectedFunnel(null);
+            setSelectedFunnelTrigger(null);
         } catch {
-            // Ignore
+            setFunnelActionFeedback(null);
         } finally {
             setStartingFunnel(false);
         }
-    }, [active_conversation, selectedFunnel, startingFunnel, funnelRunning]);
+    }, [
+        active_conversation,
+        selectedFunnel,
+        selectedFunnelTrigger,
+        startingFunnel,
+        funnelRunning,
+    ]);
 
     const handleKeyDown = useCallback(
         (e: React.KeyboardEvent) => {
@@ -653,42 +884,36 @@ export default function AtendimentoIndex({
         [sendMessage],
     );
 
-    const filteredConversations = searchQuery
-        ? conversations.filter(
-              (c) =>
-                  c.display_name
-                      .toLowerCase()
-                      .includes(searchQuery.toLowerCase()) ||
-                  c.contact_phone?.includes(searchQuery),
-          )
-        : conversations;
     const previewProduct =
         selectedProducts.length === 1 ? selectedProducts[0] : selectedProduct;
     const productPreview = previewProduct
         ? buildProductCaption(previewProduct, productOptions)
         : '';
 
-    // Not connected — redirect to setup
     if (!instance_connected) {
         return (
             <AppLayout breadcrumbs={breadcrumbs}>
-                <Head title="Atendimento" />
-                <div className="flex h-full flex-1 flex-col items-center justify-center gap-4 p-8">
-                    <MessageSquare className="size-16 text-gray-300" />
-                    <h2 className="text-xl font-semibold">
-                        WhatsApp não conectado
+                <Head title="Chat" />
+                <div className="flex h-[calc(100vh-4rem)] flex-1 flex-col items-center justify-center bg-[#101015] p-8 text-center text-[#f6f4f0]">
+                    <span className="flex size-16 items-center justify-center border border-[#f6f4f0]/14 text-[#ff4d3d]">
+                        <MessageSquare className="size-7" />
+                    </span>
+                    <p className="mt-6 text-[0.66rem] font-bold tracking-[0.18em] text-[#98968d] uppercase">
+                        Atendimento
+                    </p>
+                    <h2 className="mt-2 font-zouth-display text-3xl font-semibold tracking-[-0.05em]">
+                        Abra seu canal<span className="text-[#ff4d3d]">.</span>
                     </h2>
-                    <p className="text-center text-muted-foreground">
-                        Configure seu WhatsApp para começar a atender seus
-                        clientes.
+                    <p className="mt-3 max-w-sm text-sm leading-relaxed text-[#98968d]">
+                        Conecte o WhatsApp da marca para transformar conversas
+                        em relações comerciais.
                     </p>
                     <Button
-                        onClick={() =>
-                            router.visit('/manufacturer/atendimento/setup')
-                        }
+                        className="mt-6 rounded-[2px] bg-[#ff4d3d] font-bold text-[#18181f] hover:bg-[#ff6a5c]"
+                        onClick={() => router.visit(atendimento.channels().url)}
                     >
-                        <Settings className="mr-2 size-4" />
-                        Configurar WhatsApp
+                        <RadioTower className="mr-2 size-4" />
+                        Ir para Canais
                     </Button>
                 </div>
             </AppLayout>
@@ -697,359 +922,52 @@ export default function AtendimentoIndex({
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Atendimento" />
-            <div className="flex h-[calc(100vh-8rem)] overflow-hidden rounded-xl border">
-                {/* Conversation list */}
-                <div className="flex w-80 shrink-0 flex-col border-r bg-white">
-                    {/* Search */}
-                    <div className="flex items-center gap-2 border-b p-3">
-                        <div className="relative flex-1">
-                            <Search className="absolute top-2.5 left-2.5 size-4 text-gray-400" />
-                            <Input
-                                placeholder="Buscar conversa..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-9"
-                            />
-                        </div>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="shrink-0"
-                            onClick={() =>
-                                router.visit('/manufacturer/atendimento/setup')
-                            }
-                            title="Configurações"
-                        >
-                            <Settings className="size-4" />
-                        </Button>
-                    </div>
-
-                    {/* Conversation items */}
-                    <ScrollArea className="flex-1">
-                        {filteredConversations.length === 0 ? (
-                            <div className="flex flex-col items-center gap-2 p-8 text-center">
-                                <MessageSquare className="size-10 text-gray-300" />
-                                <p className="text-sm text-muted-foreground">
-                                    {searchQuery
-                                        ? 'Nenhuma conversa encontrada'
-                                        : 'Nenhuma conversa ainda'}
-                                </p>
-                            </div>
-                        ) : (
-                            filteredConversations.map((conv) => (
-                                <button
-                                    key={conv.id}
-                                    type="button"
-                                    onClick={() => selectConversation(conv)}
-                                    className={`flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-gray-50 ${
-                                        active_conversation?.id === conv.id
-                                            ? 'bg-gray-100'
-                                            : ''
-                                    }`}
-                                >
-                                    <Avatar className="size-10 shrink-0">
-                                        <AvatarFallback className="bg-emerald-100 text-sm text-emerald-700">
-                                            {getInitials(conv.display_name)}
-                                        </AvatarFallback>
-                                    </Avatar>
-                                    <div className="min-w-0 flex-1">
-                                        <div className="flex items-center justify-between">
-                                            <span className="truncate text-sm font-medium">
-                                                {conv.display_name}
-                                            </span>
-                                            <span className="shrink-0 text-xs text-gray-500">
-                                                {formatTime(
-                                                    conv.last_message_at,
-                                                )}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <p className="truncate text-xs text-gray-500">
-                                                {conv.last_message_from_me && (
-                                                    <span className="text-gray-400">
-                                                        Você:{' '}
-                                                    </span>
-                                                )}
-                                                {conv.last_message_body ??
-                                                    '...'}
-                                            </p>
-                                            {conv.unread_count > 0 && (
-                                                <Badge className="ml-1 h-5 min-w-5 shrink-0 rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white hover:bg-emerald-500">
-                                                    {conv.unread_count}
-                                                </Badge>
-                                            )}
-                                        </div>
-                                    </div>
-                                </button>
-                            ))
-                        )}
-                    </ScrollArea>
-                </div>
-
-                {/* Chat area */}
-                <div className="flex flex-1 flex-col bg-[#f0f2f5]">
-                    {!active_conversation ? (
-                        <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
-                            <MessageSquare className="size-16 text-gray-300" />
-                            <p className="text-muted-foreground">
-                                Selecione uma conversa para começar
-                            </p>
-                        </div>
-                    ) : (
-                        <>
-                            {/* Chat header */}
-                            <div className="flex items-center gap-3 border-b bg-white px-4 py-3">
-                                <Avatar className="size-10">
-                                    <AvatarFallback className="bg-emerald-100 text-sm text-emerald-700">
-                                        {getInitials(
-                                            active_conversation.display_name,
-                                        )}
-                                    </AvatarFallback>
-                                </Avatar>
-                                <div>
-                                    <p className="text-sm font-medium">
-                                        {active_conversation.display_name}
-                                    </p>
-                                    {active_conversation.contact_phone && (
-                                        <p className="text-xs text-gray-500">
-                                            {active_conversation.contact_phone}
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Messages */}
-                            <ScrollArea className="flex-1 px-4 py-3">
-                                <div className="mx-auto max-w-3xl space-y-1">
-                                    {messages.map((msg) => (
-                                        <div
-                                            key={msg.id}
-                                            className={`flex ${msg.from_me ? 'justify-end' : 'justify-start'}`}
-                                        >
-                                            <div
-                                                className={`relative max-w-[70%] rounded-lg px-3 py-2 shadow-sm ${
-                                                    msg.from_me
-                                                        ? 'rounded-tr-none bg-[#d9fdd3]'
-                                                        : 'rounded-tl-none bg-white'
-                                                }`}
-                                            >
-                                                {msg.media_url &&
-                                                    msg.media_type ===
-                                                        'audio' && (
-                                                        <div className="mb-2 flex min-w-64 items-center gap-3 rounded-md bg-white/70 p-2">
-                                                            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                                                                <Mic className="size-4" />
-                                                            </div>
-                                                            <div className="min-w-0 flex-1">
-                                                                <audio
-                                                                    controls
-                                                                    preload="metadata"
-                                                                    src={
-                                                                        msg.media_url
-                                                                    }
-                                                                    className="h-9 w-full"
-                                                                />
-                                                                {msg.media_file_name && (
-                                                                    <p className="mt-1 truncate text-[10px] text-gray-500">
-                                                                        {
-                                                                            msg.media_file_name
-                                                                        }
-                                                                    </p>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                {msg.media_url &&
-                                                    msg.media_type ===
-                                                        'document' && (
-                                                        <a
-                                                            href={msg.media_url}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="mb-2 flex min-w-64 items-center gap-3 rounded-md bg-white/70 p-3 text-sm transition-colors hover:bg-white"
-                                                        >
-                                                            <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-red-100 text-red-700">
-                                                                <FileText className="size-5" />
-                                                            </div>
-                                                            <div className="min-w-0 flex-1">
-                                                                <p className="truncate font-medium">
-                                                                    {msg.media_file_name ??
-                                                                        'Catálogo em PDF'}
-                                                                </p>
-                                                                <p className="text-xs text-gray-500">
-                                                                    Documento
-                                                                    PDF
-                                                                </p>
-                                                            </div>
-                                                        </a>
-                                                    )}
-                                                {msg.media_url &&
-                                                    msg.media_type !==
-                                                        'audio' &&
-                                                    msg.media_type !==
-                                                        'document' && (
-                                                        <img
-                                                            src={msg.media_url}
-                                                            alt={
-                                                                msg.media_file_name ??
-                                                                'Mídia enviada'
-                                                            }
-                                                            className="mb-2 max-h-64 w-full rounded-md object-cover"
-                                                        />
-                                                    )}
-                                                {msg.body && (
-                                                    <p className="text-sm whitespace-pre-wrap">
-                                                        {msg.body}
-                                                    </p>
-                                                )}
-                                                <div className="mt-0.5 flex items-center justify-end gap-1">
-                                                    <span className="text-[10px] text-gray-500">
-                                                        {formatTime(
-                                                            msg.message_timestamp,
-                                                        )}
-                                                    </span>
-                                                    {msg.from_me && (
-                                                        <StatusIcon
-                                                            status={msg.status}
-                                                        />
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    <div ref={messagesEndRef} />
-                                </div>
-                            </ScrollArea>
-
-                            {/* Message input */}
-                            <div className="border-t bg-white px-4 py-3">
-                                <div className="mx-auto mb-3 max-w-3xl space-y-2">
-                                    {funnels.length > 0 && (
-                                        <div className="flex flex-wrap gap-2">
-                                            {funnels.map((funnel) => (
-                                                <Button
-                                                    key={funnel.id}
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        openFunnelPreview(
-                                                            funnel,
-                                                        )
-                                                    }
-                                                    disabled={funnelRunning}
-                                                >
-                                                    <Bot className="mr-2 size-4" />
-                                                    {funnel.name}
-                                                </Button>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {activeRun && (
-                                        <div className="rounded-lg border bg-muted/40 p-3">
-                                            <div className="mb-2 flex items-center justify-between gap-2">
-                                                <div className="flex items-center gap-2 text-sm font-medium">
-                                                    <Bot className="size-4" />
-                                                    {activeRun.funnel.name}
-                                                </div>
-                                                <Badge variant="outline">
-                                                    {activeRun.status ===
-                                                    'completed'
-                                                        ? 'Concluído'
-                                                        : activeRun.status ===
-                                                            'failed'
-                                                          ? 'Erro'
-                                                          : 'Em andamento'}
-                                                </Badge>
-                                            </div>
-                                            <div className="grid gap-2 sm:grid-cols-2">
-                                                {activeRun.steps.map((step) => (
-                                                    <div
-                                                        key={step.id}
-                                                        className="flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-xs"
-                                                    >
-                                                        <span className="truncate">
-                                                            {step.sort_order}.{' '}
-                                                            {funnelStepLabel(
-                                                                step,
-                                                            )}
-                                                        </span>
-                                                        <span className="shrink-0 text-muted-foreground">
-                                                            {funnelStepStatusLabel(
-                                                                step.status,
-                                                            )}
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="mx-auto flex max-w-3xl items-center gap-2">
-                                    <Button
-                                        size="icon"
-                                        variant="outline"
-                                        onClick={() => {
-                                            setProductError(null);
-                                            setProductDialogOpen(true);
-                                        }}
-                                        disabled={
-                                            sending ||
-                                            sendingProduct ||
-                                            funnelRunning
-                                        }
-                                        className="shrink-0"
-                                        title="Enviar produto"
-                                        aria-label="Enviar produto"
-                                    >
-                                        <Shirt className="size-4" />
-                                    </Button>
-                                    <Input
-                                        ref={inputRef}
-                                        value={messageInput}
-                                        onChange={(e) =>
-                                            setMessageInput(e.target.value)
-                                        }
-                                        onKeyDown={handleKeyDown}
-                                        placeholder={
-                                            funnelRunning
-                                                ? 'Funil em andamento...'
-                                                : 'Digite uma mensagem...'
-                                        }
-                                        className="flex-1"
-                                        disabled={sending || funnelRunning}
-                                    />
-                                    <Button
-                                        size="icon"
-                                        onClick={sendMessage}
-                                        disabled={
-                                            !messageInput.trim() ||
-                                            sending ||
-                                            funnelRunning
-                                        }
-                                        className="shrink-0 bg-emerald-500 hover:bg-emerald-600"
-                                    >
-                                        <Send className="size-4" />
-                                    </Button>
-                                </div>
-                            </div>
-                        </>
-                    )}
-                </div>
-            </div>
+            <Head title="Chat" />
+            <AtendimentoWorkspace
+                conversations={conversations}
+                activeConversation={active_conversation}
+                messages={messages}
+                funnels={funnels}
+                quickReplies={quick_replies}
+                funnelActionFeedback={funnelActionFeedback}
+                funnelRunning={funnelRunning}
+                searchQuery={searchQuery}
+                messageInput={messageInput}
+                sending={sending}
+                sendingProduct={sendingProduct}
+                reactingMessageId={reactingMessageId}
+                inputRef={inputRef}
+                messagesEndRef={messagesEndRef}
+                onSearchChange={setSearchQuery}
+                onMessageChange={setMessageInput}
+                onMessageKeyDown={handleKeyDown}
+                onSelectConversation={selectConversation}
+                onBackToInbox={() => router.visit('/manufacturer/atendimento')}
+                onOpenProducts={() => {
+                    setProductError(null);
+                    setProductDialogOpen(true);
+                }}
+                onOpenFunnel={openFunnelPreview}
+                onSendMessage={sendMessage}
+                onReactToMessage={reactToMessage}
+            />
 
             <Dialog
                 open={productDialogOpen}
                 onOpenChange={setProductDialogOpen}
             >
-                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
-                    <DialogHeader>
-                        <DialogTitle>Enviar produto</DialogTitle>
-                        <DialogDescription>
-                            Pesquise um produto, escolha as informações e revise
-                            a mensagem antes do envio.
+                <DialogContent className="max-h-[92vh] overflow-y-auto rounded-[2px] border-[#f6f4f0]/14 bg-[#18181f] font-zouth-body text-[#f6f4f0] shadow-none sm:max-w-5xl [&_[data-slot=dialog-close]]:text-[#cac4ba]">
+                    <DialogHeader className="border-b border-[#f6f4f0]/12 pb-5">
+                        <p className="text-[0.66rem] font-bold tracking-[0.18em] text-[#ff4d3d] uppercase">
+                            Vitrine na conversa
+                        </p>
+                        <DialogTitle className="font-zouth-display text-3xl tracking-[-0.05em]">
+                            Apresentar coleção
+                            <span className="text-[#ff4d3d]">.</span>
+                        </DialogTitle>
+                        <DialogDescription className="text-[#98968d]">
+                            Escolha as peças e monte o material que o lojista
+                            vai receber.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -1063,28 +981,28 @@ export default function AtendimentoIndex({
                     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
                         <div className="space-y-3">
                             <div className="relative">
-                                <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-gray-400" />
+                                <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#98968d]" />
                                 <Input
                                     value={productSearch}
                                     onChange={(e) =>
                                         setProductSearch(e.target.value)
                                     }
                                     placeholder="Buscar por produto ou SKU..."
-                                    className="pl-9"
+                                    className="h-12 rounded-[2px] border-[#f6f4f0]/14 bg-[#101015] pl-10 text-[#f6f4f0] placeholder:text-[#98968d] focus-visible:border-[#ff4d3d] focus-visible:ring-[#ff4d3d]/20"
                                 />
                             </div>
 
-                            <ScrollArea className="h-80 rounded-lg border">
+                            <ScrollArea className="h-80 rounded-[2px] border border-[#f6f4f0]/14 bg-[#101015]">
                                 {productsLoading ? (
-                                    <div className="p-6 text-center text-sm text-muted-foreground">
+                                    <div className="p-6 text-center text-sm text-[#98968d]">
                                         Buscando produtos...
                                     </div>
                                 ) : products.length === 0 ? (
-                                    <div className="p-6 text-center text-sm text-muted-foreground">
+                                    <div className="p-6 text-center text-sm text-[#98968d]">
                                         Nenhum produto encontrado.
                                     </div>
                                 ) : (
-                                    <div className="divide-y">
+                                    <div className="divide-y divide-[#f6f4f0]/10">
                                         {products.map((product) => {
                                             const isSelected =
                                                 selectedProductIds.includes(
@@ -1098,17 +1016,17 @@ export default function AtendimentoIndex({
                                                     onClick={() =>
                                                         selectProduct(product)
                                                     }
-                                                    className={`flex w-full gap-3 p-3 text-left transition-colors hover:bg-gray-50 ${
+                                                    className={`flex w-full gap-3 p-3 text-left transition-colors hover:bg-[#f6f4f0]/5 ${
                                                         isSelected
-                                                            ? 'bg-emerald-50'
+                                                            ? 'bg-[#ff4d3d]/8'
                                                             : ''
                                                     }`}
                                                 >
                                                     <span
-                                                        className={`mt-4 flex size-5 shrink-0 items-center justify-center rounded border ${
+                                                        className={`mt-4 flex size-5 shrink-0 items-center justify-center border ${
                                                             isSelected
-                                                                ? 'border-emerald-600 bg-emerald-600 text-white'
-                                                                : 'border-gray-300 bg-white'
+                                                                ? 'border-[#ff4d3d] bg-[#ff4d3d] text-[#18181f]'
+                                                                : 'border-[#f6f4f0]/25 bg-[#18181f]'
                                                         }`}
                                                     >
                                                         {isSelected && (
@@ -1121,25 +1039,25 @@ export default function AtendimentoIndex({
                                                                 product.primary_image_url
                                                             }
                                                             alt={product.name}
-                                                            className="size-14 shrink-0 rounded-md object-cover"
+                                                            className="size-14 shrink-0 rounded-[2px] object-cover"
                                                         />
                                                     ) : (
-                                                        <div className="flex size-14 shrink-0 items-center justify-center rounded-md bg-gray-100">
-                                                            <Shirt className="size-5 text-gray-400" />
+                                                        <div className="flex size-14 shrink-0 items-center justify-center bg-[#f6f4f0]/6">
+                                                            <Shirt className="size-5 text-[#98968d]" />
                                                         </div>
                                                     )}
                                                     <div className="min-w-0 flex-1">
                                                         <p className="truncate text-sm font-medium">
                                                             {product.name}
                                                         </p>
-                                                        <p className="text-xs text-muted-foreground">
+                                                        <p className="text-xs text-[#cac4ba]">
                                                             {formatPrice(
                                                                 product.price_cents,
                                                             ) ??
                                                                 'Preço não informado'}
                                                         </p>
                                                         {product.sku && (
-                                                            <p className="truncate text-xs text-muted-foreground">
+                                                            <p className="truncate text-xs text-[#98968d]">
                                                                 SKU{' '}
                                                                 {product.sku}
                                                             </p>
@@ -1153,17 +1071,17 @@ export default function AtendimentoIndex({
                             </ScrollArea>
                         </div>
 
-                        <div className="space-y-4 rounded-lg border p-4">
+                        <div className="space-y-4 rounded-[2px] border border-[#f6f4f0]/14 bg-[#101015] p-4">
                             {selectedProducts.length > 0 ? (
                                 <>
-                                    <div className="rounded-md bg-muted p-3 text-sm">
+                                    <div className="border-l-2 border-[#ff4d3d] bg-[#f6f4f0]/5 p-3 text-sm">
                                         <p className="font-medium">
                                             {selectedProducts.length === 1
                                                 ? '1 produto selecionado'
                                                 : `${selectedProducts.length} produtos selecionados`}
                                         </p>
                                         {selectedProducts.length > 1 && (
-                                            <p className="mt-1 text-xs text-muted-foreground">
+                                            <p className="mt-1 text-xs text-[#98968d]">
                                                 Vários produtos serão enviados
                                                 em um PDF formatado.
                                             </p>
@@ -1174,6 +1092,7 @@ export default function AtendimentoIndex({
                                         <div className="flex items-center gap-2">
                                             <Checkbox
                                                 id="include-photo"
+                                                className="rounded-[2px] border-[#f6f4f0]/25 data-[state=checked]:border-[#ff4d3d] data-[state=checked]:bg-[#ff4d3d] data-[state=checked]:text-[#18181f]"
                                                 checked={
                                                     productOptions.include_photo
                                                 }
@@ -1204,6 +1123,7 @@ export default function AtendimentoIndex({
                                         <div className="flex items-center gap-2">
                                             <Checkbox
                                                 id="include-price"
+                                                className="rounded-[2px] border-[#f6f4f0]/25 data-[state=checked]:border-[#ff4d3d] data-[state=checked]:bg-[#ff4d3d] data-[state=checked]:text-[#18181f]"
                                                 checked={
                                                     productOptions.include_price
                                                 }
@@ -1234,6 +1154,7 @@ export default function AtendimentoIndex({
                                         <div className="flex items-center gap-2">
                                             <Checkbox
                                                 id="include-description"
+                                                className="rounded-[2px] border-[#f6f4f0]/25 data-[state=checked]:border-[#ff4d3d] data-[state=checked]:bg-[#ff4d3d] data-[state=checked]:text-[#18181f]"
                                                 checked={
                                                     productOptions.include_description
                                                 }
@@ -1264,6 +1185,7 @@ export default function AtendimentoIndex({
                                         <div className="flex items-center gap-2">
                                             <Checkbox
                                                 id="include-sku"
+                                                className="rounded-[2px] border-[#f6f4f0]/25 data-[state=checked]:border-[#ff4d3d] data-[state=checked]:bg-[#ff4d3d] data-[state=checked]:text-[#18181f]"
                                                 checked={
                                                     productOptions.include_sku
                                                 }
@@ -1293,10 +1215,10 @@ export default function AtendimentoIndex({
                                     </div>
 
                                     <div className="space-y-2">
-                                        <p className="text-sm font-medium">
+                                        <p className="text-sm font-bold">
                                             Prévia
                                         </p>
-                                        <div className="rounded-lg bg-[#d9fdd3] p-3 text-sm">
+                                        <div className="border border-[#ff4d3d]/30 bg-[#5a2a4f]/28 p-3 text-sm">
                                             {sendingMultipleProducts ? (
                                                 <div className="space-y-2">
                                                     <div className="flex items-center gap-2 font-medium">
@@ -1304,7 +1226,7 @@ export default function AtendimentoIndex({
                                                         PDF com produtos
                                                         selecionados
                                                     </div>
-                                                    <ul className="space-y-1 text-xs text-gray-700">
+                                                    <ul className="space-y-1 text-xs text-[#cac4ba]">
                                                         {selectedProducts.map(
                                                             (product) => (
                                                                 <li
@@ -1332,7 +1254,7 @@ export default function AtendimentoIndex({
                                                                 alt={
                                                                     previewProduct.name
                                                                 }
-                                                                className="mb-2 max-h-48 w-full rounded-md object-cover"
+                                                                className="mb-3 max-h-48 w-full object-cover"
                                                             />
                                                         )}
                                                     <p className="whitespace-pre-wrap">
@@ -1344,20 +1266,21 @@ export default function AtendimentoIndex({
                                     </div>
                                 </>
                             ) : (
-                                <div className="flex h-full min-h-64 flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
-                                    <Shirt className="size-10 text-gray-300" />
-                                    Selecione um produto para configurar a
-                                    mensagem.
+                                <div className="flex h-full min-h-64 flex-col items-center justify-center gap-3 text-center text-sm text-[#98968d]">
+                                    <Shirt className="size-8 text-[#ff4d3d]" />
+                                    Selecione uma peça para construir a
+                                    apresentação.
                                 </div>
                             )}
                         </div>
                     </div>
 
-                    <DialogFooter>
+                    <DialogFooter className="border-t border-[#f6f4f0]/12 pt-5">
                         <Button
                             type="button"
                             variant="outline"
                             onClick={() => setProductDialogOpen(false)}
+                            className="rounded-[2px] border-[#f6f4f0]/18 bg-transparent text-[#f6f4f0] hover:bg-[#f6f4f0]/6 hover:text-[#f6f4f0]"
                         >
                             Cancelar
                         </Button>
@@ -1367,34 +1290,41 @@ export default function AtendimentoIndex({
                             disabled={
                                 selectedProducts.length === 0 || sendingProduct
                             }
+                            className="rounded-[2px] bg-[#ff4d3d] font-bold text-[#18181f] hover:bg-[#ff6a5c]"
                         >
                             {sendingProduct
                                 ? 'Enviando...'
                                 : sendingMultipleProducts
-                                  ? 'Enviar PDF'
-                                  : 'Enviar produto'}
+                                  ? 'Enviar seleção em PDF'
+                                  : 'Apresentar peça'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
             <Dialog open={funnelDialogOpen} onOpenChange={setFunnelDialogOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Disparar funil</DialogTitle>
-                        <DialogDescription>
-                            Revise a sequência antes de enviar para a conversa.
+                <DialogContent className="rounded-[2px] border-[#f6f4f0]/14 bg-[#18181f] font-zouth-body text-[#f6f4f0] shadow-none [&_[data-slot=dialog-close]]:text-[#cac4ba]">
+                    <DialogHeader className="border-b border-[#f6f4f0]/12 pb-5">
+                        <p className="text-[0.66rem] font-bold tracking-[0.18em] text-[#ff4d3d] uppercase">
+                            Cadência comercial
+                        </p>
+                        <DialogTitle className="font-zouth-display text-3xl tracking-[-0.05em]">
+                            Iniciar sequência
+                            <span className="text-[#ff4d3d]">.</span>
+                        </DialogTitle>
+                        <DialogDescription className="text-[#98968d]">
+                            Revise os movimentos antes de iniciar a conversa.
                         </DialogDescription>
                     </DialogHeader>
 
                     {selectedFunnel && (
                         <div className="space-y-3">
-                            <div className="rounded-lg border p-3">
+                            <div className="border border-[#ff4d3d]/30 bg-[#ff4d3d]/6 p-3">
                                 <div className="flex items-center gap-2 font-medium">
                                     <Bot className="size-4" />
                                     {selectedFunnel.name}
                                 </div>
-                                <p className="mt-1 font-mono text-xs text-muted-foreground">
+                                <p className="mt-1 font-mono text-xs text-[#98968d]">
                                     {selectedFunnel.code}
                                 </p>
                             </div>
@@ -1403,16 +1333,16 @@ export default function AtendimentoIndex({
                                 {selectedFunnel.steps.map((step) => (
                                     <div
                                         key={step.id}
-                                        className="flex items-start gap-3 rounded-lg border p-3 text-sm"
+                                        className="flex items-start gap-3 border border-[#f6f4f0]/12 bg-[#101015] p-3 text-sm"
                                     >
-                                        <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-medium">
+                                        <div className="flex size-7 shrink-0 items-center justify-center bg-[#ff4d3d] text-xs font-bold text-[#18181f]">
                                             {step.sort_order}
                                         </div>
                                         <div>
                                             <p className="font-medium">
                                                 {funnelStepLabel(step)}
                                             </p>
-                                            <p className="text-xs text-muted-foreground">
+                                            <p className="text-xs text-[#98968d]">
                                                 {step.type === 'product'
                                                     ? 'Produto com as informações configuradas no funil'
                                                     : step.type === 'audio'
@@ -1428,11 +1358,12 @@ export default function AtendimentoIndex({
                         </div>
                     )}
 
-                    <DialogFooter>
+                    <DialogFooter className="border-t border-[#f6f4f0]/12 pt-5">
                         <Button
                             type="button"
                             variant="outline"
                             onClick={() => setFunnelDialogOpen(false)}
+                            className="rounded-[2px] border-[#f6f4f0]/18 bg-transparent text-[#f6f4f0] hover:bg-[#f6f4f0]/6 hover:text-[#f6f4f0]"
                         >
                             Cancelar
                         </Button>
@@ -1444,9 +1375,19 @@ export default function AtendimentoIndex({
                                 startingFunnel ||
                                 funnelRunning
                             }
+                            className="rounded-[2px] bg-[#ff4d3d] font-bold text-[#18181f] hover:bg-[#ff6a5c]"
                         >
-                            <Play className="mr-2 size-4" />
-                            {startingFunnel ? 'Iniciando...' : 'Disparar'}
+                            {startingFunnel ? (
+                                <>
+                                    <LoaderCircle className="mr-2 size-4 animate-spin" />
+                                    Enviando Funil
+                                </>
+                            ) : (
+                                <>
+                                    <Play className="mr-2 size-4" />
+                                    Iniciar agora
+                                </>
+                            )}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

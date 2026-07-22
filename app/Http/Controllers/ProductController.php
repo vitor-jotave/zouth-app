@@ -49,7 +49,7 @@ class ProductController extends Controller
         ];
 
         $products = Product::where('manufacturer_id', $manufacturer->id)
-            ->with(['category', 'media', 'comboItems.componentProduct', 'comboItems.componentVariantStock'])
+            ->with(['category', 'media', 'comboItems.componentProduct.media', 'comboItems.componentVariantStock'])
             ->when($request->search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('name', 'like', '%'.$search.'%')
@@ -62,7 +62,7 @@ class ProductController extends Controller
             ->when($request->category_id, function ($query, $categoryId) {
                 $query->where('product_category_id', $categoryId);
             })
-            ->when($request->has('is_active'), function ($query) use ($request) {
+            ->when($request->filled('is_active'), function ($query) use ($request) {
                 $query->where('is_active', filter_var($request->is_active, FILTER_VALIDATE_BOOLEAN));
             })
             ->orderBy('sort_order')
@@ -114,7 +114,9 @@ class ProductController extends Controller
                     'id' => $val->id,
                     'value' => $val->value,
                     'hex' => $val->hex,
-                    'image_url' => $val->image_path ? Storage::disk('s3')->url($val->image_path) : null,
+                    'image_url' => ($val->thumbnail_path ?: $val->image_path)
+                        ? Storage::disk('s3')->url($val->thumbnail_path ?: $val->image_path)
+                        : null,
                 ])->values()->all(),
             ])->values()->all(),
         ]);
@@ -192,7 +194,9 @@ class ProductController extends Controller
                     'id' => $val->id,
                     'value' => $val->value,
                     'hex' => $val->hex,
-                    'image_url' => $val->image_path ? Storage::disk('s3')->url($val->image_path) : null,
+                    'image_url' => ($val->thumbnail_path ?: $val->image_path)
+                        ? Storage::disk('s3')->url($val->thumbnail_path ?: $val->image_path)
+                        : null,
                 ])->values()->all(),
             ])->values()->all(),
             'stock_structure' => $stockStructure,
@@ -215,7 +219,10 @@ class ProductController extends Controller
     public function destroy(Product $product): RedirectResponse
     {
         foreach ($product->media as $media) {
-            Storage::disk('s3')->delete($media->path);
+            Storage::disk('s3')->delete(array_values(array_filter([
+                $media->path,
+                $media->thumbnail_path,
+            ])));
         }
 
         $product->delete();

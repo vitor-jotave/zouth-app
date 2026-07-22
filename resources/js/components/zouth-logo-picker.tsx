@@ -1,22 +1,62 @@
-import { ArrowUpDown } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePage } from '@inertiajs/react';
+import {
+    Check,
+    ChevronDown,
+    LayoutPanelTop,
+    MessagesSquare,
+} from 'lucide-react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useActiveService } from '@/contexts/active-service-context';
+import type { SharedData } from '@/types';
+import AppLogoIcon from './app-logo-icon';
+import ZouthLogo from './zouth-logo';
 
 const SERVICES = [
-    { key: 'catalogo', label: 'Catálogo', color: '#C1564B' },
-    { key: 'atendimento', label: 'Atendimento', color: '#2D9E6A' },
+    { key: 'catalogo', label: 'Catálogo', icon: LayoutPanelTop },
+    { key: 'atendimento', label: 'Atendimento', icon: MessagesSquare },
 ] as const;
 
 type ServiceKey = (typeof SERVICES)[number]['key'];
 
 export default function ZouthLogoPicker() {
+    const { auth } = usePage<SharedData>().props;
     const { activeService: activeKey, setActiveService } = useActiveService();
     const [open, setOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const menuId = useId();
 
-    const activeService = SERVICES.find(
-        (service) => service.key === activeKey,
-    )!;
+    const catalogCapabilities = [
+        'collection.manage',
+        'catalog.manage',
+        'orders.manage',
+        'customers.manage',
+        'affiliations.manage',
+        'reports.view',
+    ];
+    const availableServices = SERVICES.filter((service) => {
+        if (auth.access?.is_owner) {
+            return true;
+        }
+
+        if (service.key === 'atendimento') {
+            return auth.access?.capabilities.includes('whatsapp.manage');
+        }
+
+        return catalogCapabilities.some((capability) =>
+            auth.access?.capabilities.includes(capability),
+        );
+    });
+    const activeService =
+        availableServices.find((service) => service.key === activeKey) ??
+        availableServices[0] ??
+        SERVICES[0];
+    const ActiveServiceIcon = activeService.icon;
+
+    useEffect(() => {
+        if (activeService.key !== activeKey) {
+            setActiveService(activeService.key);
+        }
+    }, [activeKey, activeService.key, setActiveService]);
 
     useEffect(() => {
         if (!open) {
@@ -58,56 +98,74 @@ export default function ZouthLogoPicker() {
     );
 
     return (
-        <div ref={containerRef} className="relative inline-block">
-            <span className="inline-block text-2xl leading-none font-bold select-none">
-                Zouth
-                <button
-                    type="button"
-                    onClick={() => setOpen((value) => !value)}
-                    className="inline-flex cursor-pointer items-center gap-1 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
-                    aria-label="Selecionar módulo do Zouth"
-                    aria-expanded={open}
-                    aria-haspopup="menu"
-                >
-                    <span
-                        style={{ color: activeService.color }}
-                        className="font-normal transition-colors"
-                    >
-                        {activeService.label}
-                    </span>
-                    <ArrowUpDown
-                        size={12}
-                        className="mt-0.5 shrink-0 opacity-40"
-                        aria-hidden="true"
-                    />
-                </button>
-            </span>
+        <div ref={containerRef} className="relative flex w-full flex-col gap-7">
+            <div className="flex min-h-8 items-center px-3 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+                <ZouthLogo
+                    tone="light"
+                    className="w-[8.75rem] group-data-[collapsible=icon]:hidden"
+                />
+                <AppLogoIcon
+                    tone="light"
+                    className="hidden size-6 group-data-[collapsible=icon]:block"
+                />
+            </div>
+
+            <button
+                type="button"
+                onClick={() => setOpen((value) => !value)}
+                className="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-[2px] border border-white/20 px-3.5 text-left text-sm font-medium text-zouth-ivory outline-none group-data-[collapsible=icon]:hidden hover:border-white/35 hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-zouth-coral focus-visible:ring-offset-2 focus-visible:ring-offset-zouth-charcoal"
+                aria-label="Selecionar módulo do Zouth"
+                aria-expanded={open}
+                aria-haspopup="menu"
+                aria-controls={menuId}
+            >
+                <ActiveServiceIcon
+                    className="size-[1.125rem] shrink-0 stroke-[1.6]"
+                    aria-hidden="true"
+                />
+                <span className="min-w-0 flex-1 truncate">
+                    {activeService.label}
+                </span>
+                <ChevronDown
+                    className={`size-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+                    aria-hidden="true"
+                />
+            </button>
 
             {open && (
                 <div
+                    id={menuId}
                     role="menu"
-                    className="absolute top-full left-0 z-50 mt-2 flex min-w-max flex-col gap-0.5 rounded-lg border bg-popover p-2 text-popover-foreground shadow-lg"
+                    aria-label="Módulos da Zouth"
+                    className="absolute top-full right-0 left-0 z-50 mt-2 flex min-w-max flex-col gap-1 rounded-[2px] border border-white/20 bg-zouth-charcoal p-1.5 text-zouth-ivory group-data-[collapsible=icon]:hidden"
                 >
-                    {SERVICES.map((service) => (
-                        <button
-                            key={service.key}
-                            type="button"
-                            role="menuitemradio"
-                            aria-checked={activeKey === service.key}
-                            onClick={() => handleSelect(service.key)}
-                            className={`rounded-md px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-2 ${activeKey === service.key ? 'bg-muted' : ''}`}
-                        >
-                            <span className="inline-block text-lg leading-tight font-bold">
-                                Zouth
-                                <span
-                                    style={{ color: service.color }}
-                                    className="font-normal"
-                                >
-                                    {service.label}
-                                </span>
-                            </span>
-                        </button>
-                    ))}
+                    {availableServices.map((service) => {
+                        const ServiceIcon = service.icon;
+                        const isActive = activeKey === service.key;
+
+                        return (
+                            <button
+                                key={service.key}
+                                type="button"
+                                role="menuitemradio"
+                                aria-checked={isActive}
+                                onClick={() => handleSelect(service.key)}
+                                className="flex min-h-11 w-full items-center gap-3 rounded-[2px] px-3 text-left text-sm outline-none hover:bg-white/[0.07] focus-visible:bg-white/[0.07] focus-visible:ring-2 focus-visible:ring-zouth-coral"
+                            >
+                                <ServiceIcon
+                                    className={`size-[1.125rem] stroke-[1.6] ${isActive ? 'text-zouth-coral' : 'text-zouth-ivory/70'}`}
+                                    aria-hidden="true"
+                                />
+                                <span className="flex-1">{service.label}</span>
+                                {isActive && (
+                                    <Check
+                                        className="size-4 text-zouth-coral"
+                                        aria-hidden="true"
+                                    />
+                                )}
+                            </button>
+                        );
+                    })}
                 </div>
             )}
         </div>

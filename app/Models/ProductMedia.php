@@ -21,8 +21,13 @@ class ProductMedia extends Model
         'product_id',
         'type',
         'path',
+        'thumbnail_path',
         'sort_order',
         'file_size_bytes',
+        'thumbnail_size_bytes',
+        'width',
+        'height',
+        'optimized_at',
     ];
 
     /**
@@ -36,6 +41,10 @@ class ProductMedia extends Model
             'type' => ProductMediaType::class,
             'sort_order' => 'integer',
             'file_size_bytes' => 'integer',
+            'thumbnail_size_bytes' => 'integer',
+            'width' => 'integer',
+            'height' => 'integer',
+            'optimized_at' => 'datetime',
         ];
     }
 
