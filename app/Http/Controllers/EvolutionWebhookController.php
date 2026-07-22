@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\WhatsappConversation;
 use App\Models\WhatsappInstance;
 use App\Models\WhatsappMessage;
+use App\Services\WhatsappAutomationRunner;
+use App\Services\WhatsappIncomingMediaService;
+use App\Services\WhatsappMessageReactionService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -12,6 +15,12 @@ use Illuminate\Support\Facades\Log;
 
 class EvolutionWebhookController extends Controller
 {
+    public function __construct(
+        protected WhatsappIncomingMediaService $incomingMedia,
+        protected WhatsappMessageReactionService $messageReactions,
+        protected WhatsappAutomationRunner $automationRunner,
+    ) {}
+
     /**
      * Handle incoming webhook events from Evolution API.
      */
@@ -99,10 +108,12 @@ class EvolutionWebhookController extends Controller
             return;
         }
 
+        if ($this->processReactionMessage($instance, $data, $remoteJid, $fromMe)) {
+            return;
+        }
+
         $isGroup = str_ends_with($remoteJid, '@g.us');
-        $body = $data['message']['conversation']
-            ?? $data['message']['extendedTextMessage']['text']
-            ?? null;
+        $body = $this->messageBody($data);
 
         // Find or create conversation
         $conversation = WhatsappConversation::firstOrCreate(
@@ -143,20 +154,98 @@ class EvolutionWebhookController extends Controller
                     'instance' => $instance->instance_name,
                     'message_id' => $messageId,
                 ]);
+            } elseif (! $message->media_url) {
+                $this->incomingMedia->store($instance, $message, $data);
             }
 
             return;
         }
 
+        $this->incomingMedia->store($instance, $message, $data);
+
         // Update conversation's last message
         $conversation->update([
-            'last_message_body' => $body,
+            'last_message_body' => $body ?: $this->mediaLabel($message->media_type),
             'last_message_from_me' => $fromMe,
             'last_message_at' => $message->message_timestamp,
             'unread_count' => $fromMe
                 ? $conversation->unread_count
                 : $conversation->unread_count + 1,
         ]);
+
+        $this->automationRunner->runForIncomingMessage($message);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function messageBody(array $data): ?string
+    {
+        $body = $data['message']['conversation']
+            ?? $data['message']['extendedTextMessage']['text']
+            ?? $data['message']['imageMessage']['caption']
+            ?? $data['message']['videoMessage']['caption']
+            ?? $data['message']['documentMessage']['caption']
+            ?? null;
+
+        return is_string($body) && $body !== '' ? $body : null;
+    }
+
+    private function mediaLabel(?string $mediaType): ?string
+    {
+        return match ($mediaType) {
+            'audio' => 'Mensagem de voz',
+            'image' => 'Imagem',
+            'sticker' => 'Figurinha',
+            'video' => 'Vídeo',
+            'document' => 'Documento',
+            default => null,
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function processReactionMessage(
+        WhatsappInstance $instance,
+        array $data,
+        string $remoteJid,
+        bool $fromMe,
+    ): bool {
+        $reactionMessage = data_get($data, 'message.reactionMessage');
+
+        if (! is_array($reactionMessage)) {
+            return false;
+        }
+
+        $targetMessageId = data_get($reactionMessage, 'key.id');
+        $emoji = data_get($reactionMessage, 'text');
+
+        if (! is_string($targetMessageId)
+            || ! array_key_exists('text', $reactionMessage)
+            || (! is_string($emoji) && $emoji !== null)) {
+            return true;
+        }
+
+        $message = WhatsappMessage::query()
+            ->where('message_id', $targetMessageId)
+            ->whereHas('conversation', fn ($query) => $query
+                ->where('whatsapp_instance_id', $instance->id))
+            ->first();
+
+        if (! $message) {
+            return true;
+        }
+
+        $senderJid = data_get($data, 'key.participant');
+        $this->messageReactions->apply(
+            $message,
+            $fromMe,
+            is_string($senderJid) ? $senderJid : ($fromMe ? null : $remoteJid),
+            $emoji ?? '',
+        );
+
+        return true;
     }
 
     /**

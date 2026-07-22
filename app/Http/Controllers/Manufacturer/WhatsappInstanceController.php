@@ -32,7 +32,12 @@ class WhatsappInstanceController extends Controller
 
         $instance = $manufacturer->whatsappInstances()->first();
 
+        if ($instance) {
+            $instance->loadCount('conversations');
+        }
+
         return Inertia::render('manufacturer/atendimento/setup', [
+            'connection_key' => 'zouth-'.$manufacturer->id.'-'.Str::lower(Str::random(8)),
             'instance' => $instance ? [
                 'id' => $instance->id,
                 'instance_name' => $instance->instance_name,
@@ -40,6 +45,9 @@ class WhatsappInstanceController extends Controller
                 'phone_number' => $instance->phone_number,
                 'profile_name' => $instance->profile_name,
                 'profile_picture_url' => $instance->profile_picture_url,
+                'conversation_count' => $instance->conversations_count,
+                'last_activity_at' => $instance->conversations()
+                    ->max('last_message_at'),
             ] : null,
         ]);
     }

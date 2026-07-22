@@ -6,8 +6,10 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
+    useSidebar,
 } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/hooks/use-current-url';
+import { RESTORE_SIDEBAR_AFTER_CHAT_KEY } from '@/lib/sidebar-state';
 import type { NavItem } from '@/types';
 
 export function NavMain({
@@ -18,6 +20,7 @@ export function NavMain({
     label?: string;
 }) {
     const { isCurrentUrl } = useCurrentUrl();
+    const { isMobile, open, setOpen, setOpenMobile } = useSidebar();
 
     if (items.length === 0) {
         return null;
@@ -43,7 +46,34 @@ export function NavMain({
                                     tooltip={{ children: item.title }}
                                     className="relative h-11 gap-3 rounded-[2px] px-3 text-[0.9375rem] font-medium text-zouth-ivory/82 group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! hover:bg-white/[0.06] hover:text-zouth-ivory focus-visible:ring-zouth-coral data-[active=true]:bg-zouth-coral data-[active=true]:font-semibold data-[active=true]:text-white data-[active=true]:hover:bg-zouth-coral data-[active=true]:hover:text-white [&>svg]:size-[1.125rem] [&>svg]:stroke-[1.6]"
                                 >
-                                    <Link href={item.href} prefetch>
+                                    <Link
+                                        href={item.href}
+                                        prefetch
+                                        onClick={() => {
+                                            if (
+                                                !item.collapseSidebarOnNavigate
+                                            ) {
+                                                return;
+                                            }
+
+                                            if (isMobile) {
+                                                setOpenMobile(false);
+                                            } else {
+                                                if (open) {
+                                                    sessionStorage.setItem(
+                                                        RESTORE_SIDEBAR_AFTER_CHAT_KEY,
+                                                        'true',
+                                                    );
+                                                } else {
+                                                    sessionStorage.removeItem(
+                                                        RESTORE_SIDEBAR_AFTER_CHAT_KEY,
+                                                    );
+                                                }
+
+                                                setOpen(false);
+                                            }
+                                        }}
+                                    >
                                         {item.icon && <item.icon />}
                                         <span className="group-data-[collapsible=icon]:hidden">
                                             {item.title}

@@ -7,13 +7,18 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\SendWhatsappMessageRequest;
 use App\Http\Requests\SendWhatsappProductMessageRequest;
 use App\Http\Requests\SendWhatsappProductPdfRequest;
+use App\Http\Requests\SendWhatsappReactionRequest;
 use App\Http\Resources\WhatsappProductResource;
 use App\Models\Product;
 use App\Models\ProductMedia;
 use App\Models\WhatsappConversation;
 use App\Models\WhatsappFunnel;
+use App\Models\WhatsappMessage;
+use App\Models\WhatsappQuickReply;
 use App\Services\EvolutionApiService;
 use App\Services\ProductCatalogPdfService;
+use App\Services\WhatsappContactProfileSyncService;
+use App\Services\WhatsappMessageReactionService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,6 +26,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
 class WhatsappChatController extends Controller
@@ -30,6 +36,8 @@ class WhatsappChatController extends Controller
     public function __construct(
         protected EvolutionApiService $evolution,
         protected ProductCatalogPdfService $productCatalogPdf,
+        protected WhatsappContactProfileSyncService $contactProfileSync,
+        protected WhatsappMessageReactionService $messageReactions,
     ) {}
 
     /**
@@ -39,6 +47,11 @@ class WhatsappChatController extends Controller
     {
         $manufacturer = $request->user()->currentManufacturer;
         $instance = $manufacturer->whatsappInstances()->first();
+        $quickReplies = WhatsappQuickReply::query()
+            ->where('manufacturer_id', $manufacturer->id)
+            ->where('is_active', true)
+            ->orderBy('shortcut')
+            ->get(['id', 'shortcut', 'title', 'body']);
 
         if (! $instance || ! $instance->isConnected()) {
             return Inertia::render('manufacturer/atendimento/index', [
@@ -47,8 +60,11 @@ class WhatsappChatController extends Controller
                 'active_conversation' => null,
                 'messages' => [],
                 'funnels' => [],
+                'quick_replies' => $quickReplies,
             ]);
         }
+
+        $this->contactProfileSync->sync($instance);
 
         $conversations = $instance->conversations()
             ->orderByDesc('last_message_at')
@@ -82,18 +98,7 @@ class WhatsappChatController extends Controller
                     ->orderBy('message_timestamp')
                     ->limit(100)
                     ->get()
-                    ->map(fn ($message) => [
-                        'id' => $message->id,
-                        'message_id' => $message->message_id,
-                        'from_me' => $message->from_me,
-                        'body' => $message->body,
-                        'media_type' => $message->media_type,
-                        'media_url' => $message->media_url,
-                        'media_mimetype' => $message->media_mimetype,
-                        'media_file_name' => $message->media_file_name,
-                        'status' => $message->status->value,
-                        'message_timestamp' => $message->message_timestamp?->toIso8601String(),
-                    ]);
+                    ->map(fn (WhatsappMessage $message) => $this->messagePayload($message));
 
                 // Reset unread count when opening conversation
                 $activeConversation->update(['unread_count' => 0]);
@@ -113,6 +118,7 @@ class WhatsappChatController extends Controller
                 'display_name' => $activeConversation->displayName(),
             ] : null,
             'messages' => $messages,
+            'quick_replies' => $quickReplies,
             'funnels' => WhatsappFunnel::query()
                 ->where('manufacturer_id', $manufacturer->id)
                 ->where('is_active', true)
@@ -146,18 +152,7 @@ class WhatsappChatController extends Controller
             ->orderBy('message_timestamp')
             ->limit(100)
             ->get()
-            ->map(fn ($message) => [
-                'id' => $message->id,
-                'message_id' => $message->message_id,
-                'from_me' => $message->from_me,
-                'body' => $message->body,
-                'media_type' => $message->media_type,
-                'media_url' => $message->media_url,
-                'media_mimetype' => $message->media_mimetype,
-                'media_file_name' => $message->media_file_name,
-                'status' => $message->status->value,
-                'message_timestamp' => $message->message_timestamp?->toIso8601String(),
-            ]);
+            ->map(fn (WhatsappMessage $message) => $this->messagePayload($message));
 
         // Reset unread
         $conversation->update(['unread_count' => 0]);
@@ -207,18 +202,71 @@ class WhatsappChatController extends Controller
         ]);
 
         return response()->json([
-            'message' => [
-                'id' => $message->id,
-                'message_id' => $message->message_id,
-                'from_me' => $message->from_me,
-                'body' => $message->body,
-                'media_type' => $message->media_type,
-                'media_url' => $message->media_url,
-                'media_mimetype' => $message->media_mimetype,
-                'media_file_name' => $message->media_file_name,
-                'status' => $message->status->value,
-                'message_timestamp' => $message->message_timestamp->toIso8601String(),
+            'message' => $this->messagePayload($message),
+        ]);
+    }
+
+    public function media(WhatsappMessage $message): StreamedResponse
+    {
+        $message->loadMissing('conversation');
+        $this->authorize('view', $message->conversation);
+
+        $mediaUrl = $message->media_url;
+        $disk = Storage::disk('s3');
+        $baseUrl = rtrim($disk->url(''), '/');
+
+        abort_if(blank($mediaUrl) || ! str_starts_with($mediaUrl, $baseUrl.'/'), 404);
+
+        $path = rawurldecode(Str::after($mediaUrl, $baseUrl.'/'));
+
+        abort_if($path === '' || str_contains($path, '..') || ! $disk->exists($path), 404);
+
+        return $disk->response(
+            $path,
+            $message->media_file_name ?: basename($path),
+            [
+                'Cache-Control' => 'private, max-age=3600',
+                'Content-Type' => $message->media_mimetype ?: 'application/octet-stream',
             ],
+        );
+    }
+
+    public function react(
+        SendWhatsappReactionRequest $request,
+        WhatsappMessage $message,
+    ): JsonResponse {
+        $message->loadMissing('conversation.instance');
+        $conversation = $message->conversation;
+        $this->authorize('sendMessage', $conversation);
+
+        $selectedReaction = $request->validated('reaction');
+        $reaction = $this->messageReactions->ownReaction($message) === $selectedReaction
+            ? ''
+            : $selectedReaction;
+        $response = $this->evolution->sendReaction(
+            $conversation->instance->instance_name,
+            $conversation->remote_jid,
+            $message->from_me,
+            $message->message_id,
+            $reaction,
+        );
+
+        if (! $response->successful()) {
+            return response()->json([
+                'error' => 'Não foi possível enviar a reação.',
+            ], 422);
+        }
+
+        $reactions = $this->messageReactions->apply(
+            $message,
+            true,
+            null,
+            $reaction,
+        );
+
+        return response()->json([
+            'reaction' => $reaction ?: null,
+            'reactions' => $reactions,
         ]);
     }
 
@@ -415,6 +463,8 @@ class WhatsappChatController extends Controller
             return response()->json(['conversations' => []]);
         }
 
+        $this->contactProfileSync->sync($instance);
+
         $conversations = $instance->conversations()
             ->orderByDesc('last_message_at')
             ->get()
@@ -480,7 +530,7 @@ class WhatsappChatController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function messagePayload($message): array
+    private function messagePayload(WhatsappMessage $message): array
     {
         return [
             'id' => $message->id,
@@ -488,9 +538,12 @@ class WhatsappChatController extends Controller
             'from_me' => $message->from_me,
             'body' => $message->body,
             'media_type' => $message->media_type,
-            'media_url' => $message->media_url,
+            'media_url' => $message->media_url
+                ? route('manufacturer.atendimento.messages.media', $message)
+                : null,
             'media_mimetype' => $message->media_mimetype,
             'media_file_name' => $message->media_file_name,
+            'reactions' => $message->reactions ?? [],
             'status' => $message->status->value,
             'message_timestamp' => $message->message_timestamp->toIso8601String(),
         ];

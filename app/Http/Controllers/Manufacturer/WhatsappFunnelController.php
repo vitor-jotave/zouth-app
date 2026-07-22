@@ -10,13 +10,16 @@ use App\Models\Product;
 use App\Models\WhatsappConversation;
 use App\Models\WhatsappFunnel;
 use App\Models\WhatsappFunnelRun;
+use App\Models\WhatsappFunnelStep;
 use App\Services\TenantManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class WhatsappFunnelController extends Controller
 {
@@ -28,6 +31,7 @@ class WhatsappFunnelController extends Controller
 
         $funnels = WhatsappFunnel::query()
             ->where('manufacturer_id', $manufacturer->id)
+            ->with('steps')
             ->withCount('steps')
             ->orderBy('sort_order')
             ->orderBy('name')
@@ -76,10 +80,40 @@ class WhatsappFunnelController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'sku', 'price_cents']);
 
+        $instance = $manufacturer->whatsappInstances()->first();
+
         return Inertia::render('manufacturer/atendimento/funis/edit', [
             'funnel' => $this->funnelPayload($funnel, true),
             'products' => $products,
+            'sender_profile' => [
+                'name' => $instance?->profile_name ?: $manufacturer->name,
+                'picture_url' => $instance?->profile_picture_url,
+            ],
         ]);
+    }
+
+    public function audio(Request $request, WhatsappFunnel $funnel, WhatsappFunnelStep $step): StreamedResponse
+    {
+        $this->ensureOwnFunnel($request, $funnel);
+
+        abort_unless(
+            $step->whatsapp_funnel_id === $funnel->id && $step->type === 'audio',
+            404,
+        );
+
+        $mediaPath = (string) ($step->payload['media_path'] ?? '');
+        $disk = Storage::disk('s3');
+
+        abort_if(blank($mediaPath) || ! $disk->exists($mediaPath), 404);
+
+        return $disk->response(
+            $mediaPath,
+            (string) ($step->payload['file_name'] ?? basename($mediaPath)),
+            [
+                'Cache-Control' => 'private, max-age=3600',
+                'Content-Type' => (string) ($step->payload['mimetype'] ?? 'audio/mpeg'),
+            ],
+        );
     }
 
     public function update(UpdateWhatsappFunnelRequest $request, WhatsappFunnel $funnel): RedirectResponse
@@ -258,12 +292,26 @@ class WhatsappFunnelController extends Controller
         ];
 
         if ($withSteps || $funnel->relationLoaded('steps')) {
-            $payload['steps'] = $funnel->steps->map(fn ($step) => [
-                'id' => $step->id,
-                'type' => $step->type,
-                'sort_order' => $step->sort_order,
-                'payload' => $step->payload,
-            ])->values()->all();
+            $payload['steps'] = $funnel->steps
+                ->map(function (WhatsappFunnelStep $step) use ($funnel, $withSteps): array {
+                    $stepPayload = $step->payload;
+
+                    if ($withSteps && $step->type === 'audio') {
+                        $stepPayload['audio_url'] = route(
+                            'manufacturer.atendimento.funis.steps.audio',
+                            [$funnel, $step],
+                        );
+                    }
+
+                    return [
+                        'id' => $step->id,
+                        'type' => $step->type,
+                        'sort_order' => $step->sort_order,
+                        'payload' => $stepPayload,
+                    ];
+                })
+                ->values()
+                ->all();
         }
 
         return $payload;
