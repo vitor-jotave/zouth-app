@@ -3,7 +3,6 @@
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\ManufacturerController;
 use App\Http\Controllers\Admin\PlanController;
-use App\Http\Controllers\AffiliationController;
 use App\Http\Controllers\CatalogSettingsController;
 use App\Http\Controllers\EvolutionWebhookController;
 use App\Http\Controllers\Health\ReadinessController;
@@ -12,11 +11,19 @@ use App\Http\Controllers\Manufacturer\BillingController;
 use App\Http\Controllers\Manufacturer\CustomerController as ManufacturerCustomerController;
 use App\Http\Controllers\Manufacturer\DashboardController as ManufacturerDashboardController;
 use App\Http\Controllers\Manufacturer\OrderController as ManufacturerOrderController;
+use App\Http\Controllers\Manufacturer\OrderRuleController;
 use App\Http\Controllers\Manufacturer\ProductComboController;
+use App\Http\Controllers\Manufacturer\ProductImportController;
+use App\Http\Controllers\Manufacturer\ReportController;
+use App\Http\Controllers\Manufacturer\RepresentativeController;
+use App\Http\Controllers\Manufacturer\RepresentativeInvitationController;
 use App\Http\Controllers\Manufacturer\UserController as ManufacturerUserController;
+use App\Http\Controllers\Manufacturer\WhatsappAutomationController;
 use App\Http\Controllers\Manufacturer\WhatsappChatController;
 use App\Http\Controllers\Manufacturer\WhatsappFunnelController;
 use App\Http\Controllers\Manufacturer\WhatsappInstanceController;
+use App\Http\Controllers\Manufacturer\WhatsappQuickReplyController;
+use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\PlanSelectionController;
 use App\Http\Controllers\ProductCategoryController;
 use App\Http\Controllers\ProductController;
@@ -26,6 +33,9 @@ use App\Http\Controllers\PublicOrderController;
 use App\Http\Controllers\Rep\DashboardController as RepDashboardController;
 use App\Http\Controllers\Rep\ManufacturerController as RepManufacturerController;
 use App\Http\Controllers\Rep\OrderController as RepOrderController;
+use App\Http\Controllers\RepresentativeInvitationAcceptanceController;
+use App\Http\Controllers\RobotsController;
+use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\VariationTypeController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -39,19 +49,54 @@ Route::get('/', function () {
     $hasSafeDemoCatalogUrl = filled($demoCatalogUrl)
         && filter_var($demoCatalogUrl, FILTER_VALIDATE_URL)
         && in_array($demoCatalogScheme, ['http', 'https'], true);
+    $canonicalUrl = url('/');
+    $shareImageUrl = url('/brand/zouth/landing/collection-in-motion.webp');
+    $pageDescription = config('commercial.seo.home_description');
 
     return Inertia::render('landing/index', [
         'canRegister' => Features::enabled(Features::registration()),
         'commercial' => [
             'salesContactUrl' => config('commercial.sales_contact_url'),
             'demoCatalogUrl' => $hasSafeDemoCatalogUrl ? $demoCatalogUrl : null,
+            'onboardingUrl' => route('onboarding.index', absolute: false),
         ],
         'seo' => [
-            'canonicalUrl' => url('/'),
-            'shareImageUrl' => url('/brand/zouth/landing/collection-in-motion.webp'),
+            'pageTitle' => config('commercial.seo.home_title'),
+            'description' => $pageDescription,
+            'canonicalUrl' => $canonicalUrl,
+            'shareImageUrl' => $shareImageUrl,
+            'shareImageWidth' => 1536,
+            'shareImageHeight' => 1024,
+            'ogTitle' => config('commercial.seo.home_og_title'),
+            'ogDescription' => config('commercial.seo.home_og_description'),
+            'structuredData' => [
+                '@context' => 'https://schema.org',
+                '@type' => 'Organization',
+                '@id' => $canonicalUrl.'#organization',
+                'name' => 'ZOUTH',
+                'alternateName' => 'Zouth',
+                'url' => $canonicalUrl,
+                'logo' => url('/brand/zouth/favicon/web-app-manifest-512x512.png'),
+                'email' => 'comercial@zouth.app',
+                'description' => $pageDescription,
+            ],
         ],
     ]);
 })->name('home');
+
+Route::get('robots.txt', RobotsController::class)->name('robots');
+Route::get('sitemap.xml', SitemapController::class)->name('sitemap');
+
+Route::controller(OnboardingController::class)
+    ->prefix('comece')
+    ->name('onboarding.')
+    ->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::post('progress', 'progress')->middleware('throttle:60,1')->name('progress');
+        Route::post('account', 'store')->middleware('throttle:5,1')->name('store');
+        Route::post('preview', 'preview')->middleware(['auth', 'throttle:10,1'])->name('preview');
+        Route::post('complete', 'complete')->middleware(['auth', 'verified', 'throttle:10,1'])->name('complete');
+    });
 
 Route::get('health/live', fn () => response()->json(['status' => 'ok']))
     ->name('health.live');
@@ -80,6 +125,15 @@ Route::post('webhooks/evolution/{instanceName}', [EvolutionWebhookController::cl
     ->middleware('throttle:evolution-webhook')
     ->name('webhooks.evolution');
 
+Route::controller(RepresentativeInvitationAcceptanceController::class)
+    ->prefix('representative-invitations')
+    ->name('representative-invitations.')
+    ->where(['token' => '[A-Za-z0-9]{64}'])
+    ->group(function () {
+        Route::get('{token}', 'show')->name('show');
+        Route::post('{token}', 'accept')->middleware('throttle:10,1')->name('accept');
+    });
+
 // Public plan selection routes (secured via signed URLs)
 Route::controller(PlanSelectionController::class)
     ->prefix('plan-selection')
@@ -91,8 +145,11 @@ Route::controller(PlanSelectionController::class)
     });
 
 // Manufacturer User Routes (tenant via session)
-Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function () {
+Route::middleware(['auth', 'verified', 'manufacturer.tenant', 'manufacturer.entitled'])->group(function () {
     Route::get('dashboard', ManufacturerDashboardController::class)->name('dashboard');
+
+    Route::get('manufacturer/account-paused', [OnboardingController::class, 'paused'])
+        ->name('manufacturer.account-paused');
 
     Route::controller(ManufacturerUserController::class)->prefix('users')->name('users.')->middleware('manufacturer.owner')->group(function () {
         Route::get('/', 'index')->name('index');
@@ -104,14 +161,33 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
             ->name('transfer-ownership');
     });
 
-    Route::controller(AffiliationController::class)->prefix('affiliations')->name('affiliations.')->middleware('manufacturer.capability:affiliations.manage')->group(function () {
-        Route::get('/', 'index')->name('index');
-        Route::post('{affiliation}/approve', 'approve')->name('approve');
-        Route::post('{affiliation}/reject', 'reject')->name('reject');
-        Route::post('{affiliation}/revoke', 'revoke')->name('revoke');
+    Route::prefix('affiliations')->name('affiliations.')->middleware('manufacturer.capability:affiliations.manage')->group(function () {
+        Route::redirect('/', '/manufacturer/representatives')->name('index');
+        Route::post('{affiliation}/approve', [RepresentativeController::class, 'approve'])->name('approve');
+        Route::post('{affiliation}/reject', [RepresentativeController::class, 'reject'])->name('reject');
+        Route::post('{affiliation}/revoke', [RepresentativeController::class, 'revoke'])->name('revoke');
     });
 
     Route::prefix('manufacturer')->name('manufacturer.')->group(function () {
+        Route::get('reports', ReportController::class)
+            ->middleware('manufacturer.capability:reports.view')
+            ->name('reports.index');
+
+        Route::controller(RepresentativeController::class)
+            ->prefix('representatives')
+            ->name('representatives.')
+            ->middleware('manufacturer.capability:affiliations.manage')
+            ->group(function () {
+                Route::get('/', 'index')->name('index');
+                Route::post('{affiliation}/approve', 'approve')->name('approve');
+                Route::post('{affiliation}/reject', 'reject')->name('reject');
+                Route::post('{affiliation}/revoke', 'revoke')->name('revoke');
+
+                Route::post('invitations', [RepresentativeInvitationController::class, 'store'])->name('invitations.store');
+                Route::post('invitations/{invitation}/resend', [RepresentativeInvitationController::class, 'resend'])->name('invitations.resend');
+                Route::delete('invitations/{invitation}', [RepresentativeInvitationController::class, 'cancel'])->name('invitations.cancel');
+            });
+
         Route::controller(CatalogSettingsController::class)
             ->prefix('catalog-settings')
             ->name('catalog-settings.')
@@ -156,6 +232,24 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
             Route::delete('{product}', 'destroy')->name('destroy');
         });
 
+        Route::controller(ProductImportController::class)
+            ->prefix('product-imports')
+            ->name('product-imports.')
+            ->middleware('manufacturer.capability:collection.manage')
+            ->group(function () {
+                Route::get('/', 'index')->name('index');
+                Route::get('create', 'create')->name('create');
+                Route::post('/', 'store')->name('store');
+                Route::get('template', 'template')->name('template');
+                Route::get('{productImport}', 'show')->name('show');
+                Route::put('{productImport}/mapping', 'updateMapping')->name('mapping.update');
+                Route::post('{productImport}/confirm', 'confirm')->name('confirm');
+                Route::post('{productImport}/retry', 'retry')->name('retry');
+                Route::post('{productImport}/cancel', 'cancel')->name('cancel');
+                Route::get('{productImport}/errors', 'errors')->name('errors');
+                Route::delete('{productImport}', 'destroy')->name('destroy');
+            });
+
         Route::scopeBindings()->controller(ProductMediaController::class)
             ->prefix('products/{product}/media')
             ->name('products.media.')
@@ -173,6 +267,15 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
             Route::put('{order}/notes', 'updateNotes')->name('update-notes');
         });
 
+        Route::controller(OrderRuleController::class)->prefix('order-rules')->name('order-rules.')->middleware('manufacturer.capability:orders.manage')->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->name('store');
+            Route::put('{orderRule}', 'update')->name('update');
+            Route::post('{orderRule}/toggle', 'toggle')->name('toggle');
+            Route::post('{orderRule}/duplicate', 'duplicate')->name('duplicate');
+            Route::delete('{orderRule}', 'destroy')->name('destroy');
+        });
+
         Route::controller(ManufacturerCustomerController::class)->prefix('customers')->name('customers.')->middleware('manufacturer.capability:customers.manage')->group(function () {
             Route::get('/', 'index')->name('index');
             Route::post('/', 'store')->name('store');
@@ -181,6 +284,7 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
         });
 
         Route::prefix('atendimento')->name('atendimento.')->middleware('manufacturer.capability:whatsapp.manage')->group(function () {
+            Route::get('canais', [WhatsappInstanceController::class, 'setup'])->name('channels');
             Route::get('setup', [WhatsappInstanceController::class, 'setup'])->name('setup');
             Route::post('instances', [WhatsappInstanceController::class, 'store'])->name('instances.store');
             Route::get('instances/{instance}/qr', [WhatsappInstanceController::class, 'qrCode'])->name('instances.qr');
@@ -192,15 +296,32 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
             Route::get('conversations/list', [WhatsappChatController::class, 'conversationsList'])->name('conversations.list');
             Route::get('conversations/{conversation}/messages', [WhatsappChatController::class, 'messages'])->name('conversations.messages');
             Route::post('conversations/{conversation}/messages', [WhatsappChatController::class, 'sendMessage'])->name('conversations.send');
+            Route::get('messages/{message}/media', [WhatsappChatController::class, 'media'])->name('messages.media');
+            Route::post('messages/{message}/reaction', [WhatsappChatController::class, 'react'])->name('messages.reaction');
             Route::post('conversations/{conversation}/products/pdf', [WhatsappChatController::class, 'sendProductsPdf'])->name('conversations.products.pdf');
             Route::post('conversations/{conversation}/products/{product}', [WhatsappChatController::class, 'sendProduct'])->name('conversations.products.send');
             Route::post('conversations/{conversation}/funnels/{funnel}/runs', [WhatsappFunnelController::class, 'startRun'])->name('conversations.funnels.runs.store');
             Route::get('funnel-runs/{run}', [WhatsappFunnelController::class, 'showRun'])->name('funnel-runs.show');
 
+            Route::controller(WhatsappAutomationController::class)->prefix('automacoes')->name('automations.')->group(function () {
+                Route::get('/', 'index')->name('index');
+                Route::post('/', 'store')->name('store');
+                Route::get('{automation}/edit', 'edit')->name('edit');
+                Route::put('{automation}', 'update')->name('update');
+            });
+
+            Route::controller(WhatsappQuickReplyController::class)->prefix('mensagens-rapidas')->name('quick-replies.')->group(function () {
+                Route::get('/', 'index')->name('index');
+                Route::post('/', 'store')->name('store');
+                Route::put('{quickReply}', 'update')->name('update');
+                Route::delete('{quickReply}', 'destroy')->name('destroy');
+            });
+
             Route::controller(WhatsappFunnelController::class)->prefix('funis')->name('funis.')->group(function () {
                 Route::get('/', 'index')->name('index');
                 Route::post('/', 'store')->name('store');
                 Route::put('order', 'order')->name('order');
+                Route::get('{funnel}/steps/{step}/audio', 'audio')->name('steps.audio');
                 Route::get('{funnel}/edit', 'edit')->name('edit');
                 Route::put('{funnel}', 'update')->name('update');
                 Route::post('{funnel}/toggle', 'toggle')->name('toggle');
@@ -209,6 +330,7 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant'])->group(function (
 
         Route::controller(BillingController::class)->prefix('billing')->name('billing.')->middleware('manufacturer.owner')->group(function () {
             Route::get('/', 'index')->name('index');
+            Route::put('details', 'updateDetails')->name('details.update');
             Route::get('checkout/{plan}', 'checkout')->name('checkout');
             Route::get('checkout/{plan}/success', 'checkoutSuccess')->name('checkout.success');
             Route::post('swap', 'swap')->name('swap');

@@ -5,15 +5,21 @@ import {
     CreditCard,
     LayoutGrid,
     Layers,
+    ListChecks,
     MessageSquare,
+    MessageSquareQuote,
+    RadioTower,
     Route,
+    Workflow,
     Package,
     Palette,
+    ChartNoAxesCombined,
     ShoppingCart,
     Tags,
     UserCheck,
     Users,
 } from 'lucide-react';
+import { useEffect } from 'react';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import {
@@ -21,8 +27,10 @@ import {
     SidebarContent,
     SidebarFooter,
     SidebarHeader,
+    useSidebar,
 } from '@/components/ui/sidebar';
 import { useActiveService } from '@/contexts/active-service-context';
+import { RESTORE_SIDEBAR_AFTER_CHAT_KEY } from '@/lib/sidebar-state';
 import admin from '@/routes/admin';
 import manufacturer from '@/routes/manufacturer';
 import rep from '@/routes/rep';
@@ -97,6 +105,14 @@ function useNavItems() {
         const catalogo: NavItem[] = [];
         const atendimento: NavItem[] = [];
 
+        if (canAccess('reports.view')) {
+            common.push({
+                title: 'Relatórios',
+                href: manufacturer.reports.index(),
+                icon: ChartNoAxesCombined,
+            });
+        }
+
         if (canAccess('collection.manage')) {
             catalogo.push(
                 {
@@ -128,11 +144,18 @@ function useNavItems() {
         }
 
         if (canAccess('orders.manage')) {
-            catalogo.push({
-                title: 'Pedidos',
-                href: '/manufacturer/orders',
-                icon: ShoppingCart,
-            });
+            catalogo.push(
+                {
+                    title: 'Pedidos',
+                    href: '/manufacturer/orders',
+                    icon: ShoppingCart,
+                },
+                {
+                    title: 'Regras de pedido',
+                    href: manufacturer.orderRules.index(),
+                    icon: ListChecks,
+                },
+            );
         }
 
         if (canAccess('customers.manage')) {
@@ -145,8 +168,8 @@ function useNavItems() {
 
         if (canAccess('affiliations.manage')) {
             catalogo.push({
-                title: 'Afiliações',
-                href: '/affiliations',
+                title: 'Representantes',
+                href: manufacturer.representatives.index(),
                 icon: UserCheck,
             });
         }
@@ -165,14 +188,30 @@ function useNavItems() {
         if (canAccess('whatsapp.manage')) {
             atendimento.push(
                 {
-                    title: 'Atendimento',
+                    title: 'Chat',
                     href: '/manufacturer/atendimento',
                     icon: MessageSquare,
+                    collapseSidebarOnNavigate: true,
                 },
                 {
                     title: 'Funis',
                     href: '/manufacturer/atendimento/funis',
                     icon: Route,
+                },
+                {
+                    title: 'Automações',
+                    href: manufacturer.atendimento.automations.index(),
+                    icon: Workflow,
+                },
+                {
+                    title: 'Canais',
+                    href: manufacturer.atendimento.channels(),
+                    icon: RadioTower,
+                },
+                {
+                    title: 'Mensagens rápidas',
+                    href: manufacturer.atendimento.quickReplies.index(),
+                    icon: MessageSquareQuote,
                 },
             );
         }
@@ -198,7 +237,23 @@ function orderItems(items: NavItem[], titles: string[]): NavItem[] {
 export function AppSidebar() {
     const { common, catalogo, atendimento } = useNavItems();
     const { activeService } = useActiveService();
-    const { auth } = usePage<SharedData>().props;
+    const page = usePage<SharedData>();
+    const { auth } = page.props;
+    const { isMobile, setOpen } = useSidebar();
+    const pathname = page.url.split('?')[0];
+
+    useEffect(() => {
+        if (isMobile || pathname === '/manufacturer/atendimento') {
+            return;
+        }
+
+        if (sessionStorage.getItem(RESTORE_SIDEBAR_AFTER_CHAT_KEY) !== 'true') {
+            return;
+        }
+
+        sessionStorage.removeItem(RESTORE_SIDEBAR_AFTER_CHAT_KEY);
+        setOpen(true);
+    }, [isMobile, pathname, setOpen]);
 
     const isManufacturerUser = auth.user.user_type === 'manufacturer_user';
     const visibleService =
@@ -215,8 +270,9 @@ export function AppSidebar() {
     ]);
     const commercialItems = orderItems(catalogo, [
         'Pedidos',
+        'Regras de pedido',
         'Clientes',
-        'Afiliações',
+        'Representantes',
     ]);
     const managementItems = orderItems(catalogo, ['Usuários', 'Assinatura']);
 
