@@ -62,3 +62,21 @@ it('rejects requests for hosts outside the configured production hosts', functio
         app()->detectEnvironment(fn (): string => $originalEnvironment);
     }
 });
+
+it('configures production workers with bounded memory and unprivileged users', function () {
+    $configuration = file_get_contents(base_path('nixpacks.toml'));
+
+    expect($configuration)->toBeString();
+
+    $configuration = (string) $configuration;
+
+    expect($configuration)
+        ->toContain('php_admin_value[memory_limit] = 512M')
+        ->toContain('php -d memory_limit=512M /app/artisan queue:work')
+        ->toContain('chown -R www-data:www-data /app/storage /app/bootstrap/cache')
+        ->toContain('chmod -R ug+rwX /app/storage /app/bootstrap/cache')
+        ->toContain('exec supervisord -c /etc/supervisord.conf -n')
+        ->not->toContain('"npm run build:ssr"');
+
+    expect(substr_count($configuration, 'user=www-data'))->toBe(3);
+});
