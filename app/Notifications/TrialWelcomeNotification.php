@@ -35,22 +35,21 @@ class TrialWelcomeNotification extends Notification implements ShouldQueue
      */
     public function toMail(object $notifiable): MailMessage
     {
+        $messageData = [
+            'eyebrow' => 'SEUS 7 DIAS COMEÇARAM',
+            'title' => 'Sua vitrine já tem nome.',
+            'intro' => 'Agora é hora de trazer as peças da '.$this->manufacturer->name.' e ver a coleção ganhar presença diante de representantes e lojistas.',
+            'actionLabel' => 'Continuar minha vitrine',
+            'actionUrl' => route('onboarding.index'),
+            'note' => 'Sem cartão. Você escolhe um plano somente se quiser continuar depois do teste.',
+            'textTitle' => 'Sua vitrine já tem nome',
+            'textIntro' => 'Seus sete dias grátis começaram. Traga as peças da '.$this->manufacturer->name.' para continuar.',
+            'textNote' => 'Sem cartão.',
+        ];
+
         return (new MailMessage)
             ->subject($this->manufacturer->name.' já está em movimento na Zouth')
-            ->view('emails.onboarding.message', [
-                'eyebrow' => 'SEUS 7 DIAS COMEÇARAM',
-                'title' => 'Sua vitrine já tem nome.',
-                'intro' => 'Agora é hora de trazer as peças da '.$this->manufacturer->name.' e ver a coleção ganhar presença diante de representantes e lojistas.',
-                'actionLabel' => 'Continuar minha vitrine',
-                'actionUrl' => route('onboarding.index'),
-                'note' => 'Sem cartão. Você escolhe um plano somente se quiser continuar depois do teste.',
-            ])
-            ->text('emails.onboarding.message-text', [
-                'title' => 'Sua vitrine já tem nome',
-                'intro' => 'Seus sete dias grátis começaram. Traga as peças da '.$this->manufacturer->name.' para continuar.',
-                'actionLabel' => 'Continuar minha vitrine',
-                'actionUrl' => route('onboarding.index'),
-                'note' => 'Sem cartão.',
-            ]);
+            ->view('emails.onboarding.message', $messageData)
+            ->text('emails.onboarding.message-text', $messageData);
     }
 }
