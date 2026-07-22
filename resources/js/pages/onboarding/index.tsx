@@ -112,6 +112,10 @@ export default function OnboardingIndex() {
     const stageRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
+        setStage(props.stage);
+    }, [props.stage]);
+
+    useEffect(() => {
         const root = rootRef.current;
 
         if (
@@ -225,7 +229,10 @@ export default function OnboardingIndex() {
                 terms: termsAccepted,
                 accent_color: accentColor,
             },
-            { onFinish: () => setProcessing(false) },
+            {
+                preserveState: 'errors',
+                onFinish: () => setProcessing(false),
+            },
         );
     };
 

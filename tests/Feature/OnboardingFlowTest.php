@@ -81,6 +81,11 @@ it('creates the manufacturer owner catalog and exact seven day trial in one flow
     $catalog = $manufacturer->catalogSetting;
 
     $this->assertAuthenticatedAs($user);
+    $this->get(route('onboarding.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('onboarding/index')
+            ->where('stage', 4));
+
     expect($user->user_type)->toBe(UserType::ManufacturerUser)
         ->and($user->current_manufacturer_id)->toBe($manufacturer->id)
         ->and($manufacturer->primary_owner_user_id)->toBe($user->id)
@@ -91,6 +96,21 @@ it('creates the manufacturer owner catalog and exact seven day trial in one flow
         ->and($manufacturer->currentPlan?->is_self_service_default)->toBeTrue()
         ->and($catalog)->toBeInstanceOf(CatalogSetting::class)
         ->and($catalog?->public_link_active)->toBeFalse();
+});
+
+it('treats a repeated account submission as an idempotent onboarding resume', function () {
+    createOnboardingAccount();
+
+    $user = User::query()->where('email', 'marina@petitmonde.com.br')->firstOrFail();
+    $manufacturer = $user->currentManufacturer;
+
+    $this->post(route('onboarding.store'))
+        ->assertRedirect(route('onboarding.index'));
+
+    expect(User::query()->count())->toBe(1)
+        ->and(Manufacturer::query()->count())->toBe(1)
+        ->and(CatalogSetting::query()->count())->toBe(1)
+        ->and($manufacturer?->fresh()->primary_owner_user_id)->toBe($user->id);
 });
 
 it('requires terms and a unique account email without leaving partial records', function () {

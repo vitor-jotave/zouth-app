@@ -106,6 +106,10 @@ class OnboardingController extends Controller
 
     public function store(StoreOnboardingAccountRequest $request): RedirectResponse
     {
+        if ($request->user()) {
+            return redirect()->route('onboarding.index');
+        }
+
         $validated = $request->validated();
         $onboardingSession = $this->resolveSession($request);
         $plans = Plan::query()
