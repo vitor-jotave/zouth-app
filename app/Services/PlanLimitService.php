@@ -6,6 +6,7 @@ use App\Models\Manufacturer;
 use App\Models\ManufacturerAffiliation;
 use App\Models\Plan;
 use App\Models\ProductMedia;
+use App\Models\RepresentativeInvitation;
 use Carbon\CarbonImmutable;
 use Laravel\Cashier\Subscription;
 
@@ -20,6 +21,10 @@ class PlanLimitService
     public function activePlan(Manufacturer $manufacturer): ?Plan
     {
         $plan = $manufacturer->currentPlan;
+
+        if ($plan && $manufacturer->onGenericTrial()) {
+            return $plan;
+        }
 
         if (! $plan || ! $plan->stripe_price_id) {
             return $plan;
@@ -36,6 +41,31 @@ class PlanLimitService
             ->exists();
 
         return $hasEntitledSubscription ? $plan : null;
+    }
+
+    public function hasOperationalAccess(Manufacturer $manufacturer): bool
+    {
+        if (! $manufacturer->is_active) {
+            return false;
+        }
+
+        if ($manufacturer->trial_started_at === null) {
+            return true;
+        }
+
+        if ($manufacturer->onGenericTrial()) {
+            return $manufacturer->currentPlan !== null;
+        }
+
+        return $this->subscriptionGrantsAccess($manufacturer->subscription('default'));
+    }
+
+    public function genericTrialHasExpired(Manufacturer $manufacturer): bool
+    {
+        return $manufacturer->trial_started_at !== null
+            && $manufacturer->trial_ends_at !== null
+            && $manufacturer->trial_ends_at->isPast()
+            && ! $this->subscriptionGrantsAccess($manufacturer->subscription('default'));
     }
 
     public function subscriptionGrantsAccess(?Subscription $subscription): bool
@@ -109,7 +139,7 @@ class PlanLimitService
     /**
      * Check if the manufacturer can add a new sales rep (affiliation).
      */
-    public function canCreateRep(Manufacturer $manufacturer): bool
+    public function canCreateRep(Manufacturer $manufacturer, ?int $excludingInvitationId = null): bool
     {
         $plan = $this->activePlan($manufacturer);
 
@@ -121,11 +151,24 @@ class PlanLimitService
             return true;
         }
 
-        $activeReps = ManufacturerAffiliation::where('manufacturer_id', $manufacturer->id)
+        return $this->occupiedRepSlots($manufacturer, $excludingInvitationId) < $plan->max_reps;
+    }
+
+    public function occupiedRepSlots(Manufacturer $manufacturer, ?int $excludingInvitationId = null): int
+    {
+        $activeReps = ManufacturerAffiliation::query()
+            ->where('manufacturer_id', $manufacturer->id)
             ->where('status', 'active')
             ->count();
 
-        return $activeReps < $plan->max_reps;
+        $pendingInvitations = RepresentativeInvitation::query()
+            ->where('manufacturer_id', $manufacturer->id)
+            ->where('status', 'pending')
+            ->where('expires_at', '>', now())
+            ->when($excludingInvitationId, fn ($query) => $query->where('id', '!=', $excludingInvitationId))
+            ->count();
+
+        return $activeReps + $pendingInvitations;
     }
 
     /**
@@ -186,9 +229,7 @@ class PlanLimitService
 
         $productCount = $manufacturer->products()->count();
         $userCount = $manufacturer->users()->wherePivot('status', 'active')->count();
-        $repCount = ManufacturerAffiliation::where('manufacturer_id', $manufacturer->id)
-            ->where('status', 'active')
-            ->count();
+        $repCount = $this->occupiedRepSlots($manufacturer);
         $ordersThisMonth = $manufacturer->orders()
             ->where('created_at', '>=', $startOfMonth)
             ->count();

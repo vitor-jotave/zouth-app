@@ -50,6 +50,10 @@ class LoginResponse implements LoginResponseContract
             // Set current manufacturer
             $user->update(['current_manufacturer_id' => $manufacturer->id]);
 
+            if ($manufacturer->onboarding_completed_at === null) {
+                return redirect()->route('onboarding.index');
+            }
+
             return redirect()->intended('/dashboard');
         }
 

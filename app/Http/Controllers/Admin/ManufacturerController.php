@@ -94,6 +94,11 @@ class ManufacturerController extends Controller
                 'address_number' => $validated['address_number'] ?? null,
                 'complement' => $validated['complement'] ?? null,
                 'is_active' => true,
+                'onboarding_started_at' => now(),
+                'onboarding_account_created_at' => now(),
+                'onboarding_preview_viewed_at' => now(),
+                'onboarding_email_confirmed_at' => now(),
+                'onboarding_completed_at' => now(),
             ]);
 
             $owner = User::create([

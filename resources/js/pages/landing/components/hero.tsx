@@ -20,7 +20,7 @@ export function Hero({ salesContactUrl, demoCatalogUrl }: HeroProps) {
                 <div className="zl-shell zl-hero__grid">
                     <div className="zl-hero__content">
                         <p className="zl-eyebrow zl-hero__eyebrow">
-                            Catálogo comercial vivo para moda infantil
+                            Catálogo digital para fabricantes de moda infantil
                         </p>
 
                         <h1 id="hero-title">
@@ -31,13 +31,13 @@ export function Hero({ salesContactUrl, demoCatalogUrl }: HeroProps) {
                         </h1>
 
                         <p className="zl-hero__lead">
-                            A Zouth coloca sua coleção em movimento — da marca
-                            ao lojista, sem perder a força com que ela nasceu.
+                            A Zouth coloca sua coleção em movimento, da marca ao
+                            lojista, sem perder a tração comercial.
                         </p>
 
                         <div className="zl-hero__actions">
                             <a className="zl-button" href={salesContactUrl}>
-                                Quero ver minha coleção em movimento
+                                Colocar minha coleção em movimento
                                 <ArrowUpRight
                                     aria-hidden="true"
                                     size={20}
@@ -74,9 +74,9 @@ export function Hero({ salesContactUrl, demoCatalogUrl }: HeroProps) {
                         </div>
 
                         <p className="zl-hero__microcopy">
-                            <span>Demonstração sem compromisso</span>
+                            <span>7 dias grátis</span>
                             <i aria-hidden="true">·</i>
-                            <span>Feito para marcas infantis no atacado</span>
+                            <span>sem cartão</span>
                         </p>
                     </div>
 
@@ -92,8 +92,8 @@ export function Hero({ salesContactUrl, demoCatalogUrl }: HeroProps) {
                             />
                         </div>
                         <figcaption>
-                            <span>Em movimento</span>A coleção nasce para ser
-                            desejada.
+                            <span>Catálogo em movimento</span>Sua coleção merece
+                            ser vista.
                         </figcaption>
                     </figure>
                 </div>

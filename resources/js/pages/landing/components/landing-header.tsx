@@ -232,7 +232,7 @@ export function LandingHeader({
                         className="zl-button zl-button--small"
                         href={salesContactUrl}
                     >
-                        Conhecer a Zouth
+                        Começar grátis
                         <ArrowUpRight
                             aria-hidden="true"
                             size={17}
@@ -287,7 +287,7 @@ export function LandingHeader({
                             : 'Entrar na Zouth'}
                     </Link>
                     <a href={salesContactUrl} onClick={() => setIsOpen(false)}>
-                        Quero conhecer a Zouth
+                        Começar grátis · sem cartão
                         <ArrowUpRight aria-hidden="true" size={19} />
                     </a>
                 </div>

@@ -2,7 +2,9 @@
 
 namespace App\Http\Responses;
 
+use App\Notifications\TrialWelcomeNotification;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Laravel\Fortify\Contracts\VerifyEmailResponse as VerifyEmailResponseContract;
 
 class VerifyEmailResponse implements VerifyEmailResponseContract
@@ -33,7 +35,32 @@ class VerifyEmailResponse implements VerifyEmailResponseContract
             return redirect()->intended('/rep/dashboard?verified=1');
         }
 
-        // Manufacturer user (default)
+        if ($user?->isManufacturerUser() && $user->currentManufacturer) {
+            $manufacturer = $user->currentManufacturer;
+            $shouldSendWelcome = $manufacturer->welcome_sent_at === null;
+
+            DB::transaction(function () use ($manufacturer, $shouldSendWelcome): void {
+                $manufacturer->update([
+                    'onboarding_email_confirmed_at' => $manufacturer->onboarding_email_confirmed_at ?? now(),
+                    'welcome_sent_at' => $shouldSendWelcome ? now() : $manufacturer->welcome_sent_at,
+                ]);
+
+                $manufacturer->onboardingSessions()->update([
+                    'current_step' => 5,
+                    'email_confirmed_at' => now(),
+                    'last_activity_at' => now(),
+                ]);
+            });
+
+            if ($shouldSendWelcome) {
+                $user->notify(new TrialWelcomeNotification($manufacturer));
+            }
+
+            if ($manufacturer->onboarding_completed_at === null) {
+                return redirect()->route('onboarding.index', ['verified' => 1]);
+            }
+        }
+
         return redirect()->intended('/dashboard?verified=1');
     }
 }

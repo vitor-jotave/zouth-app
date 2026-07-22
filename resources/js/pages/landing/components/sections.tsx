@@ -17,9 +17,6 @@ export function ProblemSection() {
         >
             <div className="zl-shell">
                 <div className="zl-section-heading zl-section-heading--light">
-                    <p className="zl-index" data-reveal>
-                        01 — A dor que o mercado conhece
-                    </p>
                     <p className="zl-eyebrow" data-reveal>
                         Isso te parece familiar?
                     </p>
@@ -31,8 +28,8 @@ export function ProblemSection() {
                     </h2>
                     <p className="zl-section-heading__intro" data-reveal>
                         Você investiu tempo, dinheiro e cuidado em cada peça. E,
-                        na hora mais importante — a de apresentar e vender —
-                        tudo isso perde força no caminho.
+                        na hora mais importante, a de apresentar e vender, o seu
+                        cliente recebe um catálogo de meses atrás.
                     </p>
                 </div>
 
@@ -89,24 +86,21 @@ export function SolutionSection() {
                 </figure>
 
                 <div className="zl-solution__content">
-                    <p className="zl-index" data-reveal>
-                        02 — A virada
-                    </p>
                     <p className="zl-eyebrow" data-reveal>
-                        Apresentando a Zouth
+                        Quem Somos
                     </p>
                     <h2 id="solution-title" data-reveal>
                         O catálogo vivo para marcas de moda infantil que vendem
                         no atacado.
                     </h2>
                     <p className="zl-solution__lead" data-reveal>
-                        A Zouth mantém a força da sua coleção em cada
-                        apresentação — e permite acompanhar quando ela começa a
-                        circular.
+                        A Zouth foi desenhada para a rotina de fabricantes de
+                        moda infantil que precisam manter a coleção atualizada e
+                        em circulação constante.
                     </p>
                     <p data-reveal>
-                        Atualize uma vez. Toda a sua rede comercial vê a mudança
-                        na hora.
+                        Atualize uma vez. Todos os seus clientes e vendedores
+                        vêem a mudança na hora.
                     </p>
 
                     <div
@@ -144,9 +138,6 @@ export function HowItWorksSection() {
         >
             <div className="zl-shell">
                 <div className="zl-section-heading zl-section-heading--compact">
-                    <p className="zl-index" data-reveal>
-                        03 — Como funciona
-                    </p>
                     <h2 id="journey-title" data-reveal>
                         Simples pra você.
                         <span>Poderoso pra quem vende.</span>
@@ -187,15 +178,16 @@ export function BenefitsSection() {
             <div className="zl-shell">
                 <div className="zl-benefits__heading">
                     <p className="zl-index" data-reveal>
-                        04 — O que muda
+                        O que muda pra você?
                     </p>
                     <h2 id="benefits-title" data-reveal>
-                        Tudo o que sua coleção precisa pra circular com força.
+                        Você terá seu catálogo na internet, sempre atual.
                     </h2>
                     <p data-reveal>
-                        Não é sobre ter mais uma ferramenta. É sobre fazer cada
-                        apresentação carregar o mesmo cuidado da coleção
-                        original.
+                        Nós sabemos que você já tem muitas ferramentas. Nosso
+                        objetivo é fazer cada visualização carregar o mesmo
+                        cuidado da coleção em PDF, isso resulta em{' '}
+                        <strong>venda</strong>.
                     </p>
                 </div>
 
@@ -227,22 +219,22 @@ export function OperationSection() {
         <section className="zl-operation" aria-labelledby="operation-title">
             <div className="zl-shell zl-operation__grid">
                 <p className="zl-index" data-reveal>
-                    05 — Antes do pedido
+                    Já tem esse processo definido?
                 </p>
                 <div>
                     <h2 id="operation-title" data-reveal>
-                        A Zouth não compete com sua operação.
-                        <span>Ela prepara o terreno pra ela.</span>
+                        Não queremos competir com sua operação.
+                        <span>Queremos fazer parte dela.</span>
                     </h2>
                     <p data-reveal>
                         Você continua com o processo de pedido, ERP e
-                        faturamento que já usa hoje. A Zouth entra antes disso:
-                        no momento em que a coleção precisa ser vista, desejada
+                        faturamento que já usa hoje. Entramos antes disso: no
+                        momento em que a sua coleção precisa ser vista, desejada
                         e escolhida.
                     </p>
                     <p className="zl-operation__statement" data-reveal>
-                        É o passo que faz a venda começar — não o sistema que a
-                        fecha.
+                        Somos o que faz a venda acontecer, não o sistema de
+                        gestão.
                     </p>
                 </div>
             </div>
@@ -270,21 +262,18 @@ export function AudienceSection() {
                 </figure>
 
                 <div className="zl-audience__content">
-                    <p className="zl-index" data-reveal>
-                        06 — Feita para este mercado
-                    </p>
                     <p className="zl-eyebrow" data-reveal>
-                        Quem vive este mercado percebe
+                        Vivendo esse mercado percebemos...
                     </p>
                     <h2 id="audience-title" data-reveal>
-                        A Zouth entende o caminho de uma coleção infantil no
-                        atacado.
+                        O seu catálogo impacta diretamente a forma como os
+                        lojistas te vêem.
                     </h2>
                     <p className="zl-audience__intro" data-reveal>
-                        Uma experiência desenhada desde o início para quem cria
-                        coleções, conduz representantes e chega a lojistas
-                        multimarcas. Porque conhecer esse caminho muda tudo —
-                        inclusive o jeito de apresentar.
+                        Por isso fizemos uma experiência desenhada desde o
+                        início para que você tenha um fluxo do início ao fim da
+                        venda, coleções, representantes comerciais, atendimento
+                        via whatsapp e suporte aos lojistas multimarcas.
                     </p>
 
                     <div className="zl-audience__signals">
@@ -326,20 +315,17 @@ export function FinalCtaSection({
                     data-reveal
                 />
                 <div className="zl-final-cta__content">
-                    <p className="zl-index" data-reveal>
-                        07 — Próxima coleção
-                    </p>
                     <h2 id="final-cta-title" data-reveal>
-                        Sua próxima coleção não precisa perder força no caminho.
+                        Crie sua conta agora, é grátis.
                     </h2>
                     <p data-reveal>
-                        Comece a apresentar sua coleção com a Zouth — e
-                        acompanhe o movimento dela antes mesmo do primeiro
-                        pedido chegar.
+                        Veja como a Zouth pode colocar sua operação em
+                        movimento, fazendo seu catálogo brilhar e criando{' '}
+                        <strong>melhores oportunidades de venda</strong>.
                     </p>
                     <div className="zl-final-cta__actions" data-reveal>
                         <a className="zl-button" href={salesContactUrl}>
-                            Quero ver minha coleção em movimento
+                            Começar minha vitrine
                             <ArrowUpRight aria-hidden="true" size={20} />
                         </a>
                         {demoCatalogUrl ? (
@@ -357,7 +343,7 @@ export function FinalCtaSection({
                                 className="zl-editorial-link zl-editorial-link--light"
                                 href={salesContactUrl}
                             >
-                                Falar com o time Zouth
+                                7 dias grátis · sem cartão
                                 <ArrowUpRight aria-hidden="true" size={18} />
                             </a>
                         )}

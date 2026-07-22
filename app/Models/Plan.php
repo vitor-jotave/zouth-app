@@ -29,6 +29,7 @@ class Plan extends Model
         'name',
         'description',
         'is_active',
+        'is_self_service_default',
         'sort_order',
         'monthly_price_cents',
         'currency',
@@ -52,6 +53,7 @@ class Plan extends Model
     {
         return [
             'is_active' => 'boolean',
+            'is_self_service_default' => 'boolean',
             'sort_order' => 'integer',
             'monthly_price_cents' => 'integer',
             'trial_days' => 'integer',

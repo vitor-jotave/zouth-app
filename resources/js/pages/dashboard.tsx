@@ -158,15 +158,12 @@ export default function Dashboard({
                     }
                     title={
                         <>
-                            Sua coleção está em movimento
+                            Bem vindo, {company.name}
                             <span className="text-[#ff4d3d]">.</span>
                         </>
                     }
                     description={
                         <>
-                            <p className="font-zouth-display text-lg font-semibold tracking-[-0.02em] text-foreground sm:text-xl">
-                                Olá, {company.name}
-                            </p>
                             <p className="mt-1.5">
                                 Veja o que despertou interesse e o que pede sua
                                 atenção hoje.

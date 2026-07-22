@@ -22,6 +22,7 @@ import {
     portal,
     resume,
     swap,
+    updateDetails,
 } from '@/actions/App/Http/Controllers/Manufacturer/BillingController';
 import { AppPageHeader } from '@/components/app-page-header';
 import { StatusLabel, type StatusLabelTone } from '@/components/status-label';
@@ -90,6 +91,26 @@ type Props = {
     currentPlanId: number | null;
     subscription: Subscription | null;
     usage: Usage | Record<string, never>;
+    trial: {
+        active: boolean;
+        started_at: string | null;
+        ends_at: string | null;
+        days_remaining: number;
+    } | null;
+    billingDetails: BillingDetails;
+    billingDetailsComplete: boolean;
+};
+
+type BillingDetails = {
+    cnpj: string | null;
+    phone: string | null;
+    zip_code: string | null;
+    state: string | null;
+    city: string | null;
+    neighborhood: string | null;
+    street: string | null;
+    address_number: string | null;
+    complement: string | null;
 };
 
 type CapacityMeasureProps = {
@@ -265,9 +286,24 @@ export default function BillingIndex({
     currentPlanId,
     subscription,
     usage,
+    trial,
+    billingDetails,
+    billingDetailsComplete,
 }: Props) {
-    const { flash } = usePage<SharedData>().props;
+    const { flash, errors } = usePage<
+        SharedData & { errors: Record<string, string> }
+    >().props;
     const [planToChange, setPlanToChange] = useState<Plan | null>(null);
+    const [checkoutPlan, setCheckoutPlan] = useState<Plan | null>(null);
+    const [billingDialogOpen, setBillingDialogOpen] = useState(false);
+    const [billingForm, setBillingForm] = useState(
+        Object.fromEntries(
+            Object.entries(billingDetails).map(([key, value]) => [
+                key,
+                value ?? '',
+            ]),
+        ) as Record<keyof BillingDetails, string>,
+    );
     const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
     const currentPlan = useMemo(
@@ -313,6 +349,28 @@ export default function BillingIndex({
         router.post(resume.url(), {}, { preserveScroll: true });
     }
 
+    function startCheckout(plan: Plan) {
+        if (billingDetailsComplete) {
+            router.visit(checkout.url(plan.id));
+            return;
+        }
+
+        setCheckoutPlan(plan);
+        setBillingDialogOpen(true);
+    }
+
+    function saveBillingDetails() {
+        router.put(updateDetails.url(), billingForm, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setBillingDialogOpen(false);
+                if (checkoutPlan) {
+                    router.visit(checkout.url(checkoutPlan.id));
+                }
+            },
+        });
+    }
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Assinatura" />
@@ -352,13 +410,21 @@ export default function BillingIndex({
                             </p>
                         )}
 
-                        {subscription && (
+                        {(subscription || trial?.active) && (
                             <div className="mt-7 flex flex-wrap items-center gap-3 border-y border-border py-4">
-                                <StatusLabel tone={status.tone}>
-                                    {status.label}
+                                <StatusLabel
+                                    tone={trial?.active ? 'coral' : status.tone}
+                                >
+                                    {trial?.active
+                                        ? '7 dias grátis'
+                                        : status.label}
                                 </StatusLabel>
                                 <span className="text-sm font-semibold text-[#d9382b]">
-                                    {status.detail}
+                                    {trial?.active
+                                        ? trial.days_remaining === 1
+                                            ? 'Último dia do teste'
+                                            : `${trial.days_remaining} dias para experimentar tudo`
+                                        : status.detail}
                                 </span>
                             </div>
                         )}
@@ -622,13 +688,16 @@ export default function BillingIndex({
                                                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
                                             </button>
                                         ) : plan.has_stripe ? (
-                                            <a
-                                                href={checkout.url(plan.id)}
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    startCheckout(plan)
+                                                }
                                                 className="group inline-flex min-h-11 items-center gap-3 text-sm font-bold text-[#d9382b] hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#ff4d3d]"
                                             >
                                                 Escolher {plan.name}
                                                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-                                            </a>
+                                            </button>
                                         ) : (
                                             <span className="text-sm font-semibold text-muted-foreground">
                                                 Em breve
@@ -784,6 +853,89 @@ export default function BillingIndex({
                             onClick={handleCancel}
                         >
                             Confirmar encerramento
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={billingDialogOpen}
+                onOpenChange={setBillingDialogOpen}
+            >
+                <DialogContent className="max-h-[90vh] overflow-y-auto rounded-none border-[#18181f] shadow-none sm:max-w-2xl">
+                    <DialogHeader>
+                        <p className="text-[0.68rem] font-bold tracking-[0.2em] text-[#ff4d3d] uppercase">
+                            Antes da contratação
+                        </p>
+                        <DialogTitle className="font-zouth-display text-3xl leading-tight font-semibold tracking-[-0.045em]">
+                            Os dados fiscais entram só agora
+                            <span className="text-[#ff4d3d]">.</span>
+                        </DialogTitle>
+                        <DialogDescription className="pt-2 text-sm leading-6">
+                            {trial?.active && trial.days_remaining <= 2
+                                ? 'Seu teste está perto do fim. Ao continuar agora, a cobrança do plano escolhido começa imediatamente.'
+                                : 'Seu teste continua sem cartão. Estes dados serão usados somente na contratação e na cobrança.'}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 pt-2 sm:grid-cols-2">
+                        {(
+                            [
+                                ['cnpj', 'CNPJ'],
+                                ['phone', 'Telefone'],
+                                ['zip_code', 'CEP'],
+                                ['state', 'UF'],
+                                ['city', 'Cidade'],
+                                ['neighborhood', 'Bairro'],
+                                ['street', 'Endereço'],
+                                ['address_number', 'Número'],
+                                ['complement', 'Complemento'],
+                            ] as Array<[keyof BillingDetails, string]>
+                        ).map(([key, label]) => (
+                            <label
+                                key={key}
+                                className={cn(
+                                    'grid gap-2 text-xs font-bold tracking-[0.08em] uppercase',
+                                    key === 'street' && 'sm:col-span-2',
+                                )}
+                            >
+                                {label}
+                                <input
+                                    value={billingForm[key]}
+                                    onChange={(event) =>
+                                        setBillingForm((current) => ({
+                                            ...current,
+                                            [key]: event.target.value,
+                                        }))
+                                    }
+                                    className="h-12 rounded-none border border-border bg-transparent px-3 text-sm font-medium tracking-normal text-foreground normal-case outline-none focus:border-[#ff4d3d]"
+                                />
+                                {errors[key] && (
+                                    <span className="font-medium tracking-normal text-[#b42318] normal-case">
+                                        {errors[key]}
+                                    </span>
+                                )}
+                            </label>
+                        ))}
+                        {errors.billing && (
+                            <p className="text-sm text-[#b42318] sm:col-span-2">
+                                {errors.billing}
+                            </p>
+                        )}
+                    </div>
+                    <DialogFooter className="mt-4 sm:justify-between">
+                        <Button
+                            variant="outline"
+                            className="rounded-none"
+                            onClick={() => setBillingDialogOpen(false)}
+                        >
+                            Voltar
+                        </Button>
+                        <Button
+                            className="rounded-none font-bold"
+                            onClick={saveBillingDetails}
+                        >
+                            Salvar e escolher {checkoutPlan?.name}
+                            <ArrowRight className="size-4" />
                         </Button>
                     </DialogFooter>
                 </DialogContent>

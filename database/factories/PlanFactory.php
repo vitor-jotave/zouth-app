@@ -20,6 +20,7 @@ class PlanFactory extends Factory
             'name' => fake()->unique()->word(),
             'description' => fake()->sentence(),
             'is_active' => true,
+            'is_self_service_default' => false,
             'sort_order' => fake()->numberBetween(0, 10),
             'monthly_price_cents' => fake()->randomElement([14700, 39700, 89700]),
             'currency' => 'BRL',
@@ -42,6 +43,7 @@ class PlanFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'name' => 'Básico',
+            'is_self_service_default' => true,
             'monthly_price_cents' => 14700,
             'trial_days' => 7,
             'sort_order' => 1,

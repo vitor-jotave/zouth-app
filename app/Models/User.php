@@ -4,11 +4,13 @@ namespace App\Models;
 
 use App\Enums\ManufacturerCapability;
 use App\Enums\UserType;
+use App\Notifications\ZouthVerifyEmailNotification;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -48,6 +50,17 @@ class User extends Authenticatable implements MustVerifyEmail
             ->withTimestamps();
     }
 
+    public function sendEmailVerificationNotification(): void
+    {
+        if ($this->isManufacturerUser() && $this->currentManufacturer?->onboarding_completed_at === null) {
+            $this->notify(new ZouthVerifyEmailNotification);
+
+            return;
+        }
+
+        parent::sendEmailVerificationNotification();
+    }
+
     public function currentManufacturer(): BelongsTo
     {
         return $this->belongsTo(Manufacturer::class, 'current_manufacturer_id');
@@ -75,6 +88,16 @@ class User extends Authenticatable implements MustVerifyEmail
     public function affiliations(): HasMany
     {
         return $this->hasMany(ManufacturerAffiliation::class);
+    }
+
+    public function salesRepresentativeProfile(): HasOne
+    {
+        return $this->hasOne(SalesRepresentativeProfile::class);
+    }
+
+    public function representativeInvitations(): HasMany
+    {
+        return $this->hasMany(RepresentativeInvitation::class, 'invited_by_user_id');
     }
 
     public function affiliatedManufacturers(): BelongsToMany

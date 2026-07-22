@@ -28,6 +28,19 @@ class Manufacturer extends Model
         'primary_owner_user_id',
         'is_active',
         'current_plan_id',
+        'trial_ends_at',
+        'trial_started_at',
+        'trial_expired_at',
+        'onboarding_started_at',
+        'onboarding_account_created_at',
+        'onboarding_preview_viewed_at',
+        'onboarding_email_confirmed_at',
+        'onboarding_completed_at',
+        'onboarding_context',
+        'welcome_sent_at',
+        'trial_three_days_sent_at',
+        'trial_last_day_sent_at',
+        'trial_paused_sent_at',
         'cnpj',
         'phone',
         'logo_path',
@@ -49,6 +62,19 @@ class Manufacturer extends Model
     {
         return [
             'is_active' => 'boolean',
+            'trial_ends_at' => 'datetime',
+            'trial_started_at' => 'datetime',
+            'trial_expired_at' => 'datetime',
+            'onboarding_started_at' => 'datetime',
+            'onboarding_account_created_at' => 'datetime',
+            'onboarding_preview_viewed_at' => 'datetime',
+            'onboarding_email_confirmed_at' => 'datetime',
+            'onboarding_completed_at' => 'datetime',
+            'onboarding_context' => 'array',
+            'welcome_sent_at' => 'datetime',
+            'trial_three_days_sent_at' => 'datetime',
+            'trial_last_day_sent_at' => 'datetime',
+            'trial_paused_sent_at' => 'datetime',
         ];
     }
 
@@ -99,6 +125,21 @@ class Manufacturer extends Model
         return $this->hasMany(Product::class);
     }
 
+    public function productImports(): HasMany
+    {
+        return $this->hasMany(ProductImport::class);
+    }
+
+    public function productImportMappings(): HasMany
+    {
+        return $this->hasMany(ProductImportMapping::class);
+    }
+
+    public function onboardingSessions(): HasMany
+    {
+        return $this->hasMany(OnboardingSession::class);
+    }
+
     public function variationTypes(): HasMany
     {
         return $this->hasMany(VariationType::class)->orderBy('display_order');
@@ -122,9 +163,24 @@ class Manufacturer extends Model
         return $this->hasMany(Order::class);
     }
 
+    public function orderRules(): HasMany
+    {
+        return $this->hasMany(OrderRule::class)->orderBy('sort_order')->orderBy('id');
+    }
+
     public function customers(): HasMany
     {
         return $this->hasMany(Customer::class);
+    }
+
+    public function affiliations(): HasMany
+    {
+        return $this->hasMany(ManufacturerAffiliation::class);
+    }
+
+    public function representativeInvitations(): HasMany
+    {
+        return $this->hasMany(RepresentativeInvitation::class);
     }
 
     public function whatsappInstances(): HasMany
@@ -135,6 +191,16 @@ class Manufacturer extends Model
     public function whatsappFunnels(): HasMany
     {
         return $this->hasMany(WhatsappFunnel::class);
+    }
+
+    public function whatsappAutomations(): HasMany
+    {
+        return $this->hasMany(WhatsappAutomation::class);
+    }
+
+    public function whatsappQuickReplies(): HasMany
+    {
+        return $this->hasMany(WhatsappQuickReply::class);
     }
 
     /**

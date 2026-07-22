@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Manufacturer;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ChangeSubscriptionPlanRequest;
+use App\Http\Requests\UpdateBillingDetailsRequest;
 use App\Models\Plan;
 use App\Services\PlanLimitService;
 use App\Services\TenantManager;
@@ -77,7 +78,38 @@ class BillingController extends Controller
             'usage' => $displayPlan
                 ? $this->limitService->usage($manufacturer, $displayPlan)
                 : [],
+            'trial' => $manufacturer->trial_started_at ? [
+                'active' => $manufacturer->onGenericTrial(),
+                'started_at' => $manufacturer->trial_started_at?->toISOString(),
+                'ends_at' => $manufacturer->trial_ends_at?->toISOString(),
+                'days_remaining' => $manufacturer->onGenericTrial() && $manufacturer->trial_ends_at
+                    ? max(1, (int) now()->ceilDay()->diffInDays($manufacturer->trial_ends_at->ceilDay()))
+                    : 0,
+            ] : null,
+            'billingDetails' => [
+                'cnpj' => $manufacturer->cnpj,
+                'phone' => $manufacturer->phone,
+                'zip_code' => $manufacturer->zip_code,
+                'state' => $manufacturer->state,
+                'city' => $manufacturer->city,
+                'neighborhood' => $manufacturer->neighborhood,
+                'street' => $manufacturer->street,
+                'address_number' => $manufacturer->address_number,
+                'complement' => $manufacturer->complement,
+            ],
+            'billingDetailsComplete' => $this->hasCompleteBillingDetails($manufacturer),
         ]);
+    }
+
+    public function updateDetails(UpdateBillingDetailsRequest $request): RedirectResponse
+    {
+        $manufacturer = $this->tenantManager->get();
+
+        abort_unless($manufacturer, 403);
+
+        $manufacturer->update($request->validated());
+
+        return back()->with('success', 'Dados de contratação salvos. Agora escolha seu plano.');
     }
 
     /**
@@ -101,6 +133,11 @@ class BillingController extends Controller
                 ->withErrors(['plan_id' => 'Este plano ainda não está configurado para assinaturas.']);
         }
 
+        if (! $this->hasCompleteBillingDetails($manufacturer)) {
+            return redirect()->route('manufacturer.billing.index')
+                ->withErrors(['billing' => 'Preencha os dados de contratação antes de escolher o plano.']);
+        }
+
         $existingSubscription = $manufacturer->subscription('default');
         if ($existingSubscription && $existingSubscription->active()) {
             return redirect()->route('manufacturer.billing.index')
@@ -109,7 +146,15 @@ class BillingController extends Controller
 
         $subscriptionBuilder = $manufacturer->newSubscription('default', $plan->stripe_price_id);
 
-        if ($plan->trial_days > 0) {
+        if (
+            $manufacturer->trial_started_at
+            && $manufacturer->trial_ends_at
+            && $manufacturer->trial_ends_at->isAfter(now()->addHours(48))
+        ) {
+            $subscriptionBuilder->trialUntil($manufacturer->trial_ends_at);
+        } elseif ($manufacturer->trial_started_at) {
+            $subscriptionBuilder->skipTrial();
+        } elseif ($plan->trial_days > 0) {
             $subscriptionBuilder->trialDays($plan->trial_days);
         }
 
@@ -272,5 +317,19 @@ class BillingController extends Controller
         return $manufacturer->redirectToBillingPortal(
             route('manufacturer.billing.index')
         );
+    }
+
+    private function hasCompleteBillingDetails(\App\Models\Manufacturer $manufacturer): bool
+    {
+        return collect([
+            $manufacturer->cnpj,
+            $manufacturer->phone,
+            $manufacturer->zip_code,
+            $manufacturer->state,
+            $manufacturer->city,
+            $manufacturer->neighborhood,
+            $manufacturer->street,
+            $manufacturer->address_number,
+        ])->every(fn (?string $value): bool => filled($value));
     }
 }

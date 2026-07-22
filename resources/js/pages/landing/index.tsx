@@ -24,10 +24,18 @@ type LandingPageProps = SharedData & {
     commercial: {
         salesContactUrl: string;
         demoCatalogUrl: string | null;
+        onboardingUrl: string;
     };
     seo: {
+        pageTitle: string;
+        description: string;
         canonicalUrl: string;
         shareImageUrl: string;
+        shareImageWidth: number;
+        shareImageHeight: number;
+        ogTitle: string;
+        ogDescription: string;
+        structuredData: Record<string, unknown>;
     };
 };
 
@@ -42,42 +50,97 @@ export default function LandingPage() {
     return (
         <>
             <Head>
-                <title>Sua coleção vale mais do que um PDF</title>
+                <title>{seo.pageTitle}</title>
                 <meta
                     head-key="description"
                     name="description"
-                    content="A Zouth é o catálogo comercial vivo para fabricantes de moda infantil apresentarem coleções, conectarem representantes e acompanharem o movimento de cada divulgação."
+                    content={seo.description}
                 />
                 <meta
-                    head-key="og:title"
+                    head-key="robots"
+                    name="robots"
+                    content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
+                />
+                <meta
+                    head-key="og-title"
                     property="og:title"
-                    content="Zouth — Sua coleção em movimento"
+                    content={seo.ogTitle}
                 />
                 <meta
-                    head-key="og:description"
+                    head-key="og-description"
                     property="og:description"
-                    content="Da marca ao lojista, sem perder a força com que a coleção nasceu."
+                    content={seo.ogDescription}
                 />
                 <meta
-                    head-key="og:image"
+                    head-key="og-image"
                     property="og:image"
                     content={seo.shareImageUrl}
                 />
                 <meta
-                    head-key="og:url"
+                    head-key="og-image-width"
+                    property="og:image:width"
+                    content={String(seo.shareImageWidth)}
+                />
+                <meta
+                    head-key="og-image-height"
+                    property="og:image:height"
+                    content={String(seo.shareImageHeight)}
+                />
+                <meta
+                    head-key="og-image-alt"
+                    property="og:image:alt"
+                    content="Coleção de moda infantil apresentada pela Zouth"
+                />
+                <meta
+                    head-key="og-url"
                     property="og:url"
                     content={seo.canonicalUrl}
                 />
-                <meta head-key="og:type" property="og:type" content="website" />
-                <meta name="theme-color" content="#F6F4F0" />
-                <link rel="canonical" href={seo.canonicalUrl} />
+                <meta head-key="og-type" property="og:type" content="website" />
+                <meta
+                    head-key="og-locale"
+                    property="og:locale"
+                    content="pt_BR"
+                />
+                <meta
+                    head-key="og-site-name"
+                    property="og:site_name"
+                    content="ZOUTH"
+                />
+                <meta
+                    head-key="twitter-card"
+                    name="twitter:card"
+                    content="summary_large_image"
+                />
+                <meta
+                    head-key="twitter-title"
+                    name="twitter:title"
+                    content={seo.ogTitle}
+                />
+                <meta
+                    head-key="twitter-description"
+                    name="twitter:description"
+                    content={seo.ogDescription}
+                />
+                <meta
+                    head-key="twitter-image"
+                    name="twitter:image"
+                    content={seo.shareImageUrl}
+                />
                 <link
+                    head-key="canonical"
+                    rel="canonical"
+                    href={seo.canonicalUrl}
+                />
+                <link
+                    head-key="landing-hero-preload"
                     rel="preload"
                     as="image"
                     href="/brand/zouth/landing/collection-in-motion.webp"
                     type="image/webp"
                 />
                 <link
+                    head-key="sora-preload"
                     rel="preload"
                     as="font"
                     href="/brand/zouth/assets/sora-variable.ttf"
@@ -85,11 +148,19 @@ export default function LandingPage() {
                     crossOrigin="anonymous"
                 />
                 <link
+                    head-key="manrope-preload"
                     rel="preload"
                     as="font"
                     href="/brand/zouth/assets/manrope-variable.ttf"
                     type="font/ttf"
                     crossOrigin="anonymous"
+                />
+                <script
+                    head-key="organization-schema"
+                    type="application/ld+json"
+                    dangerouslySetInnerHTML={{
+                        __html: JSON.stringify(seo.structuredData),
+                    }}
                 />
             </Head>
 
@@ -105,12 +176,12 @@ export default function LandingPage() {
                 <LandingHeader
                     isAuthenticated={Boolean(auth.user)}
                     dashboardUrl={auth.dashboard_url}
-                    salesContactUrl={commercial.salesContactUrl}
+                    salesContactUrl={commercial.onboardingUrl}
                 />
 
                 <main id="landing-content" ref={rootRef} tabIndex={-1}>
                     <Hero
-                        salesContactUrl={commercial.salesContactUrl}
+                        salesContactUrl={commercial.onboardingUrl}
                         demoCatalogUrl={commercial.demoCatalogUrl}
                     />
                     <ProblemSection />
@@ -120,7 +191,7 @@ export default function LandingPage() {
                     <OperationSection />
                     <AudienceSection />
                     <FinalCtaSection
-                        salesContactUrl={commercial.salesContactUrl}
+                        salesContactUrl={commercial.onboardingUrl}
                         demoCatalogUrl={commercial.demoCatalogUrl}
                     />
                     <FaqSection />

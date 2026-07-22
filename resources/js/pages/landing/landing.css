@@ -484,7 +484,7 @@ body:has(.zouth-landing) {
 .zl-hero__figure figcaption {
     position: absolute;
     right: 20px;
-    bottom: -26px;
+    bottom: 0px;
     display: flex;
     width: min(88%, 340px);
     min-height: 70px;

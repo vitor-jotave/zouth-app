@@ -14,17 +14,9 @@ export function FaqSection() {
         >
             <div className="zl-shell zl-faq__grid">
                 <div className="zl-faq__heading">
-                    <p className="zl-index" data-reveal>
-                        08 — Dúvidas honestas
-                    </p>
                     <h2 id="faq-title" data-reveal>
-                        O que você precisa saber antes de colocar a coleção em
-                        movimento.
+                        Respondendo algumas perguntas que você pode ter...
                     </h2>
-                    <p data-reveal>
-                        Sem letras pequenas. A Zouth entra exatamente onde a
-                        apresentação comercial começa.
-                    </p>
                 </div>
 
                 <div className="zl-faq__list">

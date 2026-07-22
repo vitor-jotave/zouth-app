@@ -91,11 +91,11 @@ export const faqs = [
     },
     {
         question: 'Meus representantes precisam instalar algo?',
-        answer: 'Não. Cada representante recebe um link. Funciona direto no celular ou computador, sem aplicativo.',
+        answer: 'Não. Cada representante recebe um link, e você acompanha as visitas e a origem das divulgações pela Zouth. Funciona direto no celular ou computador, sem aplicativo.',
     },
     {
-        question: 'A Zouth faz pedidos e integra com meu ERP?',
-        answer: 'Não. A Zouth cuida da apresentação da coleção e do interesse comercial. O pedido e a operação continuam no sistema que você já usa.',
+        question: 'A Zouth faz pedidos e recebe dados do meu ERP?',
+        answer: 'Sim. A Zouth recebe pedidos e, se você já usa um ERP, permite trazer os produtos por uma planilha exportada do sistema. Você relaciona as colunas uma vez e reaproveita esse formato nas próximas coleções.',
     },
     {
         question: 'Preciso de ajuda de design para montar o catálogo?',
