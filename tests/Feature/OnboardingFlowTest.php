@@ -11,6 +11,8 @@ use App\Notifications\ZouthVerifyEmailNotification;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rules\Password;
 use Inertia\Testing\AssertableInertia as Assert;
 
 function createOnboardingAccount(array $overrides = []): \Illuminate\Testing\TestResponse
@@ -106,6 +108,48 @@ it('requires terms and a unique account email without leaving partial records', 
     ])->assertSessionHasErrors(['email', 'terms']);
 
     expect(Manufacturer::query()->where('name', 'Marca Nova')->exists())->toBeFalse();
+});
+
+it('does not make different onboarding visitors share the account creation limit', function () {
+    foreach (range(1, 15) as $visitor) {
+        $this->withCookie('zouth_onboarding', "visitor-{$visitor}")
+            ->from(route('onboarding.index'))
+            ->post(route('onboarding.store'), [
+                'email' => "lojista{$visitor}@example.com",
+            ])
+            ->assertRedirect(route('onboarding.index'))
+            ->assertSessionHasErrors(['brand_name']);
+    }
+});
+
+it('still throttles repeated account creation attempts from the same visitor', function () {
+    foreach (range(1, 10) as $attempt) {
+        $this->withCookie('zouth_onboarding', 'same-visitor')
+            ->from(route('onboarding.index'))
+            ->post(route('onboarding.store'), [
+                'email' => 'repetido@example.com',
+            ])
+            ->assertRedirect(route('onboarding.index'));
+    }
+
+    $this->withCookie('zouth_onboarding', 'same-visitor')
+        ->post(route('onboarding.store'), [
+            'email' => 'repetido@example.com',
+        ])
+        ->assertTooManyRequests();
+});
+
+it('translates generic and secure password validation messages to Portuguese', function () {
+    $required = Validator::make([], ['email' => ['required']]);
+    $password = Validator::make(
+        ['password' => 'SenhaSemSimbolo2026'],
+        ['password' => [Password::min(12)->symbols()]],
+    );
+
+    expect($required->errors()->first('email'))
+        ->toBe('O campo e-mail é obrigatório.')
+        ->and($password->errors()->first('password'))
+        ->toBe('O campo senha deve conter pelo menos um símbolo.');
 });
 
 it('stores the preview and sends the branded verification message only after value is shown', function () {
