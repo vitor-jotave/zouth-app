@@ -37,13 +37,13 @@ it('lists all affiliations for manufacturer owner', function () {
         'status' => 'pending',
     ]);
 
-    $response = $this->actingAs($this->manufacturerOwner)->get('/affiliations');
+    $response = $this->actingAs($this->manufacturerOwner)->get('/manufacturer/representatives');
 
     $response->assertOk();
     $response->assertInertia(fn ($page) => $page
-        ->component('affiliations/index')
-        ->has('affiliations.data', 1)
-        ->has('affiliations.data.0', fn ($aff) => $aff
+        ->component('manufacturer/representatives/index')
+        ->has('affiliations', 1)
+        ->has('affiliations.0', fn ($aff) => $aff
             ->where('id', $affiliation->id)
             ->where('status', 'pending')
             ->has('user', fn ($user) => $user
@@ -75,16 +75,19 @@ it('filters affiliations by status', function () {
     ]);
 
     $response = $this->actingAs($this->manufacturerOwner)
-        ->get('/affiliations?status=pending');
+        ->get('/manufacturer/representatives?segment=requests');
 
     $response->assertOk();
     $response->assertInertia(fn ($page) => $page
-        ->has('affiliations.data', 1)
-        ->has('affiliations.data.0', fn ($aff) => $aff
-            ->where('status', 'pending')
-            ->etc()
-        )
+        ->has('affiliations', 2)
+        ->where('filters.segment', 'requests')
     );
+});
+
+it('redirects the legacy affiliations page to representatives', function () {
+    $this->actingAs($this->manufacturerOwner)
+        ->get('/affiliations')
+        ->assertRedirect('/manufacturer/representatives');
 });
 
 it('allows manufacturer owner to approve pending affiliation', function () {

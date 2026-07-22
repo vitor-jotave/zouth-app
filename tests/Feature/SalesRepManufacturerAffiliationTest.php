@@ -14,6 +14,15 @@ beforeEach(function () {
         'name' => 'Acme Corporation',
         'slug' => 'acme',
     ]);
+
+    $this->applicationPayload = [
+        'whatsapp' => '11999990000',
+        'city' => 'Campinas',
+        'state' => 'SP',
+        'territory' => 'Campinas e região',
+        'presentation' => 'Atuo há oito anos com lojistas de moda infantil no interior paulista.',
+        'application_note' => 'A coleção combina com a carteira de lojas que acompanho hoje.',
+    ];
 });
 
 it('lists all manufacturers for sales rep with affiliation status', function () {
@@ -72,7 +81,7 @@ it('shows active status for manufacturers with active affiliation', function () 
 it('allows sales rep to create affiliation request', function () {
     $response = $this->actingAs($this->salesRep)
         ->from('/rep/manufacturers')
-        ->post("/rep/manufacturers/{$this->manufacturer->id}/affiliate");
+        ->post("/rep/manufacturers/{$this->manufacturer->id}/affiliate", $this->applicationPayload);
 
     $response->assertRedirect('/rep/manufacturers');
 
@@ -80,6 +89,11 @@ it('allows sales rep to create affiliation request', function () {
         'manufacturer_id' => $this->manufacturer->id,
         'user_id' => $this->salesRep->id,
         'status' => 'pending',
+        'source' => 'request',
+    ]);
+    $this->assertDatabaseHas('sales_representative_profiles', [
+        'user_id' => $this->salesRep->id,
+        'territory' => 'Campinas e região',
     ]);
 });
 
@@ -92,7 +106,7 @@ it('prevents duplicate pending affiliation requests', function () {
 
     $response = $this->actingAs($this->salesRep)
         ->from('/rep/manufacturers')
-        ->post("/rep/manufacturers/{$this->manufacturer->id}/affiliate");
+        ->post("/rep/manufacturers/{$this->manufacturer->id}/affiliate", $this->applicationPayload);
 
     $response->assertRedirect('/rep/manufacturers');
 
@@ -109,7 +123,7 @@ it('allows re-requesting affiliation after rejection', function () {
 
     $response = $this->actingAs($this->salesRep)
         ->from('/rep/manufacturers')
-        ->post("/rep/manufacturers/{$this->manufacturer->id}/affiliate");
+        ->post("/rep/manufacturers/{$this->manufacturer->id}/affiliate", $this->applicationPayload);
 
     $response->assertRedirect('/rep/manufacturers');
 
@@ -126,7 +140,7 @@ it('allows re-requesting affiliation after revocation', function () {
 
     $response = $this->actingAs($this->salesRep)
         ->from('/rep/manufacturers')
-        ->post("/rep/manufacturers/{$this->manufacturer->id}/affiliate");
+        ->post("/rep/manufacturers/{$this->manufacturer->id}/affiliate", $this->applicationPayload);
 
     $response->assertRedirect('/rep/manufacturers');
 

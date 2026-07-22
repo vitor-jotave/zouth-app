@@ -25,6 +25,8 @@ class ManufacturerAffiliationFactory extends Factory
             'manufacturer_id' => Manufacturer::factory(),
             'user_id' => User::factory()->state(['user_type' => 'sales_rep']),
             'status' => 'pending',
+            'source' => 'request',
+            'requested_at' => now(),
         ];
     }
 

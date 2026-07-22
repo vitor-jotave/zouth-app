@@ -20,7 +20,24 @@ class ManufacturerAffiliation extends Model
         'manufacturer_id',
         'user_id',
         'status',
+        'source',
+        'application_note',
+        'requested_at',
+        'approved_at',
+        'rejected_at',
+        'revoked_at',
+        'decided_by_user_id',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'requested_at' => 'datetime',
+            'approved_at' => 'datetime',
+            'rejected_at' => 'datetime',
+            'revoked_at' => 'datetime',
+        ];
+    }
 
     /**
      * Get the manufacturer for this affiliation.
@@ -36,5 +53,10 @@ class ManufacturerAffiliation extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function decidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'decided_by_user_id');
     }
 }
