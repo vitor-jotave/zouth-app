@@ -9,6 +9,7 @@ enum ManufacturerCapability: string
     case Orders = 'orders.manage';
     case Customers = 'customers.manage';
     case Affiliations = 'affiliations.manage';
+    case Reports = 'reports.view';
     case Whatsapp = 'whatsapp.manage';
 
     public function label(): string
@@ -19,6 +20,7 @@ enum ManufacturerCapability: string
             self::Orders => 'Pedidos',
             self::Customers => 'Clientes',
             self::Affiliations => 'Representantes',
+            self::Reports => 'Relatórios',
             self::Whatsapp => 'Atendimento',
         };
     }
@@ -31,6 +33,7 @@ enum ManufacturerCapability: string
             self::Orders => 'Consulta e andamento dos pedidos.',
             self::Customers => 'Cadastro e histórico dos lojistas.',
             self::Affiliations => 'Aprovar e acompanhar afiliações.',
+            self::Reports => 'Indicadores comerciais, coleção e canais.',
             self::Whatsapp => 'Conversas e funis do WhatsApp.',
         };
     }
@@ -56,6 +59,7 @@ enum ManufacturerCapability: string
             self::Catalog->value,
             self::Orders->value,
             self::Customers->value,
+            self::Reports->value,
         ];
     }
 

@@ -31,6 +31,7 @@ export default function ZouthLogoPicker() {
         'orders.manage',
         'customers.manage',
         'affiliations.manage',
+        'reports.view',
     ];
     const availableServices = SERVICES.filter((service) => {
         if (auth.access?.is_owner) {

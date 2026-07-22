@@ -5,6 +5,7 @@ import {
     BookOpen,
     Boxes,
     Brush,
+    ChartNoAxesCombined,
     Check,
     CheckCircle2,
     Crown,
@@ -129,6 +130,7 @@ const capabilityIcons: Record<string, LucideIcon> = {
     'orders.manage': ShoppingCart,
     'customers.manage': BookOpen,
     'affiliations.manage': UserCheck,
+    'reports.view': ChartNoAxesCombined,
     'whatsapp.manage': MessageCircleMore,
 };
 
