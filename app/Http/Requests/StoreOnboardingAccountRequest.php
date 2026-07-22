@@ -17,7 +17,17 @@ class StoreOnboardingAccountRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user() === null;
+        $user = $this->user();
+
+        if ($user === null) {
+            return true;
+        }
+
+        $manufacturer = $user->currentManufacturer;
+
+        return $user->isManufacturerUser()
+            && $manufacturer !== null
+            && $manufacturer->onboarding_completed_at === null;
     }
 
     /**
@@ -27,6 +37,10 @@ class StoreOnboardingAccountRequest extends FormRequest
      */
     public function rules(): array
     {
+        if ($this->user()) {
+            return [];
+        }
+
         return [
             'brand_name' => ['required', 'string', 'min:2', 'max:120'],
             'selling_method' => ['required', Rule::in(['pdf_whatsapp', 'representatives', 'direct_retailers', 'mixed'])],

@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Laravel\Cashier\Cashier;
 use Laravel\Cashier\Events\WebhookReceived;
@@ -77,6 +78,33 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureRateLimiting(): void
     {
+        RateLimiter::for('onboarding-progress', function (Request $request): array {
+            return [
+                Limit::perMinute(180)
+                    ->by('onboarding-progress-ip:'.$request->ip()),
+                Limit::perMinute(30)
+                    ->by('onboarding-progress-visitor:'.$this->onboardingVisitorKey($request)),
+            ];
+        });
+
+        RateLimiter::for('onboarding-account', function (Request $request): array {
+            $visitorKey = $this->onboardingVisitorKey($request);
+
+            return [
+                Limit::perMinute(120)
+                    ->by('onboarding-account-ip:'.$request->ip()),
+                Limit::perMinute(10)
+                    ->by('onboarding-account-minute:'.$visitorKey),
+                Limit::perHour(30)
+                    ->by('onboarding-account-hour:'.$visitorKey),
+            ];
+        });
+
+        RateLimiter::for('onboarding-authenticated', function (Request $request): Limit {
+            return Limit::perMinute(30)
+                ->by('onboarding-user:'.($request->user()?->getAuthIdentifier() ?? $request->ip()));
+        });
+
         RateLimiter::for('evolution-webhook', function (Request $request): array {
             return [
                 Limit::perMinute(max(1, (int) config('evolution.webhook_invalid_rate_limit')))
@@ -86,6 +114,19 @@ class AppServiceProvider extends ServiceProvider
                     ->by('instance:'.$request->route('instanceName')),
             ];
         });
+    }
+
+    /**
+     * Build a privacy-safe key that isolates each onboarding visitor.
+     */
+    protected function onboardingVisitorKey(Request $request): string
+    {
+        $email = Str::lower(trim((string) $request->input('email')));
+        $identity = $email !== ''
+            ? $email
+            : (string) $request->cookie('zouth_onboarding', $request->ip());
+
+        return hash('sha256', $identity);
     }
 
     /**

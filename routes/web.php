@@ -92,10 +92,10 @@ Route::controller(OnboardingController::class)
     ->name('onboarding.')
     ->group(function () {
         Route::get('/', 'index')->name('index');
-        Route::post('progress', 'progress')->middleware('throttle:60,1')->name('progress');
-        Route::post('account', 'store')->middleware('throttle:5,1')->name('store');
-        Route::post('preview', 'preview')->middleware(['auth', 'throttle:10,1'])->name('preview');
-        Route::post('complete', 'complete')->middleware(['auth', 'verified', 'throttle:10,1'])->name('complete');
+        Route::post('progress', 'progress')->middleware('throttle:onboarding-progress')->name('progress');
+        Route::post('account', 'store')->middleware('throttle:onboarding-account')->name('store');
+        Route::post('preview', 'preview')->middleware(['auth', 'throttle:onboarding-authenticated'])->name('preview');
+        Route::post('complete', 'complete')->middleware(['auth', 'verified', 'throttle:onboarding-authenticated'])->name('complete');
     });
 
 Route::get('health/live', fn () => response()->json(['status' => 'ok']))

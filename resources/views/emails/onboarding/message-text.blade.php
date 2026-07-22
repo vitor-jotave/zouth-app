@@ -1,9 +1,9 @@
-{{ $title }}
+{{ $textTitle ?? $title }}
 
-{{ $intro }}
+{{ $textIntro ?? $intro }}
 
 {{ $actionLabel }}: {{ $actionUrl }}
 
-{{ $note }}
+{{ $textNote ?? $note }}
 
 Zouth. Sua coleção em movimento.

@@ -11,6 +11,8 @@ use App\Notifications\ZouthVerifyEmailNotification;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rules\Password;
 use Inertia\Testing\AssertableInertia as Assert;
 
 function createOnboardingAccount(array $overrides = []): \Illuminate\Testing\TestResponse
@@ -79,6 +81,11 @@ it('creates the manufacturer owner catalog and exact seven day trial in one flow
     $catalog = $manufacturer->catalogSetting;
 
     $this->assertAuthenticatedAs($user);
+    $this->get(route('onboarding.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('onboarding/index')
+            ->where('stage', 4));
+
     expect($user->user_type)->toBe(UserType::ManufacturerUser)
         ->and($user->current_manufacturer_id)->toBe($manufacturer->id)
         ->and($manufacturer->primary_owner_user_id)->toBe($user->id)
@@ -89,6 +96,21 @@ it('creates the manufacturer owner catalog and exact seven day trial in one flow
         ->and($manufacturer->currentPlan?->is_self_service_default)->toBeTrue()
         ->and($catalog)->toBeInstanceOf(CatalogSetting::class)
         ->and($catalog?->public_link_active)->toBeFalse();
+});
+
+it('treats a repeated account submission as an idempotent onboarding resume', function () {
+    createOnboardingAccount();
+
+    $user = User::query()->where('email', 'marina@petitmonde.com.br')->firstOrFail();
+    $manufacturer = $user->currentManufacturer;
+
+    $this->post(route('onboarding.store'))
+        ->assertRedirect(route('onboarding.index'));
+
+    expect(User::query()->count())->toBe(1)
+        ->and(Manufacturer::query()->count())->toBe(1)
+        ->and(CatalogSetting::query()->count())->toBe(1)
+        ->and($manufacturer?->fresh()->primary_owner_user_id)->toBe($user->id);
 });
 
 it('requires terms and a unique account email without leaving partial records', function () {
@@ -106,6 +128,48 @@ it('requires terms and a unique account email without leaving partial records', 
     ])->assertSessionHasErrors(['email', 'terms']);
 
     expect(Manufacturer::query()->where('name', 'Marca Nova')->exists())->toBeFalse();
+});
+
+it('does not make different onboarding visitors share the account creation limit', function () {
+    foreach (range(1, 15) as $visitor) {
+        $this->withCookie('zouth_onboarding', "visitor-{$visitor}")
+            ->from(route('onboarding.index'))
+            ->post(route('onboarding.store'), [
+                'email' => "lojista{$visitor}@example.com",
+            ])
+            ->assertRedirect(route('onboarding.index'))
+            ->assertSessionHasErrors(['brand_name']);
+    }
+});
+
+it('still throttles repeated account creation attempts from the same visitor', function () {
+    foreach (range(1, 10) as $attempt) {
+        $this->withCookie('zouth_onboarding', 'same-visitor')
+            ->from(route('onboarding.index'))
+            ->post(route('onboarding.store'), [
+                'email' => 'repetido@example.com',
+            ])
+            ->assertRedirect(route('onboarding.index'));
+    }
+
+    $this->withCookie('zouth_onboarding', 'same-visitor')
+        ->post(route('onboarding.store'), [
+            'email' => 'repetido@example.com',
+        ])
+        ->assertTooManyRequests();
+});
+
+it('translates generic and secure password validation messages to Portuguese', function () {
+    $required = Validator::make([], ['email' => ['required']]);
+    $password = Validator::make(
+        ['password' => 'SenhaSemSimbolo2026'],
+        ['password' => [Password::min(12)->symbols()]],
+    );
+
+    expect($required->errors()->first('email'))
+        ->toBe('O campo e-mail é obrigatório.')
+        ->and($password->errors()->first('password'))
+        ->toBe('O campo senha deve conter pelo menos um símbolo.');
 });
 
 it('stores the preview and sends the branded verification message only after value is shown', function () {
