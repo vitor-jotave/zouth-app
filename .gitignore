@@ -4,6 +4,7 @@
 /public/build
 /public/hot
 /public/storage
+/tmp/
 /storage/*.key
 /storage/pail
 /resources/js/actions
