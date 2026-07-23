@@ -1099,8 +1099,8 @@ export default function CatalogSettings({
                                         />
                                         <p className="text-xs leading-5">
                                             Envie a fotografia que abre a
-                                            coleção. Sem ela, usamos a primeira
-                                            peça com imagem.
+                                            coleção. Sem ela, a capa permanece
+                                            apenas com texto.
                                         </p>
                                     </div>
                                 )}

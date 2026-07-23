@@ -56,6 +56,34 @@ it('places public catalog filters beside the collection navigation without repea
         ->not->toContain('{productGridTitle}');
 });
 
+it('keeps the catalog logo in the document flow above the hero copy', function () {
+    $catalog = file_get_contents(resource_path('js/pages/public/catalog.tsx'));
+
+    expect($catalog)
+        ->toMatch('/data-testid="catalog-brand-bar"[^>]+className="[^"]*relative[^"]*"/s')
+        ->not->toMatch('/data-testid="catalog-brand-bar"[^>]+className="[^"]*absolute[^"]*"/s')
+        ->toContain('object-contain object-left');
+});
+
+it('uses the same explicit campaign image rule in the studio preview and public catalog', function () {
+    $theming = file_get_contents(resource_path('js/lib/catalog-theming.ts'));
+    $preview = file_get_contents(resource_path('js/components/catalog-preview.tsx'));
+    $catalog = file_get_contents(resource_path('js/pages/public/catalog.tsx'));
+    $studio = file_get_contents(resource_path('js/pages/manufacturer/catalog-settings/index.tsx'));
+
+    expect($theming)
+        ->toContain('export function catalogCoverImageUrl(')
+        ->and($preview)
+        ->toContain('catalogCoverImageUrl(settings, true)')
+        ->not->toContain('heroProduct?.primary_image')
+        ->and($catalog)
+        ->toContain('catalogCoverImageUrl(settings)')
+        ->not->toContain('heroProduct?.primary_image')
+        ->and($studio)
+        ->toContain('Sem ela, a capa permanece')
+        ->not->toContain('usamos a primeira');
+});
+
 it('keeps one flexible catalog base while saving presentation choices', function () {
     CatalogSetting::create([
         'manufacturer_id' => $this->manufacturer->id,

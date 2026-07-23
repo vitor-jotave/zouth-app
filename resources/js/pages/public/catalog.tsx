@@ -66,6 +66,7 @@ import {
 } from '@/components/ui/sheet';
 import {
     CATALOG_LOGO_SIZE,
+    catalogCoverImageUrl,
     catalogLogoStyle,
     GRADIENTS,
     LAYOUT_TOKENS,
@@ -2097,12 +2098,7 @@ function MinimalLayout({
         ...productDisplayOptions,
         showStock: booleanSetting(productGridSection?.props?.show_stock, true),
     };
-    const heroProduct = products.data.find((product) => product.primary_image);
-    const heroImage =
-        settings.cover_image_url ??
-        settings.cover_thumbnail_url ??
-        heroProduct?.primary_image ??
-        null;
+    const heroImage = catalogCoverImageUrl(settings);
     const heroImagePosition = `${percentageSetting(settings.cover_image_focal_x)}% ${percentageSetting(settings.cover_image_focal_y)}%`;
     const productCount = products.meta?.total ?? products.data.length;
     const sectionOrder = (type: string): number => {
@@ -2130,62 +2126,59 @@ function MinimalLayout({
                     className="relative -mx-6 -mt-12"
                     style={{ order: sectionOrder('hero') }}
                 >
-                    <div
-                        className={`absolute inset-x-0 top-0 z-20 flex flex-col gap-4 px-8 pt-8 sm:flex-row sm:items-center sm:px-10 sm:pt-10 ${
-                            showBrandName || showLogo || showProductCount
-                                ? 'sm:justify-between'
-                                : 'justify-center'
-                        }`}
-                    >
+                    {(showBrandName || showLogo || showProductCount) && (
                         <div
-                            className={`flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6 ${
-                                showBrandName ? '' : 'items-center sm:mx-auto'
-                            }`}
+                            data-testid="catalog-brand-bar"
+                            className="relative z-20 flex flex-col items-start justify-between gap-4 px-8 py-6 sm:flex-row sm:items-center sm:px-10 sm:py-8"
                         >
-                            {showLogo && (
-                                <div
-                                    className="inline-flex max-w-full shrink-0 items-center justify-center"
-                                    style={{ borderRadius: tokens.radius }}
-                                >
-                                    <img
-                                        src={settings.logo_url ?? undefined}
-                                        alt={
-                                            settings.brand_name ??
-                                            manufacturer.name
-                                        }
-                                        className="h-auto object-contain"
-                                        style={catalogLogoStyle(
-                                            logoSize,
-                                            320,
-                                            112,
-                                        )}
-                                    />
-                                </div>
-                            )}
-                            <div className="min-w-0">
-                                {showBrandName && (
-                                    <p
-                                        className="text-2xl font-semibold tracking-[-0.04em]"
-                                        style={{ fontFamily: headingFont }}
+                            <div className="flex max-w-full flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6">
+                                {showLogo && (
+                                    <div
+                                        className="inline-flex max-w-full shrink-0 items-center justify-start"
+                                        style={{ borderRadius: tokens.radius }}
                                     >
-                                        {settings.brand_name ??
-                                            manufacturer.name}
-                                    </p>
+                                        <img
+                                            src={settings.logo_url ?? undefined}
+                                            alt={
+                                                settings.brand_name ??
+                                                manufacturer.name
+                                            }
+                                            className="h-auto object-contain object-left"
+                                            style={catalogLogoStyle(
+                                                logoSize,
+                                                320,
+                                                112,
+                                            )}
+                                        />
+                                    </div>
                                 )}
-                                {settings.tagline && (
-                                    <p className="mt-1 text-sm opacity-70">
-                                        {settings.tagline}
-                                    </p>
-                                )}
+                                <div className="min-w-0">
+                                    {showBrandName && (
+                                        <p
+                                            className="text-2xl font-semibold tracking-[-0.04em]"
+                                            style={{ fontFamily: headingFont }}
+                                        >
+                                            {settings.brand_name ??
+                                                manufacturer.name}
+                                        </p>
+                                    )}
+                                    {settings.tagline && (
+                                        <p className="mt-1 text-sm opacity-70">
+                                            {settings.tagline}
+                                        </p>
+                                    )}
+                                </div>
                             </div>
+                            {showProductCount && (
+                                <Badge className="shrink-0 bg-[var(--brand-primary)] text-white">
+                                    {productCount}{' '}
+                                    {productCount === 1
+                                        ? 'produto'
+                                        : 'produtos'}
+                                </Badge>
+                            )}
                         </div>
-                        {showProductCount && (
-                            <Badge className="bg-[var(--brand-primary)] text-white">
-                                {productCount}{' '}
-                                {productCount === 1 ? 'produto' : 'produtos'}
-                            </Badge>
-                        )}
-                    </div>
+                    )}
 
                     <div
                         className={cn(
@@ -2214,7 +2207,7 @@ function MinimalLayout({
                         )}
                         <div
                             className={cn(
-                                'relative z-10 flex min-h-[24rem] flex-col justify-center px-8 pt-24 pb-10 sm:px-10 md:min-h-72 md:py-10',
+                                'relative z-10 flex min-h-[24rem] flex-col justify-center px-8 py-12 sm:px-10 sm:py-16 md:min-h-72',
                                 heroAlign === 'center' &&
                                     'mx-auto max-w-4xl items-center py-16 sm:py-24',
                             )}
