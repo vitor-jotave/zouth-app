@@ -2,6 +2,7 @@ import { ArrowRight, Box, Eye, Package } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import {
     CATALOG_LOGO_SIZE,
+    catalogCoverImageUrl,
     catalogLogoStyle,
     GRADIENTS,
     PATTERNS,
@@ -189,11 +190,7 @@ export default function CatalogPreview({
                 .filter((category): category is string => Boolean(category)),
         ),
     ).slice(0, 4);
-    const heroProduct = products.find((product) => product.primary_image);
-    const coverImage =
-        settings.cover_thumbnail_url ??
-        settings.cover_image_url ??
-        heroProduct?.primary_image;
+    const coverImage = catalogCoverImageUrl(settings, true);
     const featuredProducts = products.slice(0, isMobile ? 4 : 6);
     const backgroundStyle: CSSProperties = {};
 
@@ -341,7 +338,7 @@ export default function CatalogPreview({
                                     </div>
                                     <div
                                         className={cn(
-                                            'grid overflow-hidden border-b border-black/10',
+                                            'relative grid overflow-hidden border-b border-black/10',
                                             isMobile
                                                 ? 'grid-cols-1'
                                                 : alignment === 'center'
@@ -349,20 +346,42 @@ export default function CatalogPreview({
                                                   : 'grid-cols-[0.78fr_1.22fr]',
                                         )}
                                     >
+                                        {alignment === 'center' &&
+                                            coverImage && (
+                                                <>
+                                                    <img
+                                                        src={coverImage}
+                                                        alt=""
+                                                        className="absolute inset-0 h-full w-full object-cover"
+                                                        style={{
+                                                            objectPosition: `${settings.cover_image_focal_x ?? 50}% ${settings.cover_image_focal_y ?? 50}%`,
+                                                        }}
+                                                    />
+                                                    <div className="absolute inset-0 bg-black/35" />
+                                                </>
+                                            )}
                                         <div
                                             className={cn(
-                                                'flex flex-col justify-center',
+                                                'relative z-10 flex flex-col justify-center',
                                                 isMobile
                                                     ? 'min-h-80 px-5 py-10'
                                                     : 'min-h-[25rem] px-8 py-12',
                                                 alignment === 'center' &&
                                                     'mx-auto max-w-2xl items-center',
+                                                alignment === 'center' &&
+                                                    coverImage &&
+                                                    'text-white',
                                             )}
                                         >
                                             <p
                                                 className="text-[9px] font-bold tracking-[0.18em] uppercase"
                                                 style={{
-                                                    color: settings.accent_color,
+                                                    color:
+                                                        alignment ===
+                                                            'center' &&
+                                                        coverImage
+                                                            ? 'currentColor'
+                                                            : settings.accent_color,
                                                 }}
                                             >
                                                 {sectionValue(
@@ -403,8 +422,17 @@ export default function CatalogPreview({
                                                     className="mt-7 flex w-full max-w-44 items-center justify-between gap-4 border-b pb-2 text-[10px] font-semibold"
                                                     style={{
                                                         borderColor:
-                                                            settings.accent_color,
-                                                        color: settings.accent_color,
+                                                            alignment ===
+                                                                'center' &&
+                                                            coverImage
+                                                                ? 'currentColor'
+                                                                : settings.accent_color,
+                                                        color:
+                                                            alignment ===
+                                                                'center' &&
+                                                            coverImage
+                                                                ? 'currentColor'
+                                                                : settings.accent_color,
                                                     }}
                                                 >
                                                     {sectionValue(

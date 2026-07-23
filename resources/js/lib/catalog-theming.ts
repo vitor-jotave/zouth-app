@@ -106,6 +106,25 @@ export const CATALOG_LOGO_SIZE = {
     step: 5,
 } as const;
 
+interface CatalogCoverMedia {
+    cover_image_url?: string | null;
+    cover_thumbnail_url?: string | null;
+}
+
+export function catalogCoverImageUrl(
+    settings: CatalogCoverMedia,
+    preferThumbnail = false,
+): string | null {
+    const preferredImage = preferThumbnail
+        ? settings.cover_thumbnail_url
+        : settings.cover_image_url;
+    const fallbackImage = preferThumbnail
+        ? settings.cover_image_url
+        : settings.cover_thumbnail_url;
+
+    return preferredImage ?? fallbackImage ?? null;
+}
+
 export function normalizeCatalogLogoSize(value: unknown): number {
     if (typeof value !== 'number' || Number.isNaN(value)) {
         return CATALOG_LOGO_SIZE.default;
