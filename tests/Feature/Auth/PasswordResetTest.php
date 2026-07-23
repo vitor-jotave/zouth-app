@@ -47,8 +47,8 @@ test('password can be reset with valid token', function () {
         $response = $this->post(route('password.update'), [
             'token' => $notification->token,
             'email' => $user->email,
-            'password' => 'password',
-            'password_confirmation' => 'password',
+            'password' => 'NovaSenha1',
+            'password_confirmation' => 'NovaSenha1',
         ]);
 
         $response
@@ -70,8 +70,8 @@ test('resetting a password verifies an invited account email', function () {
         $this->post(route('password.update'), [
             'token' => $notification->token,
             'email' => $user->email,
-            'password' => 'password',
-            'password_confirmation' => 'password',
+            'password' => 'NovaSenha1',
+            'password_confirmation' => 'NovaSenha1',
         ])->assertSessionHasNoErrors();
 
         return true;
@@ -86,8 +86,8 @@ test('password cannot be reset with invalid token', function () {
     $response = $this->post(route('password.update'), [
         'token' => 'invalid-token',
         'email' => $user->email,
-        'password' => 'newpassword123',
-        'password_confirmation' => 'newpassword123',
+        'password' => 'NovaSenha1',
+        'password_confirmation' => 'NovaSenha1',
     ]);
 
     $response->assertSessionHasErrors('email');

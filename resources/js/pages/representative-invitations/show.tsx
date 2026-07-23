@@ -1,6 +1,7 @@
 import { Form, Head, Link, router } from '@inertiajs/react';
 import { ArrowRight, Check, Clock3, LogIn, ShieldCheck } from 'lucide-react';
 import InputError from '@/components/input-error';
+import PasswordRequirements from '@/components/password-requirements';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -265,7 +266,12 @@ export default function RepresentativeInvitationShow({
                                                         type="password"
                                                         autoComplete="new-password"
                                                         required
+                                                        aria-describedby="invitation-password-requirements"
                                                         className="min-h-12 rounded-[2px] border-white/20 bg-white/5 text-white shadow-none"
+                                                    />
+                                                    <PasswordRequirements
+                                                        id="invitation-password-requirements"
+                                                        className="text-white/50"
                                                     />
                                                     <InputError
                                                         message={

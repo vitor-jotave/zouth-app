@@ -2,12 +2,14 @@
 
 namespace App\Http\Requests;
 
+use App\Concerns\PasswordValidationRules;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rules\Password;
 
 class AcceptRepresentativeInvitationRequest extends FormRequest
 {
+    use PasswordValidationRules;
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -29,7 +31,7 @@ class AcceptRepresentativeInvitationRequest extends FormRequest
 
         return [
             'name' => ['required', 'string', 'max:255'],
-            'password' => ['required', 'confirmed', Password::defaults()],
+            'password' => $this->passwordRules(),
             'terms' => ['required', 'accepted'],
         ];
     }

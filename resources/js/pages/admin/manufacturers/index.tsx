@@ -538,7 +538,7 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                                                 e.target.value,
                                             )
                                         }
-                                        placeholder="Opcional — mínimo 6 caracteres"
+                                        placeholder="Opcional — 6+ caracteres, maiúscula e número"
                                         className="mt-1"
                                         autoComplete="off"
                                     />
