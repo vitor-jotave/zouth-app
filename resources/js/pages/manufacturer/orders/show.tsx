@@ -3,6 +3,7 @@ import {
     ArrowLeft,
     ArrowUpRight,
     Check,
+    ChevronDown,
     CircleDot,
     Clock3,
     ExternalLink,
@@ -32,6 +33,14 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
@@ -125,6 +134,14 @@ const statusTone: Record<string, StatusLabelTone> = {
     delivered: 'mineral',
     cancelled: 'coral',
 };
+
+const operationalStatusOrder = [
+    'new',
+    'confirmed',
+    'preparing',
+    'shipped',
+    'delivered',
+];
 
 function formatCurrency(value: string | number | null): string {
     return new Intl.NumberFormat('pt-BR', {
@@ -247,6 +264,21 @@ function transitionActionLabel(
             shipped: 'Marcar como enviado',
             delivered: 'Marcar como entregue',
         }[transition.value] ?? transition.label
+    );
+}
+
+function nextOperationalTransition(order: Order): AllowedTransition | null {
+    const currentIndex = operationalStatusOrder.indexOf(order.status);
+    const nextStatus = operationalStatusOrder[currentIndex + 1];
+
+    if (!nextStatus) {
+        return null;
+    }
+
+    return (
+        order.allowed_transitions.find(
+            (transition) => transition.value === nextStatus,
+        ) ?? null
     );
 }
 
@@ -423,10 +455,10 @@ export default function OrderShow({ order }: Props) {
     const [savingNotes, setSavingNotes] = useState(false);
     const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
-    const nextTransition =
-        order.allowed_transitions.find(
-            (transition) => transition.value !== 'cancelled',
-        ) ?? null;
+    const operationalTransitions = order.allowed_transitions.filter(
+        (transition) => transition.value !== 'cancelled',
+    );
+    const nextTransition = nextOperationalTransition(order);
     const cancelTransition =
         order.allowed_transitions.find(
             (transition) => transition.value === 'cancelled',
@@ -563,13 +595,59 @@ export default function OrderShow({ order }: Props) {
                                           )}
                                 </Button>
                             ) : (
-                                <div className="mt-4 flex min-h-12 items-center gap-3 border-l-2 border-[#2e705a] pl-4 text-sm font-semibold">
+                                <div className="flex min-h-12 items-center gap-3 border-l-2 border-[#2e705a] pl-4 text-sm font-semibold">
                                     <Check
                                         className="size-4 text-[#2e705a]"
                                         aria-hidden="true"
                                     />
                                     Fluxo concluído
                                 </div>
+                            )}
+                            {operationalTransitions.length > 0 && (
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            disabled={updatingStatus}
+                                            className="mt-3 min-h-11 w-full justify-start rounded-[2px] border-[#18181f] bg-transparent px-4 font-bold shadow-none hover:bg-[#e7e3dc]/45"
+                                        >
+                                            <CircleDot
+                                                className="size-4"
+                                                aria-hidden="true"
+                                            />
+                                            Alterar etapa
+                                            <ChevronDown
+                                                className="ml-auto size-4"
+                                                aria-hidden="true"
+                                            />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                        align="end"
+                                        className="w-[var(--radix-dropdown-menu-trigger-width)] rounded-[2px] border-[#18181f] bg-[#f6f4f0] p-1 shadow-xl"
+                                    >
+                                        <DropdownMenuLabel className="px-3 py-2 text-[0.64rem] font-bold tracking-[0.16em] text-[#ff4d3d] uppercase">
+                                            Mover pedido para
+                                        </DropdownMenuLabel>
+                                        <DropdownMenuSeparator className="mx-0 bg-border" />
+                                        {operationalTransitions.map(
+                                            (transition) => (
+                                                <DropdownMenuItem
+                                                    key={transition.value}
+                                                    onSelect={() =>
+                                                        updateStatus(
+                                                            transition.value,
+                                                        )
+                                                    }
+                                                    className="min-h-10 rounded-[2px] px-3 font-semibold focus:bg-[#18181f] focus:text-[#f6f4f0]"
+                                                >
+                                                    {transition.label}
+                                                </DropdownMenuItem>
+                                            ),
+                                        )}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             )}
                             {cancelTransition && (
                                 <button
