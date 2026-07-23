@@ -20,6 +20,28 @@ test('sends verification notification', function () {
     Notification::assertSentTo($user, ZouthVerifyEmailNotification::class);
 });
 
+test('resends the branded verification notification after manufacturer onboarding is complete', function () {
+    Notification::fake();
+
+    $manufacturer = Manufacturer::factory()->create([
+        'onboarding_completed_at' => now(),
+    ]);
+    $user = User::factory()->unverified()->create([
+        'current_manufacturer_id' => $manufacturer->id,
+    ]);
+
+    $manufacturer->users()->attach($user->id, [
+        'role' => 'owner',
+        'status' => 'active',
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('verification.send'))
+        ->assertRedirect(route('home'));
+
+    Notification::assertSentTo($user, ZouthVerifyEmailNotification::class);
+});
+
 test('does not send verification notification if email is verified', function () {
     Notification::fake();
 

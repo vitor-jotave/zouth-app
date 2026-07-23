@@ -52,13 +52,7 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function sendEmailVerificationNotification(): void
     {
-        if ($this->isManufacturerUser() && $this->currentManufacturer?->onboarding_completed_at === null) {
-            $this->notify(new ZouthVerifyEmailNotification);
-
-            return;
-        }
-
-        parent::sendEmailVerificationNotification();
+        $this->notify(new ZouthVerifyEmailNotification);
     }
 
     public function currentManufacturer(): BelongsTo
