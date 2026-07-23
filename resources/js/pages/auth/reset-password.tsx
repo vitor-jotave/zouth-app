@@ -11,15 +11,36 @@ import { update } from '@/routes/password';
 type Props = {
     token: string;
     email: string;
+    intent: '' | 'team_invitation' | 'manufacturer_invitation';
+    manufacturer: string;
 };
 
-export default function ResetPassword({ token, email }: Props) {
+export default function ResetPassword({
+    token,
+    email,
+    intent,
+    manufacturer,
+}: Props) {
+    const isTeamInvitation = intent === 'team_invitation';
+    const isManufacturerInvitation = intent === 'manufacturer_invitation';
+    const title = isTeamInvitation
+        ? 'Crie seu acesso'
+        : isManufacturerInvitation
+          ? 'Ative seu acesso'
+          : 'Redefinir senha';
+    const description = isTeamInvitation
+        ? `Defina uma senha para entrar na equipe da ${manufacturer}.`
+        : isManufacturerInvitation
+          ? `Defina uma senha para assumir a gestão da ${manufacturer}.`
+          : 'Crie uma nova senha para acessar sua conta.';
+    const actionLabel =
+        isTeamInvitation || isManufacturerInvitation
+            ? 'Criar meu acesso'
+            : 'Redefinir senha';
+
     return (
-        <AuthLayout
-            title="Redefinir senha"
-            description="Crie uma nova senha para acessar sua conta."
-        >
-            <Head title="Redefinir senha" />
+        <AuthLayout title={title} description={description}>
+            <Head title={title} />
 
             <Form
                 {...update.form()}
@@ -86,7 +107,7 @@ export default function ResetPassword({ token, email }: Props) {
                             data-test="reset-password-button"
                         >
                             {processing && <Spinner />}
-                            Redefinir senha
+                            {actionLabel}
                         </Button>
                     </div>
                 )}

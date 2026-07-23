@@ -12,8 +12,10 @@ use App\Models\ProductImportRow;
 use App\Models\ProductMedia;
 use App\Models\ProductVariantStock;
 use App\Models\User;
+use App\Notifications\ProductImportFinishedNotification;
 use App\Services\ProductImportTemplateService;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 
@@ -140,9 +142,15 @@ it('imports a simple product and confirms new catalog references', function () {
         ->and($productImport->summary['new_taxonomies'])->toBe(1)
         ->and(ProductImportMapping::where('manufacturer_id', $this->manufacturer->id)->count())->toBe(1);
 
+    Notification::fake();
     $productImport = confirmProductImport($productImport, true);
 
     expect($productImport->status)->toBe(ProductImportStatus::Completed);
+    Notification::assertSentTo(
+        $this->owner,
+        ProductImportFinishedNotification::class,
+        fn (ProductImportFinishedNotification $notification): bool => $notification->productImport->is($productImport),
+    );
     $this->assertDatabaseHas('products', [
         'manufacturer_id' => $this->manufacturer->id,
         'sku' => 'CAM-001',

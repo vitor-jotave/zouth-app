@@ -16,17 +16,13 @@ class ZouthVerifyEmailNotification extends VerifyEmail implements ShouldQueue
         $this->afterCommit();
     }
 
-    /**
-     * Get the mail representation of the notification.
-     */
-    /** @return MailMessage */
-    public function toMail($notifiable)
+    public function toMail(mixed $notifiable): MailMessage
     {
         $manufacturerName = $notifiable->currentManufacturer?->name ?? 'sua marca';
         $messageData = [
             'eyebrow' => 'SUA VITRINE ESTÁ QUASE PRONTA',
-            'title' => 'Confirme seu e-mail.',
-            'intro' => 'A primeira vitrine da '.$manufacturerName.' já ganhou forma. Confirme seu endereço para trazer a coleção e continuar preparando sua apresentação comercial.',
+            'title' => 'Confirme seu e-mail',
+            'intro' => 'A '.$manufacturerName.' já está na Zouth. Confirme seu endereço para colocar a coleção em movimento.',
             'actionLabel' => 'Confirmar e continuar',
             'actionUrl' => $this->verificationUrl($notifiable),
             'note' => 'Este link expira em 60 minutos. Se você não iniciou este cadastro, ignore esta mensagem.',

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\ManufacturerCapability;
 use App\Enums\UserType;
+use App\Notifications\ZouthResetPasswordNotification;
 use App\Notifications\ZouthVerifyEmailNotification;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -53,6 +54,11 @@ class User extends Authenticatable implements MustVerifyEmail
     public function sendEmailVerificationNotification(): void
     {
         $this->notify(new ZouthVerifyEmailNotification);
+    }
+
+    public function sendPasswordResetNotification(mixed $token): void
+    {
+        $this->notify(new ZouthResetPasswordNotification((string) $token));
     }
 
     public function currentManufacturer(): BelongsTo

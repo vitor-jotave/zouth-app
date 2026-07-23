@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\User;
-use Illuminate\Auth\Notifications\ResetPassword;
+use App\Notifications\ZouthResetPasswordNotification;
 use Illuminate\Support\Facades\Notification;
 
 test('reset password link screen can be rendered', function () {
@@ -17,7 +17,7 @@ test('reset password link can be requested', function () {
 
     $this->post(route('password.email'), ['email' => $user->email]);
 
-    Notification::assertSentTo($user, ResetPassword::class);
+    Notification::assertSentTo($user, ZouthResetPasswordNotification::class);
 });
 
 test('reset password screen can be rendered', function () {
@@ -27,7 +27,7 @@ test('reset password screen can be rendered', function () {
 
     $this->post(route('password.email'), ['email' => $user->email]);
 
-    Notification::assertSentTo($user, ResetPassword::class, function ($notification) {
+    Notification::assertSentTo($user, ZouthResetPasswordNotification::class, function ($notification) {
         $response = $this->get(route('password.reset', $notification->token));
 
         $response->assertOk();
@@ -43,7 +43,7 @@ test('password can be reset with valid token', function () {
 
     $this->post(route('password.email'), ['email' => $user->email]);
 
-    Notification::assertSentTo($user, ResetPassword::class, function ($notification) use ($user) {
+    Notification::assertSentTo($user, ZouthResetPasswordNotification::class, function ($notification) use ($user) {
         $response = $this->post(route('password.update'), [
             'token' => $notification->token,
             'email' => $user->email,
@@ -66,7 +66,7 @@ test('resetting a password verifies an invited account email', function () {
 
     $this->post(route('password.email'), ['email' => $user->email]);
 
-    Notification::assertSentTo($user, ResetPassword::class, function ($notification) use ($user) {
+    Notification::assertSentTo($user, ZouthResetPasswordNotification::class, function ($notification) use ($user) {
         $this->post(route('password.update'), [
             'token' => $notification->token,
             'email' => $user->email,
@@ -78,6 +78,24 @@ test('resetting a password verifies an invited account email', function () {
     });
 
     expect($user->refresh()->hasVerifiedEmail())->toBeTrue();
+});
+
+test('renders the password recovery email with the Zouth identity in Portuguese', function () {
+    $user = User::factory()->create();
+    $message = (new ZouthResetPasswordNotification('reset-token'))->toMail($user);
+
+    $html = view($message->view['html'], $message->viewData)->render();
+    $text = view($message->view['text'], $message->viewData)->render();
+
+    expect($message->subject)
+        ->toBe('Crie uma nova senha para sua conta Zouth')
+        ->and($html)
+        ->toContain('ACESSO À SUA CONTA')
+        ->toContain('Criar nova senha')
+        ->not->toContain('Reset Password Notification')
+        ->and($text)
+        ->toContain('Crie uma nova senha')
+        ->toContain('Criar nova senha');
 });
 
 test('password cannot be reset with invalid token', function () {

@@ -3,6 +3,7 @@
 use App\Enums\UserType;
 use App\Models\Manufacturer;
 use App\Models\User;
+use App\Notifications\ManufacturerOwnerInvitationNotification;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
@@ -70,6 +71,18 @@ it('allows superadmin to create manufacturer with owner', function () {
         ->first();
 
     expect($pivot)->not->toBeNull();
+
+    Notification::assertSentTo(
+        $owner,
+        ManufacturerOwnerInvitationNotification::class,
+        function (ManufacturerOwnerInvitationNotification $notification) use ($manufacturer, $owner): bool {
+            $message = $notification->toMail($owner);
+
+            return $notification->manufacturer->is($manufacturer)
+                && $message->subject === 'Seu acesso à Test Manufacturer está pronto'
+                && str_contains($message->viewData['actionUrl'], 'intent=manufacturer_invitation');
+        },
+    );
 });
 
 it('validates manufacturer creation input', function () {

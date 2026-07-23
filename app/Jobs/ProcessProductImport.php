@@ -4,10 +4,12 @@ namespace App\Jobs;
 
 use App\Enums\ProductImportStatus;
 use App\Models\ProductImport;
+use App\Notifications\ProductImportFinishedNotification;
 use App\Services\ProductImportExecutionService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class ProcessProductImport implements ShouldQueue
@@ -44,5 +46,20 @@ class ProcessProductImport implements ShouldQueue
             'status' => ProductImportStatus::Failed,
             'error_message' => $exception?->getMessage() ?? 'Não foi possível concluir a importação.',
         ]);
+
+        $this->productImport->loadMissing('user');
+
+        if ($this->productImport->user?->hasVerifiedEmail()) {
+            try {
+                $this->productImport->user->notify(
+                    new ProductImportFinishedNotification($this->productImport->refresh()),
+                );
+            } catch (Throwable $notificationException) {
+                Log::error('Could not queue failed product import notification.', [
+                    'product_import_id' => $this->productImport->id,
+                    'exception' => $notificationException,
+                ]);
+            }
+        }
     }
 }

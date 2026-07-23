@@ -4,6 +4,7 @@ use App\Enums\UserType;
 use App\Models\Manufacturer;
 use App\Models\Plan;
 use App\Models\User;
+use App\Notifications\TeamInvitationNotification;
 use Illuminate\Support\Facades\Notification;
 
 beforeEach(function () {
@@ -81,6 +82,47 @@ it('allows owner to create a new user', function () {
         'status' => 'active',
         'capabilities' => json_encode(['collection.manage', 'orders.manage']),
     ]);
+
+    Notification::assertSentTo(
+        $newUser,
+        TeamInvitationNotification::class,
+        function (TeamInvitationNotification $notification) use ($newUser): bool {
+            $message = $notification->toMail($newUser);
+            parse_str((string) parse_url($message->viewData['actionUrl'], PHP_URL_QUERY), $query);
+
+            return $notification->manufacturer->is($this->manufacturer)
+                && $notification->invitedBy->is($this->owner)
+                && $notification->role === 'staff'
+                && $message->subject === $this->owner->name.' convidou você para a equipe da '.$this->manufacturer->name
+                && ($query['intent'] ?? null) === 'team_invitation'
+                && ($query['manufacturer'] ?? null) === $this->manufacturer->name;
+        },
+    );
+});
+
+it('renders a team invitation instead of a generic password reset email', function () {
+    $invitedUser = User::factory()->unverified()->make([
+        'email' => 'convidada@example.com',
+    ]);
+    $notification = new TeamInvitationNotification(
+        'invitation-token',
+        $this->manufacturer,
+        $this->owner,
+        'staff',
+    );
+    $message = $notification->toMail($invitedUser);
+
+    $html = view($message->view['html'], $message->viewData)->render();
+    $text = view($message->view['text'], $message->viewData)->render();
+
+    expect($html)
+        ->toContain('CONVITE PARA A EQUIPE')
+        ->toContain('Criar meu acesso')
+        ->toContain($this->manufacturer->name)
+        ->not->toContain('Reset Password Notification')
+        ->and($text)
+        ->toContain('Você foi convidado para a equipe')
+        ->toContain('Criar meu acesso');
 });
 
 it('denies staff from creating users', function () {

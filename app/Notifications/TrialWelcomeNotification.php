@@ -37,7 +37,7 @@ class TrialWelcomeNotification extends Notification implements ShouldQueue
     {
         $messageData = [
             'eyebrow' => 'SEUS 7 DIAS COMEÇARAM',
-            'title' => 'Sua vitrine já tem nome.',
+            'title' => 'Sua vitrine já tem nome',
             'intro' => 'Agora é hora de trazer as peças da '.$this->manufacturer->name.' e ver a coleção ganhar presença diante de representantes e lojistas.',
             'actionLabel' => 'Continuar minha vitrine',
             'actionUrl' => route('onboarding.index'),
