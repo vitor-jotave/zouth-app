@@ -161,6 +161,8 @@ class CatalogSetting extends Model
                 'props' => [
                     'show_logo' => true,
                     'logo_size' => 100,
+                    'image_fit' => 'cover',
+                    'image_scale' => 100,
                     'eyebrow' => 'Nova coleção',
                     'headline' => null,
                     'subtitle' => null,

@@ -73,6 +73,25 @@ it('shows the catalog settings page', function () {
     $response->assertOk();
 });
 
+it('shows the public product count in the catalog preview', function () {
+    Product::factory()
+        ->count(2)
+        ->forManufacturer($this->manufacturer)
+        ->withoutCategory()
+        ->create(['product_type' => 'product']);
+    Product::factory()
+        ->forManufacturer($this->manufacturer)
+        ->withoutCategory()
+        ->create(['product_type' => 'combo']);
+
+    $response = $this->actingAs($this->user)
+        ->get(route('manufacturer.catalog-settings.index'));
+
+    $response->assertOk();
+
+    expect($response->inertiaProps('product_count'))->toBe(2);
+});
+
 it('returns saved settings in page props without data wrapping', function () {
     CatalogSetting::create([
         'manufacturer_id' => $this->manufacturer->id,
@@ -160,6 +179,56 @@ it('rejects a catalog logo size outside the editor range', function (int $logoSi
             catalogSettingsUpdatePayload(['sections' => $sections]),
         )
         ->assertSessionHasErrors('sections.0.props.logo_size');
+})->with([
+    'smaller than the minimum' => 49,
+    'larger than the maximum' => 201,
+]);
+
+it('saves the campaign image fit and manual scale inside the cover settings', function () {
+    $setting = createCatalogSettingFor($this->manufacturer);
+    $sections = CatalogSetting::defaultSections();
+    $sections[0]['props']['image_fit'] = 'manual';
+    $sections[0]['props']['image_scale'] = 135;
+
+    $this->actingAs($this->user)
+        ->put(
+            route('manufacturer.catalog-settings.update'),
+            catalogSettingsUpdatePayload(['sections' => $sections]),
+        )
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
+
+    $hero = collect($setting->fresh()->sections)->firstWhere('type', 'hero');
+
+    expect($hero['props']['image_fit'])->toBe('manual')
+        ->and($hero['props']['image_scale'])->toBe(135);
+});
+
+it('rejects an unsupported campaign image fit', function () {
+    createCatalogSettingFor($this->manufacturer);
+    $sections = CatalogSetting::defaultSections();
+    $sections[0]['props']['image_fit'] = 'repeat';
+
+    $this->actingAs($this->user)
+        ->put(
+            route('manufacturer.catalog-settings.update'),
+            catalogSettingsUpdatePayload(['sections' => $sections]),
+        )
+        ->assertSessionHasErrors('sections.0.props.image_fit');
+});
+
+it('rejects a manual campaign image scale outside the editor range', function (int $imageScale) {
+    createCatalogSettingFor($this->manufacturer);
+    $sections = CatalogSetting::defaultSections();
+    $sections[0]['props']['image_fit'] = 'manual';
+    $sections[0]['props']['image_scale'] = $imageScale;
+
+    $this->actingAs($this->user)
+        ->put(
+            route('manufacturer.catalog-settings.update'),
+            catalogSettingsUpdatePayload(['sections' => $sections]),
+        )
+        ->assertSessionHasErrors('sections.0.props.image_scale');
 })->with([
     'smaller than the minimum' => 49,
     'larger than the maximum' => 201,

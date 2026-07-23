@@ -63,12 +63,18 @@ class CatalogSettingsController extends Controller
                     'price_cents' => $product->price_cents,
                 ];
             });
+        $productCount = Product::query()
+            ->where('manufacturer_id', $manufacturer->id)
+            ->where('is_active', true)
+            ->where('product_type', 'product')
+            ->count();
 
         return Inertia::render('manufacturer/catalog-settings/index', [
             'catalog_settings' => (new CatalogSettingResource($setting))->resolve(request()),
             'public_link' => route('public.catalog.show', ['token' => $setting->public_token]),
             'stats' => $this->buildStats($setting),
             'sample_products' => $sampleProducts,
+            'product_count' => $productCount,
             'manufacturer_name' => $manufacturer->name,
             'whatsapp_channel' => [
                 'available' => $whatsappChannel !== null,

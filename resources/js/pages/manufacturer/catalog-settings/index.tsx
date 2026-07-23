@@ -58,9 +58,13 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import AppLayout from '@/layouts/app-layout';
 import {
+    CATALOG_COVER_SCALE,
     CATALOG_LOGO_SIZE,
+    catalogCoverImageStyle,
     catalogLogoStyle,
     GRADIENT_LABELS,
+    normalizeCatalogCoverFit,
+    normalizeCatalogCoverScale,
     normalizeCatalogLogoSize,
     PATTERN_LABELS,
 } from '@/lib/catalog-theming';
@@ -125,6 +129,7 @@ interface Props {
         last_30_days: number;
     };
     sample_products: Product[];
+    product_count: number;
     manufacturer_name: string;
     whatsapp_channel: {
         available: boolean;
@@ -168,6 +173,29 @@ const fontOptions = [
     { value: 'ibm-plex', label: 'IBM Plex Sans' },
 ];
 
+const coverFitOptions = [
+    {
+        value: 'cover',
+        label: 'Cobrir',
+        description: 'Preenche a capa e pode cortar as bordas.',
+    },
+    {
+        value: 'contain',
+        label: 'Conter',
+        description: 'Mostra a foto inteira, sem cortes.',
+    },
+    {
+        value: 'fill',
+        label: 'Estender',
+        description: 'Ocupa todo o espaço, mesmo alterando a proporção.',
+    },
+    {
+        value: 'manual',
+        label: 'Tamanho manual',
+        description: 'Controle a escala e a posição com precisão.',
+    },
+] as const;
+
 const fallbackSections: CatalogSection[] = [
     {
         type: 'hero',
@@ -180,6 +208,8 @@ const fallbackSections: CatalogSection[] = [
             show_cta: true,
             show_product_count: false,
             logo_size: CATALOG_LOGO_SIZE.default,
+            image_fit: 'cover',
+            image_scale: CATALOG_COVER_SCALE.default,
             align: 'left',
         },
     },
@@ -259,10 +289,26 @@ function normalizeSections(sections: CatalogSection[]): CatalogSection[] {
             !current.some((section) => section.type === fallback.type),
     );
 
-    return [...current, ...missing].map((section) => ({
-        ...section,
-        props: { ...section.props },
-    }));
+    return [...current, ...missing].map((section) => {
+        if (section.type !== 'hero') {
+            return {
+                ...section,
+                props: { ...section.props },
+            };
+        }
+
+        return {
+            ...section,
+            props: {
+                ...section.props,
+                logo_size: normalizeCatalogLogoSize(section.props?.logo_size),
+                image_fit: normalizeCatalogCoverFit(section.props?.image_fit),
+                image_scale: normalizeCatalogCoverScale(
+                    section.props?.image_scale,
+                ),
+            },
+        };
+    });
 }
 
 function sectionProp<T extends string | number | boolean | null>(
@@ -466,6 +512,7 @@ export default function CatalogSettings({
     public_link,
     stats,
     sample_products,
+    product_count,
     manufacturer_name,
     whatsapp_channel,
 }: Props) {
@@ -484,6 +531,8 @@ export default function CatalogSettings({
         useState<CatalogSectionType | null>(null);
     const [pendingErrorKey, setPendingErrorKey] = useState<string | null>(null);
     const inspectorRef = useRef<HTMLElement>(null);
+    const previewStageRef = useRef<HTMLDivElement>(null);
+    const [previewStageWidth, setPreviewStageWidth] = useState(0);
 
     const settingsForm = useForm({
         brand_name: settings.brand_name ?? '',
@@ -576,6 +625,12 @@ export default function CatalogSettings({
     const selectedSection = settingsForm.data.sections.find(
         (section) => section.type === activePanel,
     );
+    const previewCanvasWidth = viewport === 'mobile' ? 390 : 1280;
+    const previewFitScale = Math.min(
+        1,
+        (previewStageWidth || previewCanvasWidth) / previewCanvasWidth,
+    );
+    const previewScale = previewFitScale * (zoom / 100);
     const formErrorEntries = Object.entries(settingsForm.errors) as Array<
         [string, string]
     >;
@@ -605,6 +660,24 @@ export default function CatalogSettings({
             : settingsForm.data.show_logo
               ? 'logo'
               : 'name';
+
+    useEffect(() => {
+        const stage = previewStageRef.current;
+
+        if (!stage || typeof ResizeObserver === 'undefined') {
+            return;
+        }
+
+        const updateStageWidth = () => {
+            setPreviewStageWidth(stage.clientWidth);
+        };
+        const observer = new ResizeObserver(updateStageWidth);
+
+        updateStageWidth();
+        observer.observe(stage);
+
+        return () => observer.disconnect();
+    }, []);
 
     useEffect(() => {
         if (!pendingErrorKey) {
@@ -914,6 +987,22 @@ export default function CatalogSettings({
                     CATALOG_LOGO_SIZE.default,
                 ),
             );
+            const coverFit = normalizeCatalogCoverFit(
+                sectionProp(selectedSection, 'image_fit', 'cover'),
+            );
+            const coverScale = normalizeCatalogCoverScale(
+                sectionProp(
+                    selectedSection,
+                    'image_scale',
+                    CATALOG_COVER_SCALE.default,
+                ),
+            );
+            const heroSectionIndex = Math.max(
+                0,
+                settingsForm.data.sections.findIndex(
+                    (section) => section.type === 'hero',
+                ),
+            );
 
             return (
                 <>
@@ -1086,10 +1175,15 @@ export default function CatalogSettings({
                                             undefined
                                         }
                                         alt="Prévia da imagem de campanha"
-                                        className="h-full w-full object-cover"
-                                        style={{
-                                            objectPosition: `${settingsForm.data.cover_image_focal_x}% ${settingsForm.data.cover_image_focal_y}%`,
-                                        }}
+                                        className="h-full w-full"
+                                        style={catalogCoverImageStyle(
+                                            coverFit,
+                                            coverScale,
+                                            settingsForm.data
+                                                .cover_image_focal_x,
+                                            settingsForm.data
+                                                .cover_image_focal_y,
+                                        )}
                                     />
                                 ) : (
                                     <div className="flex h-full flex-col items-center justify-center gap-2 px-5 text-center text-muted-foreground">
@@ -1165,6 +1259,95 @@ export default function CatalogSettings({
                             />
 
                             <div className="space-y-4 border-t border-border pt-4">
+                                <div
+                                    className="space-y-2"
+                                    data-catalog-error={`sections.${heroSectionIndex}.props.image_fit`}
+                                >
+                                    <Label className="text-xs">
+                                        Como a foto ocupa a capa
+                                    </Label>
+                                    <div
+                                        className="grid grid-cols-2 border-t border-l border-border"
+                                        role="radiogroup"
+                                        aria-label="Ajuste da imagem de campanha"
+                                    >
+                                        {coverFitOptions.map((option) => {
+                                            const isSelected =
+                                                coverFit === option.value;
+
+                                            return (
+                                                <button
+                                                    key={option.value}
+                                                    type="button"
+                                                    role="radio"
+                                                    aria-checked={isSelected}
+                                                    onClick={() =>
+                                                        updateSectionProp(
+                                                            'hero',
+                                                            'image_fit',
+                                                            option.value,
+                                                        )
+                                                    }
+                                                    className={cn(
+                                                        'min-h-24 border-r border-b border-border p-3 text-left transition-colors',
+                                                        isSelected
+                                                            ? 'bg-[#18181f] text-white'
+                                                            : 'bg-background hover:bg-[#e7e3dc]/45',
+                                                    )}
+                                                >
+                                                    <span className="block text-xs font-semibold">
+                                                        {option.label}
+                                                    </span>
+                                                    <span
+                                                        className={cn(
+                                                            'mt-1.5 block text-[0.65rem] leading-4',
+                                                            isSelected
+                                                                ? 'text-white/60'
+                                                                : 'text-muted-foreground',
+                                                        )}
+                                                    >
+                                                        {option.description}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {coverFit === 'manual' && (
+                                    <div
+                                        className="space-y-2"
+                                        data-catalog-error={`sections.${heroSectionIndex}.props.image_scale`}
+                                    >
+                                        <div className="flex items-center justify-between gap-3">
+                                            <Label className="text-xs">
+                                                Tamanho da imagem
+                                            </Label>
+                                            <span className="text-[0.68rem] font-semibold text-muted-foreground tabular-nums">
+                                                {coverScale}%
+                                            </span>
+                                        </div>
+                                        <Slider
+                                            aria-label="Tamanho da imagem de campanha"
+                                            min={CATALOG_COVER_SCALE.min}
+                                            max={CATALOG_COVER_SCALE.max}
+                                            step={CATALOG_COVER_SCALE.step}
+                                            value={[coverScale]}
+                                            onValueChange={([value]) =>
+                                                updateSectionProp(
+                                                    'hero',
+                                                    'image_scale',
+                                                    value,
+                                                )
+                                            }
+                                        />
+                                        <div className="flex justify-between text-[0.65rem] text-muted-foreground">
+                                            <span>Menor</span>
+                                            <span>Maior</span>
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="space-y-2">
                                     <div className="flex items-center justify-between gap-3">
                                         <Label className="text-xs">
@@ -2859,34 +3042,37 @@ export default function CatalogSettings({
                         </div>
                         <div className="flex min-h-[680px] flex-1 items-start justify-center overflow-auto p-4 sm:p-6">
                             <div
-                                data-testid="catalog-live-preview"
-                                className={cn(
-                                    'origin-top transition-[width,transform] duration-300 ease-out',
-                                    viewport === 'mobile'
-                                        ? 'w-[390px] max-w-full'
-                                        : 'w-full max-w-[1024px] min-w-[620px]',
-                                )}
-                                style={{
-                                    transform: `scale(${zoom / 100})`,
-                                }}
+                                ref={previewStageRef}
+                                data-testid="catalog-preview-stage"
+                                className="flex w-full items-start justify-center"
                             >
-                                <div className="min-h-[680px] overflow-hidden border border-[#cac4ba] bg-white shadow-[0_18px_50px_rgba(24,24,31,0.08)]">
-                                    <CatalogPreview
-                                        settings={draftSettings}
-                                        products={sample_products}
-                                        manufacturerName={manufacturer_name}
-                                        viewport={viewport}
-                                        selectedSection={
-                                            activePanel === 'hero' ||
-                                            activePanel === 'collections' ||
-                                            activePanel === 'product_grid'
-                                                ? activePanel
-                                                : null
-                                        }
-                                        onSelectSection={(section) =>
-                                            setActivePanel(section)
-                                        }
-                                    />
+                                <div
+                                    data-testid="catalog-live-preview"
+                                    className="origin-top transition-[zoom] duration-300 ease-out"
+                                    style={{
+                                        width: `${previewCanvasWidth}px`,
+                                        zoom: previewScale,
+                                    }}
+                                >
+                                    <div className="min-h-[680px] overflow-hidden border border-[#cac4ba] bg-white shadow-[0_18px_50px_rgba(24,24,31,0.08)]">
+                                        <CatalogPreview
+                                            settings={draftSettings}
+                                            products={sample_products}
+                                            productCount={product_count}
+                                            manufacturerName={manufacturer_name}
+                                            viewport={viewport}
+                                            selectedSection={
+                                                activePanel === 'hero' ||
+                                                activePanel === 'collections' ||
+                                                activePanel === 'product_grid'
+                                                    ? activePanel
+                                                    : null
+                                            }
+                                            onSelectSection={(section) =>
+                                                setActivePanel(section)
+                                            }
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
