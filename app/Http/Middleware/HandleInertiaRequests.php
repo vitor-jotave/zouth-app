@@ -52,6 +52,7 @@ class HandleInertiaRequests extends Middleware
                 'upgrade_success' => fn () => $request->session()->get('upgrade_success'),
                 'downgrade_violations' => fn () => $request->session()->get('downgrade_violations'),
                 'plan_selection_url' => fn () => $request->session()->get('plan_selection_url'),
+                'demo_credentials' => fn () => $request->session()->get('demo_credentials'),
             ],
         ];
     }

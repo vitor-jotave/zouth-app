@@ -27,6 +27,7 @@ class Manufacturer extends Model
         'slug',
         'primary_owner_user_id',
         'is_active',
+        'is_demo',
         'current_plan_id',
         'trial_ends_at',
         'trial_started_at',
@@ -62,6 +63,7 @@ class Manufacturer extends Model
     {
         return [
             'is_active' => 'boolean',
+            'is_demo' => 'boolean',
             'trial_ends_at' => 'datetime',
             'trial_started_at' => 'datetime',
             'trial_expired_at' => 'datetime',

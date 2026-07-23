@@ -22,6 +22,10 @@ class PlanLimitService
     {
         $plan = $manufacturer->currentPlan;
 
+        if ($manufacturer->is_demo) {
+            return $plan;
+        }
+
         if ($plan && $manufacturer->onGenericTrial()) {
             return $plan;
         }
@@ -47,6 +51,10 @@ class PlanLimitService
     {
         if (! $manufacturer->is_active) {
             return false;
+        }
+
+        if ($manufacturer->is_demo) {
+            return $manufacturer->currentPlan !== null;
         }
 
         if ($manufacturer->trial_started_at === null) {
