@@ -37,7 +37,7 @@ class TrialPausedNotification extends Notification implements ShouldQueue
     {
         $messageData = [
             'eyebrow' => 'SEU TRABALHO ESTÁ PRESERVADO',
-            'title' => 'A coleção parou. Nada foi perdido.',
+            'title' => 'A coleção parou. Nada foi perdido',
             'intro' => 'A conta da '.$this->manufacturer->name.' foi pausada e o catálogo deixou de circular. Produtos, imagens, clientes e configurações continuam guardados para quando você quiser retomar.',
             'actionLabel' => 'Retomar minha coleção',
             'actionUrl' => route('manufacturer.account-paused'),

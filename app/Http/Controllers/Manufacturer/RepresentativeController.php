@@ -8,6 +8,7 @@ use App\Models\ManufacturerAffiliation;
 use App\Models\Order;
 use App\Models\RepresentativeInvitation;
 use App\Services\PlanLimitService;
+use App\Services\RepresentativeNotificationService;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,7 +18,10 @@ use Inertia\Response;
 
 class RepresentativeController extends Controller
 {
-    public function __construct(private PlanLimitService $limitService) {}
+    public function __construct(
+        private PlanLimitService $limitService,
+        private RepresentativeNotificationService $notificationService,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -182,6 +186,8 @@ class RepresentativeController extends Controller
                 ->with('limit_exceeded', $this->limitService->limitExceededPayload($manufacturer, 'reps'));
         }
 
+        $this->notificationService->notifyStatusChanged($affiliation->refresh());
+
         return back()->with('status', 'Representante aprovado e pronto para movimentar a coleção.');
     }
 
@@ -198,6 +204,7 @@ class RepresentativeController extends Controller
             'rejected_at' => now(),
             'decided_by_user_id' => $request->user()->id,
         ]);
+        $this->notificationService->notifyStatusChanged($affiliation->refresh());
 
         return back()->with('status', 'Solicitação recusada e preservada no histórico.');
     }
@@ -215,6 +222,7 @@ class RepresentativeController extends Controller
             'revoked_at' => now(),
             'decided_by_user_id' => $request->user()->id,
         ]);
+        $this->notificationService->notifyStatusChanged($affiliation->refresh());
 
         return back()->with('status', 'Vínculo encerrado. Pedidos e histórico foram preservados.');
     }

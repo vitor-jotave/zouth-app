@@ -10,6 +10,7 @@ use App\Models\ProductMedia;
 use App\Models\ProductVariantStock;
 use App\Models\VariationType;
 use App\Models\VariationValue;
+use App\Notifications\ProductImportFinishedNotification;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -92,7 +93,20 @@ class ProductImportExecutionService
             'completed_at' => now(),
         ]);
 
-        return $productImport->refresh();
+        $productImport = $productImport->refresh()->loadMissing('user');
+
+        if ($productImport->user?->hasVerifiedEmail()) {
+            try {
+                $productImport->user->notify(new ProductImportFinishedNotification($productImport));
+            } catch (Throwable $exception) {
+                Log::error('Could not queue product import notification.', [
+                    'product_import_id' => $productImport->id,
+                    'exception' => $exception,
+                ]);
+            }
+        }
+
+        return $productImport;
     }
 
     private function upsertProduct(ProductImport $productImport, string $sku, Collection $rows): Product

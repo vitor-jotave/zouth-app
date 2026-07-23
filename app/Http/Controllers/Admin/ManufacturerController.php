@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateManufacturerRequest;
 use App\Mail\PlanSelectionInvite;
 use App\Models\Manufacturer;
 use App\Models\User;
+use App\Notifications\ManufacturerOwnerInvitationNotification;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
@@ -118,8 +119,13 @@ class ManufacturerController extends Controller
                 'primary_owner_user_id' => $owner->id,
             ]);
 
-            Password::sendResetLink(['email' => $owner->email]);
         });
+
+        $passwordToken = Password::broker()->createToken($owner);
+        $owner->notify(new ManufacturerOwnerInvitationNotification(
+            $passwordToken,
+            $manufacturer,
+        ));
 
         $planSelectionUrl = URL::temporarySignedRoute(
             'plan-selection.show',

@@ -134,6 +134,29 @@ it('sends a plan selection invite email after manufacturer creation', function (
     });
 });
 
+it('renders the plan selection invite with the Zouth email layout', function () {
+    $manufacturer = Manufacturer::factory()->make(['name' => 'Petit Monde']);
+    $mail = new PlanSelectionInvite(
+        $manufacturer,
+        'Marina',
+        'https://zouth.app/plan-selection/signed',
+    );
+    $content = $mail->content();
+
+    expect($content->view)
+        ->toBe('emails.onboarding.message')
+        ->and($content->text)
+        ->toBe('emails.onboarding.message-text')
+        ->and($content->markdown)
+        ->toBeNull()
+        ->and($content->with)
+        ->toMatchArray([
+            'eyebrow' => 'ESCOLHA O PRÓXIMO PASSO',
+            'actionLabel' => 'Escolher meu plano',
+            'actionUrl' => 'https://zouth.app/plan-selection/signed',
+        ]);
+});
+
 it('flashes plan_selection_url to session after manufacturer creation', function () {
     $superadmin = User::factory()->create(['user_type' => 'superadmin']);
     actingAs($superadmin);

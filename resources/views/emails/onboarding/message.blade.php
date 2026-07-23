@@ -12,7 +12,8 @@
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#f6f4f0;border:1px solid #cac4ba;">
                 <tr>
                     <td style="padding:32px 40px;border-bottom:1px solid #cac4ba;">
-                        <img src="{{ asset('/brand/zouth/assets/logo-duotone-dark.png') }}" width="164" alt="Zouth" style="display:block;width:164px;height:auto;border:0;">
+                        @php($logoPath = public_path('brand/zouth/assets/logo-duotone-dark.png'))
+                        <img src="{{ isset($message) && file_exists($logoPath) ? $message->embed($logoPath) : asset('/brand/zouth/assets/logo-duotone-dark.png') }}" width="164" alt="Zouth" style="display:block;width:164px;height:auto;border:0;">
                     </td>
                 </tr>
                 <tr>

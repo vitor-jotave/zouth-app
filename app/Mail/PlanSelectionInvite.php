@@ -38,7 +38,19 @@ class PlanSelectionInvite extends Mailable
     public function content(): Content
     {
         return new Content(
-            markdown: 'emails.manufacturers.plan-selection',
+            view: 'emails.onboarding.message',
+            text: 'emails.onboarding.message-text',
+            with: [
+                'eyebrow' => 'ESCOLHA O PRÓXIMO PASSO',
+                'title' => 'Um plano para o momento da '.$this->manufacturer->name,
+                'intro' => 'Olá, '.$this->ownerName.'. A estrutura comercial da '.$this->manufacturer->name.' já está criada. Escolha o plano que acompanha o tamanho da operação e coloque a coleção em movimento.',
+                'actionLabel' => 'Escolher meu plano',
+                'actionUrl' => $this->planSelectionUrl,
+                'note' => 'Este link fica disponível por 3 dias. Depois desse prazo, fale com a equipe Zouth para receber um novo acesso.',
+                'textTitle' => 'Escolha o plano da '.$this->manufacturer->name,
+                'textIntro' => 'A estrutura comercial da marca já está criada.',
+                'textNote' => 'Este link fica disponível por 3 dias.',
+            ],
         );
     }
 

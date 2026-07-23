@@ -10,6 +10,7 @@ use App\Http\Requests\UpdateManufacturerUserAccessRequest;
 use App\Http\Requests\UpdateManufacturerUserStatusRequest;
 use App\Models\Manufacturer;
 use App\Models\User;
+use App\Notifications\TeamInvitationNotification;
 use App\Services\PlanLimitService;
 use App\Services\TenantManager;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -106,7 +107,13 @@ class UserController extends Controller
                 : null,
         ]);
 
-        Password::sendResetLink(['email' => $user->email]);
+        $token = Password::broker()->createToken($user);
+        $user->notify(new TeamInvitationNotification(
+            $token,
+            $manufacturer,
+            $request->user(),
+            $validated['role'],
+        ));
 
         return redirect()->back()->with('success', 'Pessoa convidada. O e-mail para criar a senha foi enviado.');
     }

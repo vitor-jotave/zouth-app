@@ -40,7 +40,7 @@ class TrialEndingNotification extends Notification implements ShouldQueue
         $timeLabel = $this->daysRemaining === 1 ? 'último dia' : 'três dias';
         $messageData = [
             'eyebrow' => $this->daysRemaining === 1 ? 'ÚLTIMO DIA DE TESTE' : 'FALTAM 3 DIAS',
-            'title' => $this->daysRemaining === 1 ? 'Mantenha a coleção em movimento.' : 'Sua coleção já encontrou um novo ritmo.',
+            'title' => $this->daysRemaining === 1 ? 'Mantenha a coleção em movimento' : 'Sua coleção já encontrou um novo ritmo',
             'intro' => 'Escolha o plano que acompanha o momento da '.$this->manufacturer->name.'. Ao continuar, todo o trabalho feito até aqui permanece exatamente onde está.',
             'actionLabel' => 'Escolher meu plano',
             'actionUrl' => route('manufacturer.billing.index'),

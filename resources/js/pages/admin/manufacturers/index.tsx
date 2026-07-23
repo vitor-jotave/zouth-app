@@ -370,8 +370,9 @@ export default function ManufacturersIndex({ manufacturers }: Props) {
                                 <DialogTitle>Criar Novo Fabricante</DialogTitle>
                                 <DialogDescription>
                                     Preencha os dados do fabricante e do
-                                    responsável. Um link de redefinição de senha
-                                    será enviado ao responsável.
+                                    responsável. Os convites para criar o acesso
+                                    e escolher o plano serão enviados por
+                                    e-mail.
                                 </DialogDescription>
                             </DialogHeader>
                             <form

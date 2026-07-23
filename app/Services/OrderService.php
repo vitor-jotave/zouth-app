@@ -18,6 +18,7 @@ class OrderService
         private InventoryReservationService $inventoryReservationService,
         private OrderCartBuilder $orderCartBuilder,
         private OrderRuleEvaluator $orderRuleEvaluator,
+        private OrderNotificationService $orderNotificationService,
     ) {}
 
     /**
@@ -50,7 +51,7 @@ class OrderService
      */
     public function createPublicOrder(array $data): Order
     {
-        return DB::transaction(function () use ($data) {
+        $order = DB::transaction(function () use ($data) {
             $cart = $this->orderCartBuilder->build(
                 $data['manufacturer_id'],
                 $data['items'],
@@ -169,6 +170,10 @@ class OrderService
 
             return $order->load('items');
         });
+
+        $this->orderNotificationService->notifyCreated($order);
+
+        return $order;
     }
 
     /**
@@ -188,7 +193,7 @@ class OrderService
 
     public function updateStatus(Order $order, OrderStatus $newStatus, ?int $userId = null): Order
     {
-        return DB::transaction(function () use ($order, $newStatus, $userId): Order {
+        [$updatedOrder, $previousStatus] = DB::transaction(function () use ($order, $newStatus, $userId): array {
             $lockedOrder = Order::query()->lockForUpdate()->findOrFail($order->id);
             $oldStatus = $lockedOrder->status;
 
@@ -207,7 +212,11 @@ class OrderService
                 'created_at' => now(),
             ]);
 
-            return $lockedOrder->refresh();
+            return [$lockedOrder->refresh(), $oldStatus];
         });
+
+        $this->orderNotificationService->notifyStatusChanged($updatedOrder, $previousStatus);
+
+        return $updatedOrder;
     }
 }

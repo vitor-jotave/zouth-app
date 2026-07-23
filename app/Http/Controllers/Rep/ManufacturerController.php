@@ -8,6 +8,7 @@ use App\Http\Resources\ProductCatalogResource;
 use App\Models\Manufacturer;
 use App\Models\ManufacturerAffiliation;
 use App\Models\Product;
+use App\Services\RepresentativeNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -16,6 +17,10 @@ use Inertia\Response;
 
 class ManufacturerController extends Controller
 {
+    public function __construct(
+        private RepresentativeNotificationService $notificationService,
+    ) {}
+
     public function index(Request $request): Response
     {
         $user = $request->user();
@@ -134,12 +139,13 @@ class ManufacturerController extends Controller
                 'revoked_at' => null,
                 'decided_by_user_id' => null,
             ]);
+            $this->notificationService->notifyApplicationReceived($existing->refresh());
 
             return redirect()->back()->with('status', 'Sua apresentação foi reenviada para análise.');
         }
 
         // Create new affiliation request
-        ManufacturerAffiliation::create([
+        $affiliation = ManufacturerAffiliation::create([
             'manufacturer_id' => $manufacturer->id,
             'user_id' => $user->id,
             'status' => 'pending',
@@ -147,6 +153,7 @@ class ManufacturerController extends Controller
             'application_note' => $data['application_note'],
             'requested_at' => now(),
         ]);
+        $this->notificationService->notifyApplicationReceived($affiliation);
 
         return redirect()->back()->with('status', 'Sua apresentação chegou ao fabricante.');
     }
