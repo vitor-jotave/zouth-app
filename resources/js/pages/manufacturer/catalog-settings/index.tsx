@@ -25,7 +25,7 @@ import {
     Upload,
 } from 'lucide-react';
 import type { DragEvent, ReactNode } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import CatalogPreview, {
     type CatalogSection,
     type CatalogSectionType,
@@ -201,6 +201,49 @@ const fallbackSections: CatalogSection[] = [
     },
 ];
 
+const panelLabels: Record<CatalogPanel, string> = {
+    hero: 'Capa',
+    collections: 'Coleções',
+    product_grid: 'Produtos',
+    appearance: 'Aparência',
+    publish: 'Publicar',
+};
+
+function panelForError(
+    errorKey: string,
+    sections: CatalogSection[],
+): CatalogPanel {
+    const sectionMatch = errorKey.match(/^sections\.(\d+)\./);
+
+    if (sectionMatch) {
+        return sections[Number(sectionMatch[1])]?.type ?? 'hero';
+    }
+
+    if (
+        [
+            'brand_name',
+            'show_brand_name',
+            'show_logo',
+            'tagline',
+            'description',
+            'cover_image_focal_x',
+            'cover_image_focal_y',
+        ].includes(errorKey)
+    ) {
+        return 'hero';
+    }
+
+    if (['layout_density', 'card_style'].includes(errorKey)) {
+        return 'product_grid';
+    }
+
+    if (['hide_prices', 'public_link_active'].includes(errorKey)) {
+        return 'publish';
+    }
+
+    return 'appearance';
+}
+
 function normalizeSections(sections: CatalogSection[]): CatalogSection[] {
     const current = sections.length ? sections : fallbackSections;
     const missing = fallbackSections.filter(
@@ -272,17 +315,24 @@ function SegmentedControl({
     value,
     options,
     onChange,
+    error,
+    errorKey,
 }: {
     label: string;
     value: string;
     options: Array<{ value: string; label: string; icon?: ReactNode }>;
     onChange: (value: string) => void;
+    error?: string;
+    errorKey?: string;
 }) {
     return (
-        <div className="space-y-2">
+        <div className="space-y-2" data-catalog-error={errorKey}>
             <Label className="text-xs">{label}</Label>
             <div
                 className="grid border border-border bg-[#f6f4f0]"
+                role="group"
+                aria-label={label}
+                aria-invalid={Boolean(error)}
                 style={{
                     gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))`,
                 }}
@@ -306,6 +356,7 @@ function SegmentedControl({
                     </button>
                 ))}
             </div>
+            <InputError message={error} />
         </div>
     );
 }
@@ -316,15 +367,17 @@ function ColorField({
     value,
     onChange,
     error,
+    errorKey,
 }: {
     id: string;
     label: string;
     value: string;
     onChange: (value: string) => void;
     error?: string;
+    errorKey?: string;
 }) {
     return (
-        <div className="space-y-2">
+        <div className="space-y-2" data-catalog-error={errorKey}>
             <Label htmlFor={id} className="text-xs">
                 {label}
             </Label>
@@ -346,6 +399,7 @@ function ColorField({
                     id={id}
                     value={value}
                     onChange={(event) => onChange(event.target.value)}
+                    aria-invalid={Boolean(error)}
                     className="h-11 rounded-[2px] border-border bg-transparent font-mono text-xs uppercase shadow-none focus-visible:border-[#18181f] focus-visible:ring-0"
                 />
             </div>
@@ -386,6 +440,19 @@ function OptionSwitch({
     );
 }
 
+function PanelErrorBadge({ count }: { count?: number }) {
+    if (!count) {
+        return null;
+    }
+
+    return (
+        <span className="mt-1 inline-flex items-center gap-1.5 text-[0.62rem] font-bold tracking-[0.08em] text-[#b5271d] uppercase">
+            <span className="size-1.5 rounded-full bg-[#ff4d3d]" />
+            {count} {count === 1 ? 'ajuste' : 'ajustes'}
+        </span>
+    );
+}
+
 export default function CatalogSettings({
     catalog_settings: settings,
     public_link,
@@ -405,6 +472,8 @@ export default function CatalogSettings({
     const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
     const [draggedSection, setDraggedSection] =
         useState<CatalogSectionType | null>(null);
+    const [pendingErrorKey, setPendingErrorKey] = useState<string | null>(null);
+    const inspectorRef = useRef<HTMLElement>(null);
 
     const settingsForm = useForm({
         brand_name: settings.brand_name ?? '',
@@ -426,18 +495,36 @@ export default function CatalogSettings({
         cover_image_focal_y: settings.cover_image_focal_y ?? 50,
         public_link_active: settings.public_link_active ?? true,
         layout_preset: 'minimal',
-        layout_density: settings.layout_density ?? 'comfortable',
-        card_style: settings.card_style ?? 'soft',
-        background_mode: settings.background_mode ?? 'solid',
+        layout_density:
+            settings.layout_density === 'compact' ? 'compact' : 'comfortable',
+        card_style: settings.card_style === 'flat' ? 'flat' : 'soft',
+        background_mode: ['solid', 'image', 'pattern', 'gradient'].includes(
+            settings.background_mode,
+        )
+            ? settings.background_mode
+            : 'solid',
         background_image_opacity: settings.background_image_opacity ?? 20,
         background_overlay_color:
             settings.background_overlay_color ?? '#000000',
         background_overlay_opacity: settings.background_overlay_opacity ?? 10,
         background_blur: settings.background_blur ?? 0,
-        pattern_id: settings.pattern_id ?? 'dots',
+        pattern_id: ['confetti', 'stars', 'clouds', 'dots'].includes(
+            settings.pattern_id ?? '',
+        )
+            ? (settings.pattern_id ?? 'dots')
+            : 'dots',
         pattern_color: settings.pattern_color ?? settings.primary_color,
         pattern_opacity: settings.pattern_opacity ?? 12,
-        gradient_id: settings.gradient_id ?? 'soft-sky',
+        gradient_id: [
+            'sunset',
+            'soft-sky',
+            'mint',
+            'ocean',
+            'lavender',
+            'peach',
+        ].includes(settings.gradient_id ?? '')
+            ? (settings.gradient_id ?? 'soft-sky')
+            : 'soft-sky',
         sections: normalizeSections(settings.sections ?? []),
     });
 
@@ -480,13 +567,65 @@ export default function CatalogSettings({
     const selectedSection = settingsForm.data.sections.find(
         (section) => section.type === activePanel,
     );
-    const hasFormErrors = Object.keys(settingsForm.errors).length > 0;
+    const formErrorEntries = Object.entries(settingsForm.errors) as Array<
+        [string, string]
+    >;
+    const hasFormErrors = formErrorEntries.length > 0;
+    const firstErrorPanel = formErrorEntries[0]
+        ? panelForError(formErrorEntries[0][0], settingsForm.data.sections)
+        : null;
+    const panelErrorCounts = useMemo(
+        () =>
+            formErrorEntries.reduce<Partial<Record<CatalogPanel, number>>>(
+                (counts, [errorKey]) => {
+                    const panel = panelForError(
+                        errorKey,
+                        settingsForm.data.sections,
+                    );
+                    counts[panel] = (counts[panel] ?? 0) + 1;
+
+                    return counts;
+                },
+                {},
+            ),
+        [formErrorEntries, settingsForm.data.sections],
+    );
     const brandDisplay =
         settingsForm.data.show_logo && settingsForm.data.show_brand_name
             ? 'both'
             : settingsForm.data.show_logo
               ? 'logo'
               : 'name';
+
+    useEffect(() => {
+        if (!pendingErrorKey) {
+            return;
+        }
+
+        const timeout = window.setTimeout(() => {
+            const target = inspectorRef.current?.querySelector<HTMLElement>(
+                `[data-catalog-error="${pendingErrorKey}"]`,
+            );
+
+            if (target) {
+                target.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center',
+                });
+                target
+                    .querySelector<HTMLElement>(
+                        'input, textarea, button, [tabindex]:not([tabindex="-1"])',
+                    )
+                    ?.focus({ preventScroll: true });
+            } else {
+                inspectorRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+
+            setPendingErrorKey(null);
+        }, 80);
+
+        return () => window.clearTimeout(timeout);
+    }, [activePanel, pendingErrorKey]);
 
     const updateSection = (
         type: CatalogSectionType,
@@ -572,10 +711,24 @@ export default function CatalogSettings({
         setDraggedSection(null);
     };
 
+    const guideToFirstError = (errors: Record<string, string>) => {
+        const firstErrorKey = Object.keys(errors)[0];
+
+        if (!firstErrorKey) {
+            return;
+        }
+
+        setActivePanel(
+            panelForError(firstErrorKey, settingsForm.data.sections),
+        );
+        setPendingErrorKey(firstErrorKey);
+    };
+
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
         settingsForm.put(manufacturer.catalogSettings.update().url, {
             preserveScroll: true,
+            onError: (errors) => guideToFirstError(errors),
         });
     };
 
@@ -950,7 +1103,10 @@ export default function CatalogSettings({
                     </InspectorSection>
                     <InspectorSection title="Apresentação">
                         <div className="space-y-4">
-                            <div className="space-y-2">
+                            <div
+                                className="space-y-2"
+                                data-catalog-error="brand_name"
+                            >
                                 <Label htmlFor="brand-name" className="text-xs">
                                     Nome da marca
                                 </Label>
@@ -963,6 +1119,9 @@ export default function CatalogSettings({
                                             event.target.value,
                                         )
                                     }
+                                    aria-invalid={Boolean(
+                                        settingsForm.errors.brand_name,
+                                    )}
                                     className="h-11 rounded-[2px] border-border bg-transparent shadow-none focus-visible:border-[#18181f] focus-visible:ring-0"
                                 />
                                 <InputError
@@ -1339,6 +1498,8 @@ export default function CatalogSettings({
                                         value,
                                     )
                                 }
+                                error={settingsForm.errors.layout_density}
+                                errorKey="layout_density"
                             />
                             {sectionProp(
                                 selectedSection,
@@ -1361,12 +1522,20 @@ export default function CatalogSettings({
                                             value,
                                         )
                                     }
+                                    error={settingsForm.errors.card_style}
+                                    errorKey="card_style"
                                 />
                             ) : (
-                                <p className="border-l-2 border-[#ff4d3d] pl-3 text-xs leading-5 text-muted-foreground">
-                                    No lookbook, imagens e informações entram
-                                    direto na página, sem moldura ou sombra.
-                                </p>
+                                <div data-catalog-error="card_style">
+                                    <p className="border-l-2 border-[#ff4d3d] pl-3 text-xs leading-5 text-muted-foreground">
+                                        No lookbook, imagens e informações
+                                        entram direto na página, sem moldura ou
+                                        sombra.
+                                    </p>
+                                    <InputError
+                                        message={settingsForm.errors.card_style}
+                                    />
+                                </div>
                             )}
                         </div>
                     </InspectorSection>
@@ -1501,6 +1670,7 @@ export default function CatalogSettings({
                                     settingsForm.setData('primary_color', value)
                                 }
                                 error={settingsForm.errors.primary_color}
+                                errorKey="primary_color"
                             />
                             <ColorField
                                 id="accent-color"
@@ -1510,6 +1680,7 @@ export default function CatalogSettings({
                                     settingsForm.setData('accent_color', value)
                                 }
                                 error={settingsForm.errors.accent_color}
+                                errorKey="accent_color"
                             />
                             <ColorField
                                 id="secondary-color"
@@ -1522,6 +1693,7 @@ export default function CatalogSettings({
                                     )
                                 }
                                 error={settingsForm.errors.secondary_color}
+                                errorKey="secondary_color"
                             />
                             <ColorField
                                 id="background-color"
@@ -1534,12 +1706,16 @@ export default function CatalogSettings({
                                     )
                                 }
                                 error={settingsForm.errors.background_color}
+                                errorKey="background_color"
                             />
                         </div>
                     </InspectorSection>
                     <InspectorSection title="Tipografia">
                         <div className="space-y-4">
-                            <div className="space-y-2">
+                            <div
+                                className="space-y-2"
+                                data-catalog-error="heading_font_family"
+                            >
                                 <Label className="text-xs">
                                     Títulos e marca
                                 </Label>
@@ -1556,6 +1732,10 @@ export default function CatalogSettings({
                                 >
                                     <SelectTrigger
                                         aria-label="Títulos e marca"
+                                        aria-invalid={Boolean(
+                                            settingsForm.errors
+                                                .heading_font_family,
+                                        )}
                                         className="h-11 rounded-[2px] border-border bg-transparent shadow-none"
                                     >
                                         <SelectValue />
@@ -1577,7 +1757,10 @@ export default function CatalogSettings({
                                     }
                                 />
                             </div>
-                            <div className="space-y-2">
+                            <div
+                                className="space-y-2"
+                                data-catalog-error="body_font_family"
+                            >
                                 <Label className="text-xs">
                                     Textos e informações
                                 </Label>
@@ -1593,6 +1776,10 @@ export default function CatalogSettings({
                                 >
                                     <SelectTrigger
                                         aria-label="Textos e informações"
+                                        aria-invalid={Boolean(
+                                            settingsForm.errors
+                                                .body_font_family,
+                                        )}
                                         className="h-11 rounded-[2px] border-border bg-transparent shadow-none"
                                     >
                                         <SelectValue />
@@ -1637,6 +1824,8 @@ export default function CatalogSettings({
                                         value,
                                     )
                                 }
+                                error={settingsForm.errors.background_mode}
+                                errorKey="background_mode"
                             />
 
                             {settingsForm.data.background_mode === 'image' && (
@@ -1722,7 +1911,10 @@ export default function CatalogSettings({
                             {settingsForm.data.background_mode ===
                                 'pattern' && (
                                 <div className="space-y-4">
-                                    <div className="space-y-2">
+                                    <div
+                                        className="space-y-2"
+                                        data-catalog-error="pattern_id"
+                                    >
                                         <Label className="text-xs">
                                             Desenho
                                         </Label>
@@ -1738,7 +1930,13 @@ export default function CatalogSettings({
                                                 )
                                             }
                                         >
-                                            <SelectTrigger className="h-11 rounded-[2px] border-border bg-transparent shadow-none">
+                                            <SelectTrigger
+                                                aria-invalid={Boolean(
+                                                    settingsForm.errors
+                                                        .pattern_id,
+                                                )}
+                                                className="h-11 rounded-[2px] border-border bg-transparent shadow-none"
+                                            >
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -1754,6 +1952,11 @@ export default function CatalogSettings({
                                                 ))}
                                             </SelectContent>
                                         </Select>
+                                        <InputError
+                                            message={
+                                                settingsForm.errors.pattern_id
+                                            }
+                                        />
                                     </div>
                                     <ColorField
                                         id="pattern-color"
@@ -1768,6 +1971,10 @@ export default function CatalogSettings({
                                                 value,
                                             )
                                         }
+                                        error={
+                                            settingsForm.errors.pattern_color
+                                        }
+                                        errorKey="pattern_color"
                                     />
                                     <div className="space-y-2">
                                         <div className="flex items-center justify-between gap-4 text-xs">
@@ -1800,7 +2007,10 @@ export default function CatalogSettings({
 
                             {settingsForm.data.background_mode ===
                                 'gradient' && (
-                                <div className="space-y-2">
+                                <div
+                                    className="space-y-2"
+                                    data-catalog-error="gradient_id"
+                                >
                                     <Label className="text-xs">
                                         Combinação de cores
                                     </Label>
@@ -1816,7 +2026,12 @@ export default function CatalogSettings({
                                             )
                                         }
                                     >
-                                        <SelectTrigger className="h-11 rounded-[2px] border-border bg-transparent shadow-none">
+                                        <SelectTrigger
+                                            aria-invalid={Boolean(
+                                                settingsForm.errors.gradient_id,
+                                            )}
+                                            className="h-11 rounded-[2px] border-border bg-transparent shadow-none"
+                                        >
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -1832,6 +2047,11 @@ export default function CatalogSettings({
                                             ))}
                                         </SelectContent>
                                     </Select>
+                                    <InputError
+                                        message={
+                                            settingsForm.errors.gradient_id
+                                        }
+                                    />
                                 </div>
                             )}
                         </div>
@@ -1898,7 +2118,7 @@ export default function CatalogSettings({
                     description="Leve a coleção ao lojista e acompanhe sua chegada."
                 />
                 <InspectorSection title="Forma de negociação">
-                    <div className="space-y-4">
+                    <div className="space-y-4" data-catalog-error="hide_prices">
                         <p className="text-xs leading-5 text-muted-foreground">
                             Escolha se o lojista fecha o pedido pelo catálogo ou
                             leva a seleção para uma conversa comercial.
@@ -2006,7 +2226,10 @@ export default function CatalogSettings({
                     </div>
                 </InspectorSection>
                 <InspectorSection>
-                    <div className="flex items-center justify-between gap-4">
+                    <div
+                        className="flex items-center justify-between gap-4"
+                        data-catalog-error="public_link_active"
+                    >
                         <div>
                             <p className="text-sm font-semibold">
                                 Link disponível
@@ -2210,8 +2433,38 @@ export default function CatalogSettings({
                 </header>
 
                 {hasFormErrors && (
-                    <div className="border-b border-[#ff4d3d] bg-[#ff4d3d]/8 px-5 py-3 text-sm text-[#8c241d] lg:px-8">
-                        Revise os campos destacados antes de salvar.
+                    <div
+                        role="alert"
+                        className="flex flex-col gap-3 border-b border-[#ff4d3d] bg-[#ff4d3d]/8 px-5 py-3 text-[#8c241d] sm:flex-row sm:items-center sm:justify-between lg:px-8"
+                    >
+                        <div>
+                            <p className="text-sm font-semibold">
+                                Encontramos {formErrorEntries.length}{' '}
+                                {formErrorEntries.length === 1
+                                    ? 'ajuste antes de salvar.'
+                                    : 'ajustes antes de salvar.'}
+                            </p>
+                            <p className="mt-0.5 text-xs leading-5">
+                                {firstErrorPanel && (
+                                    <>Revise {panelLabels[firstErrorPanel]}: </>
+                                )}
+                                {formErrorEntries[0]?.[1]}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() =>
+                                guideToFirstError(
+                                    settingsForm.errors as Record<
+                                        string,
+                                        string
+                                    >,
+                                )
+                            }
+                            className="min-h-10 shrink-0 border border-[#ff4d3d] px-4 text-xs font-semibold transition-colors hover:bg-[#ff4d3d] hover:text-[#18181f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff4d3d]"
+                        >
+                            Ir para o primeiro campo
+                        </button>
                     </div>
                 )}
 
@@ -2286,6 +2539,13 @@ export default function CatalogSettings({
                                                     <span className="mt-0.5 block truncate text-[0.67rem] text-muted-foreground">
                                                         {meta.description}
                                                     </span>
+                                                    <PanelErrorBadge
+                                                        count={
+                                                            panelErrorCounts[
+                                                                section.type
+                                                            ]
+                                                        }
+                                                    />
                                                 </span>
                                             </button>
                                             <div className="mr-2 flex items-center">
@@ -2365,6 +2625,9 @@ export default function CatalogSettings({
                                     <span className="mt-0.5 block text-[0.67rem] text-muted-foreground">
                                         Cores, fonte e fundo
                                     </span>
+                                    <PanelErrorBadge
+                                        count={panelErrorCounts.appearance}
+                                    />
                                 </span>
                             </button>
                             <button
@@ -2386,6 +2649,9 @@ export default function CatalogSettings({
                                     <span className="mt-0.5 block text-[0.67rem] text-muted-foreground">
                                         Link e interesse
                                     </span>
+                                    <PanelErrorBadge
+                                        count={panelErrorCounts.publish}
+                                    />
                                 </span>
                             </button>
                         </div>
@@ -2506,6 +2772,7 @@ export default function CatalogSettings({
                     </main>
 
                     <aside
+                        ref={inspectorRef}
                         data-testid="catalog-studio-inspector"
                         className="min-w-0 border-t border-border bg-[#f6f4f0] xl:sticky xl:top-0 xl:z-20 xl:max-h-svh xl:self-start xl:overflow-y-auto xl:overscroll-contain xl:border-t-0 xl:border-l"
                     >

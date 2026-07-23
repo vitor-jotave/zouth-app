@@ -31,6 +31,19 @@ it('keeps the catalog studio controls accessible while the preview scrolls', fun
         ->toMatch('/data-testid="catalog-studio-inspector"[^>]+xl:sticky[^>]+xl:top-0[^>]+xl:max-h-svh[^>]+xl:overflow-y-auto/s');
 });
 
+it('reveals the section and field responsible for catalog validation errors', function () {
+    $studio = file_get_contents(resource_path('js/pages/manufacturer/catalog-settings/index.tsx'));
+
+    expect($studio)
+        ->toContain('function panelForError(')
+        ->toContain('guideToFirstError')
+        ->toContain('data-catalog-error')
+        ->toContain('PanelErrorBadge')
+        ->toContain('Ir para o primeiro campo')
+        ->toContain("settings.layout_density === 'compact' ? 'compact' : 'comfortable'")
+        ->toContain("settings.card_style === 'flat' ? 'flat' : 'soft'");
+});
+
 it('places public catalog filters beside the collection navigation without repeated headings', function () {
     $catalog = file_get_contents(resource_path('js/pages/public/catalog.tsx'));
 
