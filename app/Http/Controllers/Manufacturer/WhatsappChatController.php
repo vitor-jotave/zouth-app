@@ -64,7 +64,9 @@ class WhatsappChatController extends Controller
             ]);
         }
 
-        $this->contactProfileSync->sync($instance);
+        if (! $manufacturer->is_demo) {
+            $this->contactProfileSync->sync($instance);
+        }
 
         $conversations = $instance->conversations()
             ->orderByDesc('last_message_at')
@@ -463,7 +465,9 @@ class WhatsappChatController extends Controller
             return response()->json(['conversations' => []]);
         }
 
-        $this->contactProfileSync->sync($instance);
+        if (! $manufacturer->is_demo) {
+            $this->contactProfileSync->sync($instance);
+        }
 
         $conversations = $instance->conversations()
             ->orderByDesc('last_message_at')

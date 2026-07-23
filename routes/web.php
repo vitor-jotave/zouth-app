@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Admin\DemoShowroomController;
 use App\Http\Controllers\Admin\ManufacturerController;
 use App\Http\Controllers\Admin\PlanController;
 use App\Http\Controllers\CatalogSettingsController;
@@ -345,6 +346,11 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant', 'manufacturer.enti
 // Superadmin Routes
 Route::middleware(['auth', 'verified', 'superadmin'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('dashboard', AdminDashboardController::class)->name('dashboard');
+
+    Route::controller(DemoShowroomController::class)->prefix('demo-showroom')->name('demo-showroom.')->group(function () {
+        Route::get('/', 'show')->name('show');
+        Route::post('/', 'store')->name('store');
+    });
 
     Route::controller(ManufacturerController::class)->prefix('manufacturers')->name('manufacturers.')->group(function () {
         Route::get('/', 'index')->name('index');
