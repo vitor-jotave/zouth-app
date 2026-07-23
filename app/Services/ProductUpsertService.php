@@ -149,6 +149,7 @@ class ProductUpsertService
             'description' => $data['description'] ?? null,
             'base_quantity' => $hasVariations ? 0 : (int) ($data['base_quantity'] ?? 0),
             'is_active' => array_key_exists('is_active', $data) ? (bool) $data['is_active'] : true,
+            'allow_quote_when_out_of_stock' => (bool) ($data['allow_quote_when_out_of_stock'] ?? false),
             'sort_order' => (int) ($data['sort_order'] ?? 0),
             'price_cents' => $this->toCents($data['price'] ?? null),
         ];

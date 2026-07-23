@@ -1,4 +1,4 @@
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import {
     AlignCenter,
     AlignLeft,
@@ -13,6 +13,7 @@ import {
     ImageIcon,
     LayoutGrid,
     Link2,
+    Loader2,
     MessageCircle,
     Minus,
     Monitor,
@@ -56,7 +57,13 @@ import {
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import AppLayout from '@/layouts/app-layout';
-import { GRADIENT_LABELS, PATTERN_LABELS } from '@/lib/catalog-theming';
+import {
+    CATALOG_LOGO_SIZE,
+    catalogLogoStyle,
+    GRADIENT_LABELS,
+    normalizeCatalogLogoSize,
+    PATTERN_LABELS,
+} from '@/lib/catalog-theming';
 import { cn } from '@/lib/utils';
 import manufacturer from '@/routes/manufacturer';
 import type { BreadcrumbItem } from '@/types';
@@ -172,6 +179,7 @@ const fallbackSections: CatalogSection[] = [
             cta_text: 'Conheça a coleção',
             show_cta: true,
             show_product_count: false,
+            logo_size: CATALOG_LOGO_SIZE.default,
             align: 'left',
         },
     },
@@ -469,6 +477,8 @@ export default function CatalogSettings({
     const [resetDialogOpen, setResetDialogOpen] = useState(false);
     const [logoCropDialogOpen, setLogoCropDialogOpen] = useState(false);
     const [logoCropFile, setLogoCropFile] = useState<File | null>(null);
+    const [logoUploading, setLogoUploading] = useState(false);
+    const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
     const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
     const [draggedSection, setDraggedSection] =
         useState<CatalogSectionType | null>(null);
@@ -528,7 +538,6 @@ export default function CatalogSettings({
         sections: normalizeSections(settings.sections ?? []),
     });
 
-    const logoForm = useForm<{ logo: File | null }>({ logo: null });
     const backgroundForm = useForm<{ background_image: File | null }>({
         background_image: null,
     });
@@ -758,29 +767,46 @@ export default function CatalogSettings({
             return;
         }
 
+        setLogoUploadError(null);
         setLogoCropFile(file);
         setLogoCropDialogOpen(true);
     };
 
     const handleLogoCropped = (croppedFile: File) => {
-        logoForm.setData('logo', croppedFile);
         setLogoCropFile(null);
         setLogoCropDialogOpen(false);
-    };
+        setLogoUploadError(null);
+        setLogoUploading(true);
 
-    const handleLogoUpload = () => {
-        logoForm.post(manufacturer.catalogSettings.logo().url, {
-            preserveScroll: true,
-            onSuccess: () => {
-                logoForm.reset();
-                setLogoCropFile(null);
+        router.post(
+            manufacturer.catalogSettings.logo().url,
+            { logo: croppedFile },
+            {
+                forceFormData: true,
+                preserveScroll: true,
+                onError: (errors) => {
+                    setLogoUploadError(
+                        errors.logo ??
+                            'Não foi possível enviar a logo. Tente novamente.',
+                    );
+                },
+                onFinish: () => setLogoUploading(false),
             },
-        });
+        );
     };
 
     const handleRemoveLogo = () => {
-        logoForm.delete(manufacturer.catalogSettings.logo.destroy().url, {
+        setLogoUploadError(null);
+        setLogoUploading(true);
+
+        router.delete(manufacturer.catalogSettings.logo.destroy().url, {
             preserveScroll: true,
+            onError: () => {
+                setLogoUploadError(
+                    'Não foi possível remover a logo. Tente novamente.',
+                );
+            },
+            onFinish: () => setLogoUploading(false),
         });
     };
 
@@ -881,6 +907,14 @@ export default function CatalogSettings({
 
     const renderInspector = () => {
         if (activePanel === 'hero') {
+            const logoSize = normalizeCatalogLogoSize(
+                sectionProp(
+                    selectedSection,
+                    'logo_size',
+                    CATALOG_LOGO_SIZE.default,
+                ),
+            );
+
             return (
                 <>
                     <InspectorHeader
@@ -895,7 +929,12 @@ export default function CatalogSettings({
                                     <img
                                         src={settings.logo_url}
                                         alt={settingsForm.data.brand_name}
-                                        className="max-h-16 max-w-full object-contain"
+                                        className="h-auto object-contain"
+                                        style={catalogLogoStyle(
+                                            logoSize,
+                                            160,
+                                            64,
+                                        )}
                                     />
                                 ) : (
                                     <span className="text-xs text-muted-foreground">
@@ -907,48 +946,130 @@ export default function CatalogSettings({
                                 type="file"
                                 accept="image/*"
                                 onChange={handleLogoSelected}
+                                disabled={logoUploading}
                                 className="sr-only"
                                 id="catalog-logo-file"
                             />
-                            <div className="grid grid-cols-2 gap-2">
-                                <Label
-                                    htmlFor="catalog-logo-file"
-                                    className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 border border-border px-3 text-xs font-semibold hover:bg-[#e7e3dc]/45"
-                                >
+                            <Label
+                                htmlFor="catalog-logo-file"
+                                aria-disabled={logoUploading}
+                                className={cn(
+                                    'inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 border border-border px-3 text-xs font-semibold hover:bg-[#e7e3dc]/45',
+                                    logoUploading &&
+                                        'pointer-events-none cursor-wait opacity-60',
+                                )}
+                            >
+                                {logoUploading ? (
+                                    <Loader2
+                                        className="size-4 animate-spin"
+                                        aria-hidden="true"
+                                    />
+                                ) : (
                                     <Upload
                                         className="size-4"
                                         aria-hidden="true"
                                     />
-                                    Escolher logo
-                                </Label>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={handleLogoUpload}
-                                    disabled={
-                                        logoForm.processing ||
-                                        !logoForm.data.logo
-                                    }
-                                    className="min-h-11 rounded-[2px] shadow-none"
-                                >
-                                    Enviar
-                                </Button>
-                            </div>
+                                )}
+                                {logoUploading
+                                    ? 'Enviando logo…'
+                                    : settings.logo_url
+                                      ? 'Trocar logo'
+                                      : 'Escolher logo'}
+                            </Label>
                             {settings.logo_url && (
-                                <button
-                                    type="button"
-                                    onClick={handleRemoveLogo}
-                                    className="text-xs font-semibold text-muted-foreground underline underline-offset-4 hover:text-foreground"
-                                >
-                                    Remover logo atual
-                                </button>
+                                <>
+                                    <div className="space-y-3 border-t border-border pt-4">
+                                        <div className="flex items-center justify-between gap-4">
+                                            <Label className="text-xs">
+                                                Tamanho da logo
+                                            </Label>
+                                            <span className="font-mono text-xs text-muted-foreground">
+                                                {logoSize}%
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <button
+                                                type="button"
+                                                aria-label="Diminuir tamanho da logo"
+                                                disabled={
+                                                    logoSize <=
+                                                    CATALOG_LOGO_SIZE.min
+                                                }
+                                                onClick={() =>
+                                                    updateSectionProp(
+                                                        'hero',
+                                                        'logo_size',
+                                                        Math.max(
+                                                            CATALOG_LOGO_SIZE.min,
+                                                            logoSize - 10,
+                                                        ),
+                                                    )
+                                                }
+                                                className="inline-flex size-9 shrink-0 items-center justify-center border border-border transition-colors hover:bg-[#e7e3dc]/55 disabled:cursor-not-allowed disabled:opacity-35"
+                                            >
+                                                <Minus
+                                                    className="size-3.5"
+                                                    aria-hidden="true"
+                                                />
+                                            </button>
+                                            <Slider
+                                                aria-label="Tamanho da logo"
+                                                min={CATALOG_LOGO_SIZE.min}
+                                                max={CATALOG_LOGO_SIZE.max}
+                                                step={CATALOG_LOGO_SIZE.step}
+                                                value={[logoSize]}
+                                                onValueChange={([value]) =>
+                                                    updateSectionProp(
+                                                        'hero',
+                                                        'logo_size',
+                                                        value,
+                                                    )
+                                                }
+                                                className="flex-1"
+                                            />
+                                            <button
+                                                type="button"
+                                                aria-label="Aumentar tamanho da logo"
+                                                disabled={
+                                                    logoSize >=
+                                                    CATALOG_LOGO_SIZE.max
+                                                }
+                                                onClick={() =>
+                                                    updateSectionProp(
+                                                        'hero',
+                                                        'logo_size',
+                                                        Math.min(
+                                                            CATALOG_LOGO_SIZE.max,
+                                                            logoSize + 10,
+                                                        ),
+                                                    )
+                                                }
+                                                className="inline-flex size-9 shrink-0 items-center justify-center border border-border transition-colors hover:bg-[#e7e3dc]/55 disabled:cursor-not-allowed disabled:opacity-35"
+                                            >
+                                                <Plus
+                                                    className="size-3.5"
+                                                    aria-hidden="true"
+                                                />
+                                            </button>
+                                        </div>
+                                        <div className="flex justify-between text-[0.65rem] text-muted-foreground">
+                                            <span>Discreta</span>
+                                            <span>Protagonista</span>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleRemoveLogo}
+                                        disabled={logoUploading}
+                                        className="text-xs font-semibold text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                                    >
+                                        Remover logo atual
+                                    </button>
+                                </>
                             )}
-                            {logoForm.data.logo && (
-                                <p className="text-xs text-[#2e705a]">
-                                    Recorte pronto para envio.
-                                </p>
-                            )}
-                            <InputError message={logoForm.errors.logo} />
+                            <InputError
+                                message={logoUploadError ?? undefined}
+                            />
                         </div>
                     </InspectorSection>
                     <InspectorSection title="Imagem de campanha">
@@ -2787,13 +2908,13 @@ export default function CatalogSettings({
                 imageFile={logoCropFile}
                 onCropped={handleLogoCropped}
                 onSkip={() => {
-                    logoForm.setData('logo', null);
                     setLogoCropFile(null);
                     setLogoCropDialogOpen(false);
                 }}
                 aspectRatio={null}
                 title="Ajustar logo"
                 description="Recorte próximo da marca. O catálogo preserva o formato original sem cortar a assinatura."
+                allowTransparentBackground
             />
         </AppLayout>
     );

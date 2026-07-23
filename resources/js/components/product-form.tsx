@@ -248,6 +248,8 @@ export function ProductForm({
         product_category_id: product?.product_category_id ?? '',
         base_quantity: product?.base_quantity ?? 0,
         is_active: product?.is_active ?? true,
+        allow_quote_when_out_of_stock:
+            product?.allow_quote_when_out_of_stock ?? false,
         sort_order: product?.sort_order ?? 0,
         price: centsToDisplay(product?.price_cents),
         variations: initialVariations,
@@ -919,11 +921,17 @@ export function ProductForm({
                         variations={data.variations}
                         stocks={computedStocks}
                         baseQuantity={data.base_quantity}
+                        allowQuoteWhenOutOfStock={
+                            data.allow_quote_when_out_of_stock
+                        }
                         errors={formErrors}
                         onToggleType={toggleVariationType}
                         onToggleValue={toggleVariationValue}
                         onBaseQuantityChange={(quantity) =>
                             setData('base_quantity', quantity)
+                        }
+                        onAllowQuoteWhenOutOfStockChange={(enabled) =>
+                            setData('allow_quote_when_out_of_stock', enabled)
                         }
                         onStockChange={updateStockField}
                     />

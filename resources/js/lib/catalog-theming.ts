@@ -98,3 +98,35 @@ export const GRADIENT_LABELS: Record<string, string> = {
     lavender: 'Lavanda',
     peach: 'Pêssego',
 };
+
+export const CATALOG_LOGO_SIZE = {
+    min: 50,
+    max: 200,
+    default: 100,
+    step: 5,
+} as const;
+
+export function normalizeCatalogLogoSize(value: unknown): number {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+        return CATALOG_LOGO_SIZE.default;
+    }
+
+    return Math.min(
+        CATALOG_LOGO_SIZE.max,
+        Math.max(CATALOG_LOGO_SIZE.min, value),
+    );
+}
+
+export function catalogLogoStyle(
+    value: unknown,
+    baseWidth: number,
+    baseMaxHeight: number,
+): { width: string; maxWidth: string; maxHeight: string } {
+    const scale = normalizeCatalogLogoSize(value) / 100;
+
+    return {
+        width: `min(100%, ${Math.round(baseWidth * scale)}px)`,
+        maxWidth: '100%',
+        maxHeight: `${Math.round(baseMaxHeight * scale)}px`,
+    };
+}

@@ -61,6 +61,7 @@ trait ProductValidationRules
             ],
             'base_quantity' => ['nullable', 'integer', 'min:0'],
             'is_active' => ['sometimes', 'boolean'],
+            'allow_quote_when_out_of_stock' => ['sometimes', 'boolean'],
             'sort_order' => ['sometimes', 'integer'],
             'price' => ['nullable', 'numeric', 'min:0', 'max:999999.99'],
 

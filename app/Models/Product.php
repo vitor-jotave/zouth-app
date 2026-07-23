@@ -27,6 +27,7 @@ class Product extends Model
         'description',
         'base_quantity',
         'is_active',
+        'allow_quote_when_out_of_stock',
         'sort_order',
         'price_cents',
     ];
@@ -40,6 +41,7 @@ class Product extends Model
     {
         return [
             'is_active' => 'boolean',
+            'allow_quote_when_out_of_stock' => 'boolean',
             'base_quantity' => 'integer',
             'sort_order' => 'integer',
             'price_cents' => 'integer',

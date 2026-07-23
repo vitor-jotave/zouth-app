@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Manufacturer;
 
 use App\Enums\OrderStatus;
+use App\Enums\OrderType;
 use App\Enums\ProductMediaType;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
@@ -57,6 +58,7 @@ class DashboardController extends Controller
         $grossRevenue = OrderItem::query()
             ->whereHas('order', fn ($query) => $query
                 ->where('manufacturer_id', $manufacturer->id)
+                ->where('order_type', OrderType::Standard)
                 ->where('status', '!=', OrderStatus::Cancelled->value))
             ->selectRaw('COALESCE(SUM(unit_price * quantity), 0) as aggregate')
             ->value('aggregate');
@@ -70,7 +72,9 @@ class DashboardController extends Controller
                 'id' => $order->id,
                 'customer_name' => $order->customer_name,
                 'status' => $order->status->value,
-                'status_label' => $order->status->label(),
+                'status_label' => $order->statusLabel(),
+                'order_type' => $order->order_type->value,
+                'order_type_label' => $order->order_type->label(),
                 'total_items' => $order->totalItems(),
                 'total_amount' => $order->totalAmount(),
                 'sales_rep_name' => $order->salesRep?->name,

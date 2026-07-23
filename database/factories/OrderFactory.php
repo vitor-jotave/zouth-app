@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Enums\OrderStatus;
+use App\Enums\OrderType;
 use App\Models\Customer;
 use App\Models\Manufacturer;
 use App\Models\Order;
@@ -24,6 +25,7 @@ class OrderFactory extends Factory
             'sales_rep_id' => null,
             'public_token' => Str::random(48),
             'status' => OrderStatus::New,
+            'order_type' => OrderType::Standard,
             'customer_name' => fake()->name(),
             'customer_phone' => fake()->numerify('(##) #####-####'),
             'customer_email' => fake()->safeEmail(),

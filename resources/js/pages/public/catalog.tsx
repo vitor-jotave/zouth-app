@@ -64,7 +64,13 @@ import {
     SheetHeader,
     SheetTitle,
 } from '@/components/ui/sheet';
-import { LAYOUT_TOKENS, PATTERNS, GRADIENTS } from '@/lib/catalog-theming';
+import {
+    CATALOG_LOGO_SIZE,
+    catalogLogoStyle,
+    GRADIENTS,
+    LAYOUT_TOKENS,
+    PATTERNS,
+} from '@/lib/catalog-theming';
 import {
     evaluateOrderRules,
     pendingRuleProgress,
@@ -153,6 +159,7 @@ interface Product {
         quantity: number;
     }>;
     total_stock: number;
+    allow_quote_when_out_of_stock: boolean;
     price_cents?: number | null;
 }
 
@@ -837,7 +844,9 @@ function ProductQuickViewModal({
     }
 
     const availableStock = availableStockForSelection(product, selectedValues);
-    const canAdd = availableStock !== null && availableStock > 0;
+    const canAdd =
+        availableStock !== null &&
+        (availableStock > 0 || product.allow_quote_when_out_of_stock);
 
     return (
         <Dialog
@@ -924,7 +933,9 @@ function ProductQuickViewModal({
                                     ? `${product.total_stock} unidade(s) disponíveis`
                                     : availableStock > 0
                                       ? `${availableStock} unidade(s) nesta opção`
-                                      : 'Opção sem estoque disponível'}
+                                      : product.allow_quote_when_out_of_stock
+                                        ? 'Sem estoque imediato · disponível para orçamento'
+                                        : 'Opção sem estoque disponível'}
                             </p>
                             <Button
                                 type="button"
@@ -940,6 +951,9 @@ function ProductQuickViewModal({
                                 <AddToCartContent
                                     isAdded={isAdded}
                                     availableStock={availableStock}
+                                    acceptsQuote={
+                                        product.allow_quote_when_out_of_stock
+                                    }
                                 />
                             </Button>
                         </div>
@@ -1451,9 +1465,11 @@ function CatalogCollections({
 function AddToCartContent({
     isAdded,
     availableStock,
+    acceptsQuote = false,
 }: {
     isAdded: boolean;
     availableStock: number | null;
+    acceptsQuote?: boolean;
 }) {
     if (isAdded) {
         return (
@@ -1469,7 +1485,14 @@ function AddToCartContent({
     }
 
     if (availableStock === 0) {
-        return <>Esgotado</>;
+        return acceptsQuote ? (
+            <>
+                <MessageCircle className="h-4 w-4" />
+                Pedir orçamento
+            </>
+        ) : (
+            <>Esgotado</>
+        );
     }
 
     return (
@@ -2011,6 +2034,7 @@ function MinimalLayout({
     const collectionsEnabled = collectionsSection?.enabled ?? true;
     const showBrandName = settings.show_brand_name;
     const showLogo = settings.show_logo && Boolean(settings.logo_url);
+    const logoSize = heroSection?.props?.logo_size ?? CATALOG_LOGO_SIZE.default;
     const headingFont =
         fontMap[settings.heading_font_family ?? settings.font_family] ??
         fontMap['space-grotesk'];
@@ -2129,7 +2153,12 @@ function MinimalLayout({
                                             settings.brand_name ??
                                             manufacturer.name
                                         }
-                                        className="h-auto max-h-24 w-auto max-w-72 object-contain sm:max-h-28 sm:max-w-80"
+                                        className="h-auto object-contain"
+                                        style={catalogLogoStyle(
+                                            logoSize,
+                                            320,
+                                            112,
+                                        )}
                                     />
                                 </div>
                             )}
@@ -2344,7 +2373,8 @@ function MinimalLayout({
                                     );
                                 const canAdd =
                                     availableStock !== null &&
-                                    availableStock > 0;
+                                    (availableStock > 0 ||
+                                        product.allow_quote_when_out_of_stock);
                                 const visibleStock =
                                     availableStock ?? product.total_stock;
                                 const openOptionsInsteadOfAdding =
@@ -2558,6 +2588,9 @@ function MinimalLayout({
                                                                         availableStock={
                                                                             availableStock
                                                                         }
+                                                                        acceptsQuote={
+                                                                            product.allow_quote_when_out_of_stock
+                                                                        }
                                                                     />
                                                                 )}
                                                             </button>
@@ -2588,6 +2621,9 @@ function MinimalLayout({
                                                                     }
                                                                     availableStock={
                                                                         availableStock
+                                                                    }
+                                                                    acceptsQuote={
+                                                                        product.allow_quote_when_out_of_stock
                                                                     }
                                                                 />
                                                             </button>
@@ -2626,8 +2662,9 @@ function PlayfulLayout({
     filterOptions,
     onSelectVariation,
 }: LayoutProps) {
-    const heroEnabled =
-        settings.sections?.find((s) => s.type === 'hero')?.enabled ?? true;
+    const heroSection = settings.sections?.find((s) => s.type === 'hero');
+    const heroEnabled = heroSection?.enabled ?? true;
+    const logoSize = heroSection?.props?.logo_size ?? CATALOG_LOGO_SIZE.default;
     const productGridEnabled =
         settings.sections?.find((s) => s.type === 'product_grid')?.enabled ??
         true;
@@ -2671,7 +2708,8 @@ function PlayfulLayout({
                                     alt={
                                         settings.brand_name ?? manufacturer.name
                                     }
-                                    className="h-auto max-h-28 w-auto max-w-72 object-contain sm:max-h-32 sm:max-w-80"
+                                    className="h-auto object-contain"
+                                    style={catalogLogoStyle(logoSize, 320, 128)}
                                 />
                             </div>
                         )}
@@ -2788,7 +2826,9 @@ function PlayfulLayout({
                                 selectedValues,
                             );
                             const canAdd =
-                                availableStock !== null && availableStock > 0;
+                                availableStock !== null &&
+                                (availableStock > 0 ||
+                                    product.allow_quote_when_out_of_stock);
 
                             return (
                                 <article
@@ -2904,6 +2944,9 @@ function PlayfulLayout({
                                             <AddToCartContent
                                                 isAdded={isAdded}
                                                 availableStock={availableStock}
+                                                acceptsQuote={
+                                                    product.allow_quote_when_out_of_stock
+                                                }
                                             />
                                         </button>
                                     </div>
@@ -2936,8 +2979,9 @@ function BoutiqueLayout({
     filterOptions,
     onSelectVariation,
 }: LayoutProps) {
-    const heroEnabled =
-        settings.sections?.find((s) => s.type === 'hero')?.enabled ?? true;
+    const heroSection = settings.sections?.find((s) => s.type === 'hero');
+    const heroEnabled = heroSection?.enabled ?? true;
+    const logoSize = heroSection?.props?.logo_size ?? CATALOG_LOGO_SIZE.default;
     const productGridEnabled =
         settings.sections?.find((s) => s.type === 'product_grid')?.enabled ??
         true;
@@ -3026,7 +3070,12 @@ function BoutiqueLayout({
                                             settings.brand_name ??
                                             manufacturer.name
                                         }
-                                        className="h-auto max-h-36 w-auto max-w-[28rem] object-contain sm:max-h-40"
+                                        className="h-auto object-contain"
+                                        style={catalogLogoStyle(
+                                            logoSize,
+                                            448,
+                                            160,
+                                        )}
                                     />
                                 </div>
                             </div>
@@ -3092,7 +3141,9 @@ function BoutiqueLayout({
                                 selectedValues,
                             );
                             const canAdd =
-                                availableStock !== null && availableStock > 0;
+                                availableStock !== null &&
+                                (availableStock > 0 ||
+                                    product.allow_quote_when_out_of_stock);
 
                             return (
                                 <article
@@ -3184,6 +3235,9 @@ function BoutiqueLayout({
                                             <AddToCartContent
                                                 isAdded={isAdded}
                                                 availableStock={availableStock}
+                                                acceptsQuote={
+                                                    product.allow_quote_when_out_of_stock
+                                                }
                                             />
                                         </button>
                                     </div>
@@ -3278,6 +3332,18 @@ export default function PublicCatalog({
         ? `${cartCompositionTotal} ${cartCompositionTotal === 1 ? 'composição' : 'composições'}`
         : `${cartTotal} ${cartTotal === 1 ? 'seleção' : 'seleções'}`;
     const cartPieceLabel = `${cartPieceTotal} ${cartPieceTotal === 1 ? 'peça' : 'peças'}`;
+    const cartRequiresQuote = cart.some((item) => {
+        const availableStock = availableStockForSelection(
+            item.product,
+            item.selected_variations ?? {},
+        );
+
+        return (
+            item.product.allow_quote_when_out_of_stock &&
+            availableStock !== null &&
+            item.quantity > availableStock
+        );
+    });
     const whatsappMessage = whatsapp_checkout.enabled
         ? buildWhatsappCartMessage(
               catalog_settings.brand_name ?? manufacturer.name,
@@ -3385,7 +3451,10 @@ export default function PublicCatalog({
                 selectedValues,
             );
 
-            if (availableStock === null || availableStock === 0) {
+            if (
+                availableStock === null ||
+                (availableStock === 0 && !product.allow_quote_when_out_of_stock)
+            ) {
                 return;
             }
 
@@ -3399,10 +3468,13 @@ export default function PublicCatalog({
                         item.key === key
                             ? {
                                   ...item,
-                                  quantity: Math.min(
-                                      item.quantity + 1,
-                                      availableStock,
-                                  ),
+                                  quantity:
+                                      product.allow_quote_when_out_of_stock
+                                          ? Math.min(item.quantity + 1, 9999)
+                                          : Math.min(
+                                                item.quantity + 1,
+                                                availableStock,
+                                            ),
                               }
                             : item,
                     );
@@ -3445,7 +3517,9 @@ export default function PublicCatalog({
 
                 return {
                     ...item,
-                    quantity: Math.min(quantity, availableStock),
+                    quantity: item.product.allow_quote_when_out_of_stock
+                        ? Math.min(quantity, 9999)
+                        : Math.min(quantity, availableStock),
                 };
             }),
         );
@@ -3470,18 +3544,33 @@ export default function PublicCatalog({
             `/catalog/${catalog_token}/orders`,
             {
                 customer_name: customerName,
+                request_quote: cartRequiresQuote,
                 customer_phone: customerPhone || null,
                 customer_email: customerEmail || null,
-                customer_document_type: customerDocumentType,
-                customer_document: onlyDigits(customerDocument),
-                customer_zip_code: onlyDigits(customerZipCode),
-                customer_state: customerState,
-                customer_city: customerCity,
-                customer_neighborhood: customerNeighborhood,
-                customer_street: customerStreet,
-                customer_address_number: customerAddressNumber,
-                customer_address_complement: customerAddressComplement || null,
-                customer_address_reference: customerAddressReference || null,
+                customer_document_type: cartRequiresQuote
+                    ? null
+                    : customerDocumentType,
+                customer_document: cartRequiresQuote
+                    ? null
+                    : onlyDigits(customerDocument),
+                customer_zip_code: cartRequiresQuote
+                    ? null
+                    : onlyDigits(customerZipCode),
+                customer_state: cartRequiresQuote ? null : customerState,
+                customer_city: cartRequiresQuote ? null : customerCity,
+                customer_neighborhood: cartRequiresQuote
+                    ? null
+                    : customerNeighborhood,
+                customer_street: cartRequiresQuote ? null : customerStreet,
+                customer_address_number: cartRequiresQuote
+                    ? null
+                    : customerAddressNumber,
+                customer_address_complement: cartRequiresQuote
+                    ? null
+                    : customerAddressComplement || null,
+                customer_address_reference: cartRequiresQuote
+                    ? null
+                    : customerAddressReference || null,
                 customer_notes: customerNotes || null,
                 items: cart.map((item) => ({
                     product_id: item.product.id,
@@ -3691,7 +3780,9 @@ export default function PublicCatalog({
                     <span>
                         {whatsapp_checkout.enabled
                             ? 'Ver seleção'
-                            : 'Ver pedido'}
+                            : cartRequiresQuote
+                              ? 'Ver orçamento'
+                              : 'Ver pedido'}
                     </span>
                     <span className="rounded-full bg-white/20 px-2 py-0.5 font-bold">
                         {cartTotal}
@@ -3717,7 +3808,9 @@ export default function PublicCatalog({
                         >
                             {whatsapp_checkout.enabled
                                 ? 'Seleção em construção'
-                                : 'Pedido em construção'}
+                                : cartRequiresQuote
+                                  ? 'Orçamento em construção'
+                                  : 'Pedido em construção'}
                         </p>
                         <SheetTitle
                             className="pr-12 text-[2.35rem] leading-[0.98] font-semibold tracking-[-0.04em] sm:text-[2.75rem]"
@@ -3809,6 +3902,17 @@ export default function PublicCatalog({
                                                         )}
                                                     </p>
                                                 )}
+
+                                                {item.product
+                                                    .allow_quote_when_out_of_stock &&
+                                                    availableStock !== null &&
+                                                    item.quantity >
+                                                        availableStock && (
+                                                        <span className="mt-3 inline-flex min-h-7 items-center gap-2 bg-[#ff4d3d]/10 px-2.5 text-[0.65rem] font-bold tracking-[0.08em] text-[#b52e24] uppercase">
+                                                            <MessageCircle className="size-3.5" />
+                                                            Vai para orçamento
+                                                        </span>
+                                                    )}
 
                                                 {item.product.product_type ===
                                                 'combo' ? (
@@ -4068,7 +4172,9 @@ export default function PublicCatalog({
                                         style={{ fontFamily: headingFont }}
                                     >
                                         <span className="text-lg">
-                                            Total estimado
+                                            {cartRequiresQuote
+                                                ? 'Estimativa atual'
+                                                : 'Total estimado'}
                                         </span>
                                         <span className="text-2xl">
                                             {formatPrice(
@@ -4092,6 +4198,24 @@ export default function PublicCatalog({
                                     </p>
                                 </div>
                             )}
+
+                            {cartRequiresQuote &&
+                                !whatsapp_checkout.enabled && (
+                                    <div className="w-full border-l-2 border-[#ff4d3d] pl-4 text-sm leading-6">
+                                        <p
+                                            className="font-semibold"
+                                            style={{ fontFamily: headingFont }}
+                                        >
+                                            Esta seleção será enviada como
+                                            orçamento.
+                                        </p>
+                                        <p className="mt-1 text-xs text-[#716f68]">
+                                            O comercial confirma prazo, saldo e
+                                            condição final. Nenhuma peça será
+                                            reservada agora.
+                                        </p>
+                                    </div>
+                                )}
 
                             {whatsapp_checkout.enabled ? (
                                 whatsappCheckoutUrl ? (
@@ -4128,7 +4252,10 @@ export default function PublicCatalog({
                                     type="button"
                                     className="h-[52px] w-full rounded-[2px] text-sm font-semibold shadow-none transition-transform duration-200 hover:-translate-y-px"
                                     onClick={() => {
-                                        if (orderRuleEvaluation.is_blocked) {
+                                        if (
+                                            orderRuleEvaluation.is_blocked &&
+                                            !cartRequiresQuote
+                                        ) {
                                             setCartOpen(false);
 
                                             return;
@@ -4142,9 +4269,12 @@ export default function PublicCatalog({
                                             catalog_settings.primary_color,
                                     }}
                                 >
-                                    {orderRuleEvaluation.is_blocked
+                                    {orderRuleEvaluation.is_blocked &&
+                                    !cartRequiresQuote
                                         ? 'Continuar escolhendo peças'
-                                        : 'Finalizar pedido'}
+                                        : cartRequiresQuote
+                                          ? 'Solicitar orçamento'
+                                          : 'Finalizar pedido'}
                                     <ArrowRight className="ml-2 size-4" />
                                 </Button>
                             )}
@@ -4156,7 +4286,8 @@ export default function PublicCatalog({
                                     permanece salva neste navegador.
                                 </p>
                             ) : !whatsapp_checkout.enabled &&
-                              orderRuleEvaluation.is_blocked ? (
+                              orderRuleEvaluation.is_blocked &&
+                              !cartRequiresQuote ? (
                                 <p className="text-center text-xs leading-5 text-[#716f68]">
                                     Sua seleção fica salva enquanto você
                                     continua no catálogo.
@@ -4178,10 +4309,14 @@ export default function PublicCatalog({
                 >
                     <DialogHeader>
                         <DialogTitle style={{ fontFamily: headingFont }}>
-                            Finalizar pedido
+                            {cartRequiresQuote
+                                ? 'Solicitar orçamento'
+                                : 'Finalizar pedido'}
                         </DialogTitle>
                         <DialogDescription>
-                            Preencha seus dados para enviar o pedido.
+                            {cartRequiresQuote
+                                ? 'Deixe seu contato. O comercial confirmará disponibilidade, condições e prazo.'
+                                : 'Preencha seus dados para enviar o pedido.'}
                         </DialogDescription>
                     </DialogHeader>
 
@@ -4238,272 +4373,297 @@ export default function PublicCatalog({
                             )}
                         </div>
 
-                        <div className="space-y-3">
-                            <h3 className="text-sm font-semibold">Documento</h3>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label htmlFor="customer_document_type">
-                                        Tipo *
-                                    </Label>
-                                    <Select
-                                        value={customerDocumentType}
-                                        onValueChange={(value) => {
-                                            setCustomerDocumentType(
-                                                value as DocumentType,
-                                            );
-                                            setCustomerDocument('');
-                                        }}
-                                    >
-                                        <SelectTrigger id="customer_document_type">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="cpf">
-                                                Pessoa fisica
-                                            </SelectItem>
-                                            <SelectItem value="cnpj">
-                                                Pessoa juridica
-                                            </SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    {checkoutErrors.customer_document_type && (
-                                        <p className="text-xs text-destructive">
-                                            {
-                                                checkoutErrors.customer_document_type
-                                            }
-                                        </p>
-                                    )}
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="customer_document">
-                                        {customerDocumentType === 'cpf'
-                                            ? 'CPF *'
-                                            : 'CNPJ *'}
-                                    </Label>
-                                    <Input
-                                        id="customer_document"
-                                        value={customerDocument}
-                                        onChange={(e) =>
-                                            setCustomerDocument(
-                                                customerDocumentType === 'cpf'
-                                                    ? formatCpf(e.target.value)
-                                                    : formatCnpj(
-                                                          e.target.value,
-                                                      ),
-                                            )
-                                        }
-                                        placeholder={
-                                            customerDocumentType === 'cpf'
-                                                ? '000.000.000-00'
-                                                : '00.000.000/0000-00'
-                                        }
-                                        inputMode="numeric"
-                                    />
-                                    {checkoutErrors.customer_document && (
-                                        <p className="text-xs text-destructive">
-                                            {checkoutErrors.customer_document}
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="space-y-3">
-                            <h3 className="text-sm font-semibold">
-                                Endereco de entrega
-                            </h3>
-                            <div className="grid gap-3 sm:grid-cols-4">
-                                <div className="space-y-2 sm:col-span-2">
-                                    <Label htmlFor="customer_zip_code">
-                                        CEP *
-                                    </Label>
-                                    <Input
-                                        id="customer_zip_code"
-                                        value={customerZipCode}
-                                        onChange={(e) =>
-                                            setCustomerZipCode(
-                                                formatZipCode(e.target.value),
-                                            )
-                                        }
-                                        placeholder="00000-000"
-                                        inputMode="numeric"
-                                    />
-                                    {checkoutErrors.customer_zip_code && (
-                                        <p className="text-xs text-destructive">
-                                            {checkoutErrors.customer_zip_code}
-                                        </p>
-                                    )}
-                                </div>
-
-                                <div className="space-y-2 sm:col-span-2">
-                                    <Label htmlFor="customer_state">UF *</Label>
-                                    <Select
-                                        value={customerState}
-                                        onValueChange={setCustomerState}
-                                    >
-                                        <SelectTrigger id="customer_state">
-                                            <SelectValue placeholder="Selecione" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {BRAZILIAN_STATES.map((state) => (
-                                                <SelectItem
-                                                    key={state}
-                                                    value={state}
-                                                >
-                                                    {state}
+                        {!cartRequiresQuote && (
+                            <div className="space-y-3">
+                                <h3 className="text-sm font-semibold">
+                                    Documento
+                                </h3>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="customer_document_type">
+                                            Tipo *
+                                        </Label>
+                                        <Select
+                                            value={customerDocumentType}
+                                            onValueChange={(value) => {
+                                                setCustomerDocumentType(
+                                                    value as DocumentType,
+                                                );
+                                                setCustomerDocument('');
+                                            }}
+                                        >
+                                            <SelectTrigger id="customer_document_type">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="cpf">
+                                                    Pessoa física
                                                 </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    {checkoutErrors.customer_state && (
-                                        <p className="text-xs text-destructive">
-                                            {checkoutErrors.customer_state}
-                                        </p>
-                                    )}
-                                </div>
+                                                <SelectItem value="cnpj">
+                                                    Pessoa jurídica
+                                                </SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        {checkoutErrors.customer_document_type && (
+                                            <p className="text-xs text-destructive">
+                                                {
+                                                    checkoutErrors.customer_document_type
+                                                }
+                                            </p>
+                                        )}
+                                    </div>
 
-                                <div className="space-y-2 sm:col-span-2">
-                                    <Label htmlFor="customer_city">
-                                        Cidade *
-                                    </Label>
-                                    <Input
-                                        id="customer_city"
-                                        value={customerCity}
-                                        onChange={(e) =>
-                                            setCustomerCity(e.target.value)
-                                        }
-                                        placeholder="Cidade"
-                                    />
-                                    {checkoutErrors.customer_city && (
-                                        <p className="text-xs text-destructive">
-                                            {checkoutErrors.customer_city}
-                                        </p>
-                                    )}
-                                </div>
-
-                                <div className="space-y-2 sm:col-span-2">
-                                    <Label htmlFor="customer_neighborhood">
-                                        Bairro *
-                                    </Label>
-                                    <Input
-                                        id="customer_neighborhood"
-                                        value={customerNeighborhood}
-                                        onChange={(e) =>
-                                            setCustomerNeighborhood(
-                                                e.target.value,
-                                            )
-                                        }
-                                        placeholder="Bairro"
-                                    />
-                                    {checkoutErrors.customer_neighborhood && (
-                                        <p className="text-xs text-destructive">
-                                            {
-                                                checkoutErrors.customer_neighborhood
+                                    <div className="space-y-2">
+                                        <Label htmlFor="customer_document">
+                                            {customerDocumentType === 'cpf'
+                                                ? 'CPF *'
+                                                : 'CNPJ *'}
+                                        </Label>
+                                        <Input
+                                            id="customer_document"
+                                            value={customerDocument}
+                                            onChange={(e) =>
+                                                setCustomerDocument(
+                                                    customerDocumentType ===
+                                                        'cpf'
+                                                        ? formatCpf(
+                                                              e.target.value,
+                                                          )
+                                                        : formatCnpj(
+                                                              e.target.value,
+                                                          ),
+                                                )
                                             }
-                                        </p>
-                                    )}
-                                </div>
-
-                                <div className="space-y-2 sm:col-span-3">
-                                    <Label htmlFor="customer_street">
-                                        Rua *
-                                    </Label>
-                                    <Input
-                                        id="customer_street"
-                                        value={customerStreet}
-                                        onChange={(e) =>
-                                            setCustomerStreet(e.target.value)
-                                        }
-                                        placeholder="Rua"
-                                    />
-                                    {checkoutErrors.customer_street && (
-                                        <p className="text-xs text-destructive">
-                                            {checkoutErrors.customer_street}
-                                        </p>
-                                    )}
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="customer_address_number">
-                                        Numero *
-                                    </Label>
-                                    <Input
-                                        id="customer_address_number"
-                                        value={customerAddressNumber}
-                                        onChange={(e) =>
-                                            setCustomerAddressNumber(
-                                                e.target.value,
-                                            )
-                                        }
-                                        placeholder="100"
-                                    />
-                                    {checkoutErrors.customer_address_number && (
-                                        <p className="text-xs text-destructive">
-                                            {
-                                                checkoutErrors.customer_address_number
+                                            placeholder={
+                                                customerDocumentType === 'cpf'
+                                                    ? '000.000.000-00'
+                                                    : '00.000.000/0000-00'
                                             }
-                                        </p>
-                                    )}
-                                </div>
-
-                                <div className="space-y-2 sm:col-span-2">
-                                    <Label htmlFor="customer_address_complement">
-                                        Complemento
-                                    </Label>
-                                    <Input
-                                        id="customer_address_complement"
-                                        value={customerAddressComplement}
-                                        onChange={(e) =>
-                                            setCustomerAddressComplement(
-                                                e.target.value,
-                                            )
-                                        }
-                                        placeholder="Apto, sala, bloco"
-                                    />
-                                    {checkoutErrors.customer_address_complement && (
-                                        <p className="text-xs text-destructive">
-                                            {
-                                                checkoutErrors.customer_address_complement
-                                            }
-                                        </p>
-                                    )}
-                                </div>
-
-                                <div className="space-y-2 sm:col-span-2">
-                                    <Label htmlFor="customer_address_reference">
-                                        Referencia
-                                    </Label>
-                                    <Input
-                                        id="customer_address_reference"
-                                        value={customerAddressReference}
-                                        onChange={(e) =>
-                                            setCustomerAddressReference(
-                                                e.target.value,
-                                            )
-                                        }
-                                        placeholder="Referência para Entrega"
-                                    />
-                                    {checkoutErrors.customer_address_reference && (
-                                        <p className="text-xs text-destructive">
-                                            {
-                                                checkoutErrors.customer_address_reference
-                                            }
-                                        </p>
-                                    )}
+                                            inputMode="numeric"
+                                        />
+                                        {checkoutErrors.customer_document && (
+                                            <p className="text-xs text-destructive">
+                                                {
+                                                    checkoutErrors.customer_document
+                                                }
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
+
+                        {!cartRequiresQuote && (
+                            <div className="space-y-3">
+                                <h3 className="text-sm font-semibold">
+                                    Endereço de entrega
+                                </h3>
+                                <div className="grid gap-3 sm:grid-cols-4">
+                                    <div className="space-y-2 sm:col-span-2">
+                                        <Label htmlFor="customer_zip_code">
+                                            CEP *
+                                        </Label>
+                                        <Input
+                                            id="customer_zip_code"
+                                            value={customerZipCode}
+                                            onChange={(e) =>
+                                                setCustomerZipCode(
+                                                    formatZipCode(
+                                                        e.target.value,
+                                                    ),
+                                                )
+                                            }
+                                            placeholder="00000-000"
+                                            inputMode="numeric"
+                                        />
+                                        {checkoutErrors.customer_zip_code && (
+                                            <p className="text-xs text-destructive">
+                                                {
+                                                    checkoutErrors.customer_zip_code
+                                                }
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2 sm:col-span-2">
+                                        <Label htmlFor="customer_state">
+                                            UF *
+                                        </Label>
+                                        <Select
+                                            value={customerState}
+                                            onValueChange={setCustomerState}
+                                        >
+                                            <SelectTrigger id="customer_state">
+                                                <SelectValue placeholder="Selecione" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {BRAZILIAN_STATES.map(
+                                                    (state) => (
+                                                        <SelectItem
+                                                            key={state}
+                                                            value={state}
+                                                        >
+                                                            {state}
+                                                        </SelectItem>
+                                                    ),
+                                                )}
+                                            </SelectContent>
+                                        </Select>
+                                        {checkoutErrors.customer_state && (
+                                            <p className="text-xs text-destructive">
+                                                {checkoutErrors.customer_state}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2 sm:col-span-2">
+                                        <Label htmlFor="customer_city">
+                                            Cidade *
+                                        </Label>
+                                        <Input
+                                            id="customer_city"
+                                            value={customerCity}
+                                            onChange={(e) =>
+                                                setCustomerCity(e.target.value)
+                                            }
+                                            placeholder="Cidade"
+                                        />
+                                        {checkoutErrors.customer_city && (
+                                            <p className="text-xs text-destructive">
+                                                {checkoutErrors.customer_city}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2 sm:col-span-2">
+                                        <Label htmlFor="customer_neighborhood">
+                                            Bairro *
+                                        </Label>
+                                        <Input
+                                            id="customer_neighborhood"
+                                            value={customerNeighborhood}
+                                            onChange={(e) =>
+                                                setCustomerNeighborhood(
+                                                    e.target.value,
+                                                )
+                                            }
+                                            placeholder="Bairro"
+                                        />
+                                        {checkoutErrors.customer_neighborhood && (
+                                            <p className="text-xs text-destructive">
+                                                {
+                                                    checkoutErrors.customer_neighborhood
+                                                }
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2 sm:col-span-3">
+                                        <Label htmlFor="customer_street">
+                                            Rua *
+                                        </Label>
+                                        <Input
+                                            id="customer_street"
+                                            value={customerStreet}
+                                            onChange={(e) =>
+                                                setCustomerStreet(
+                                                    e.target.value,
+                                                )
+                                            }
+                                            placeholder="Rua"
+                                        />
+                                        {checkoutErrors.customer_street && (
+                                            <p className="text-xs text-destructive">
+                                                {checkoutErrors.customer_street}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="customer_address_number">
+                                            Número *
+                                        </Label>
+                                        <Input
+                                            id="customer_address_number"
+                                            value={customerAddressNumber}
+                                            onChange={(e) =>
+                                                setCustomerAddressNumber(
+                                                    e.target.value,
+                                                )
+                                            }
+                                            placeholder="100"
+                                        />
+                                        {checkoutErrors.customer_address_number && (
+                                            <p className="text-xs text-destructive">
+                                                {
+                                                    checkoutErrors.customer_address_number
+                                                }
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2 sm:col-span-2">
+                                        <Label htmlFor="customer_address_complement">
+                                            Complemento
+                                        </Label>
+                                        <Input
+                                            id="customer_address_complement"
+                                            value={customerAddressComplement}
+                                            onChange={(e) =>
+                                                setCustomerAddressComplement(
+                                                    e.target.value,
+                                                )
+                                            }
+                                            placeholder="Apto, sala, bloco"
+                                        />
+                                        {checkoutErrors.customer_address_complement && (
+                                            <p className="text-xs text-destructive">
+                                                {
+                                                    checkoutErrors.customer_address_complement
+                                                }
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-2 sm:col-span-2">
+                                        <Label htmlFor="customer_address_reference">
+                                            Referência
+                                        </Label>
+                                        <Input
+                                            id="customer_address_reference"
+                                            value={customerAddressReference}
+                                            onChange={(e) =>
+                                                setCustomerAddressReference(
+                                                    e.target.value,
+                                                )
+                                            }
+                                            placeholder="Referência para Entrega"
+                                        />
+                                        {checkoutErrors.customer_address_reference && (
+                                            <p className="text-xs text-destructive">
+                                                {
+                                                    checkoutErrors.customer_address_reference
+                                                }
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         <div className="space-y-2">
-                            <Label htmlFor="customer_notes">Observacoes</Label>
+                            <Label htmlFor="customer_notes">Observações</Label>
                             <textarea
                                 id="customer_notes"
                                 value={customerNotes}
                                 onChange={(e) =>
                                     setCustomerNotes(e.target.value)
                                 }
-                                placeholder="Alguma observacao sobre o pedido?"
+                                placeholder={
+                                    cartRequiresQuote
+                                        ? 'Conte ao comercial o que precisa, se quiser.'
+                                        : 'Alguma observação sobre o pedido?'
+                                }
                                 rows={3}
                                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground"
                             />
@@ -4570,7 +4730,9 @@ export default function PublicCatalog({
                                 </div>
                             )}
                             <p className="mt-2 text-xs text-muted-foreground">
-                                O estoque e reservado quando o pedido e enviado.
+                                {cartRequiresQuote
+                                    ? 'Esta é uma estimativa. Nenhuma peça será reservada até o comercial confirmar o orçamento.'
+                                    : 'O estoque é reservado quando o pedido é enviado.'}
                             </p>
                         </div>
                     </div>
@@ -4587,13 +4749,20 @@ export default function PublicCatalog({
                             disabled={
                                 submitting ||
                                 !customerName.trim() ||
-                                orderRuleEvaluation.is_blocked
+                                (!customerPhone.trim() &&
+                                    !customerEmail.trim()) ||
+                                (!cartRequiresQuote &&
+                                    orderRuleEvaluation.is_blocked)
                             }
                             style={{
                                 backgroundColor: catalog_settings.primary_color,
                             }}
                         >
-                            {submitting ? 'Enviando...' : 'Enviar pedido'}
+                            {submitting
+                                ? 'Enviando...'
+                                : cartRequiresQuote
+                                  ? 'Solicitar orçamento'
+                                  : 'Enviar pedido'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

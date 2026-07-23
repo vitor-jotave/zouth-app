@@ -3,6 +3,7 @@ import {
     Check,
     ClipboardCopy,
     Clock,
+    MessageCircle,
     Package,
     Truck,
     XCircle,
@@ -43,6 +44,8 @@ interface Order {
     public_token: string;
     status: string;
     status_label: string;
+    order_type: 'standard' | 'quote';
+    order_type_label: string;
     customer_name: string;
     items: OrderItem[];
     total_items: number;
@@ -122,6 +125,7 @@ export default function OrderTracking({ order, manufacturer }: Props) {
     const StatusIcon = config.icon;
     const currentIndex = statusOrder.indexOf(order.status);
     const isCancelled = order.status === 'cancelled';
+    const isQuote = order.order_type === 'quote';
 
     const copyLink = () => {
         const url = window.location.href;
@@ -163,7 +167,7 @@ export default function OrderTracking({ order, manufacturer }: Props) {
     return (
         <div className="min-h-screen bg-gray-50">
             <Head
-                title={`Pedido #${order.public_token.slice(0, 8).toUpperCase()}`}
+                title={`${isQuote ? 'Orçamento' : 'Pedido'} #${order.public_token.slice(0, 8).toUpperCase()}`}
             />
 
             <div className="mx-auto max-w-2xl px-4 py-12">
@@ -173,7 +177,8 @@ export default function OrderTracking({ order, manufacturer }: Props) {
                         {manufacturer.name}
                     </p>
                     <h1 className="mt-2 text-2xl font-bold">
-                        Pedido #{order.public_token.slice(0, 8).toUpperCase()}
+                        {isQuote ? 'Orçamento' : 'Pedido'} #
+                        {order.public_token.slice(0, 8).toUpperCase()}
                     </h1>
                     <p className="mt-1 text-sm text-muted-foreground">
                         {new Date(order.created_at).toLocaleDateString(
@@ -195,12 +200,29 @@ export default function OrderTracking({ order, manufacturer }: Props) {
                 >
                     <StatusIcon className={`h-6 w-6 ${config.color}`} />
                     <span className={`text-lg font-semibold ${config.color}`}>
-                        {order.status_label}
+                        {isQuote ? 'Orçamento recebido' : order.status_label}
                     </span>
                 </div>
 
+                {isQuote && !isCancelled && (
+                    <div className="mb-8 flex gap-3 border border-[#ff4d43]/35 bg-[#fff3ef] p-4 text-[#2d2926]">
+                        <MessageCircle className="mt-0.5 size-5 shrink-0 text-[#ff4d43]" />
+                        <div>
+                            <p className="font-semibold">
+                                Sua seleção já está com o comercial.
+                            </p>
+                            <p className="mt-1 text-sm leading-6 text-[#716f68]">
+                                As peças ainda não foram reservadas. A equipe da{' '}
+                                {manufacturer.name} confirmará disponibilidade,
+                                condições e prazo antes de transformar esta
+                                solicitação em pedido.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
                 {/* Progress bar */}
-                {!isCancelled && (
+                {!isCancelled && !isQuote && (
                     <div className="mb-8">
                         <div className="flex justify-between">
                             {statusOrder.map((step, index) => {
@@ -255,7 +277,11 @@ export default function OrderTracking({ order, manufacturer }: Props) {
                 {/* Items */}
                 <div className="mb-6 rounded-lg border bg-white">
                     <div className="border-b p-4">
-                        <h2 className="font-semibold">Itens do pedido</h2>
+                        <h2 className="font-semibold">
+                            {isQuote
+                                ? 'Itens para orçamento'
+                                : 'Itens do pedido'}
+                        </h2>
                     </div>
                     <div className="divide-y">
                         {order.items.map((item) => (
@@ -358,7 +384,9 @@ export default function OrderTracking({ order, manufacturer }: Props) {
                                 </p>
                             )}
                             <p className="mt-1 flex justify-between gap-5 border-t pt-1 font-bold text-gray-950">
-                                <span>Total</span>
+                                <span>
+                                    {isQuote ? 'Estimativa atual' : 'Total'}
+                                </span>
                                 <span>
                                     {formatCurrency(order.total_amount)}
                                 </span>

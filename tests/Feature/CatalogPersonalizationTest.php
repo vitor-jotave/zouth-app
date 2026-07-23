@@ -133,6 +133,51 @@ it('updates catalog branding settings', function () {
     ]);
 });
 
+it('saves the catalog logo size inside the cover settings', function () {
+    $setting = createCatalogSettingFor($this->manufacturer);
+    $sections = CatalogSetting::defaultSections();
+    $sections[0]['props']['logo_size'] = 145;
+
+    $this->actingAs($this->user)
+        ->put(
+            route('manufacturer.catalog-settings.update'),
+            catalogSettingsUpdatePayload(['sections' => $sections]),
+        )
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
+
+    expect($setting->fresh()->sections[0]['props']['logo_size'])->toBe(145);
+});
+
+it('rejects a catalog logo size outside the editor range', function (int $logoSize) {
+    createCatalogSettingFor($this->manufacturer);
+    $sections = CatalogSetting::defaultSections();
+    $sections[0]['props']['logo_size'] = $logoSize;
+
+    $this->actingAs($this->user)
+        ->put(
+            route('manufacturer.catalog-settings.update'),
+            catalogSettingsUpdatePayload(['sections' => $sections]),
+        )
+        ->assertSessionHasErrors('sections.0.props.logo_size');
+})->with([
+    'smaller than the minimum' => 49,
+    'larger than the maximum' => 201,
+]);
+
+it('renders the logo size controls in the studio and public catalog', function () {
+    $studio = file_get_contents(resource_path('js/pages/manufacturer/catalog-settings/index.tsx'));
+    $catalog = file_get_contents(resource_path('js/pages/public/catalog.tsx'));
+
+    expect($studio)
+        ->toContain('Tamanho da logo')
+        ->toContain("'logo_size'")
+        ->toContain('CATALOG_LOGO_SIZE')
+        ->and($catalog)
+        ->toContain('catalogLogoStyle(')
+        ->toContain('heroSection?.props?.logo_size');
+});
+
 it('shows the connected commercial channel in the catalog editor', function () {
     createCatalogSettingFor($this->manufacturer);
     WhatsappInstance::factory()->connected()->create([
@@ -498,6 +543,49 @@ it('limits public catalog variations to values with positive stock on that produ
         ->toBe([['value' => 'P', 'hex' => null, 'image_url' => null]]);
     expect(collect($response->inertiaProps('filter_options.variation_types'))->firstWhere('name', 'Cor')['values'])
         ->toBe([['value' => 'Azul', 'hex' => '#3b82f6', 'image_url' => null]]);
+});
+
+it('keeps out of stock variation values available when the product accepts quotes', function () {
+    $setting = createCatalogSettingFor($this->manufacturer);
+    $color = VariationType::factory()->colorType()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+    ]);
+
+    VariationValue::factory()->create([
+        'variation_type_id' => $color->id,
+        'value' => 'Vermelho',
+        'hex' => '#ef4444',
+    ]);
+
+    $product = Product::factory()->forManufacturer($this->manufacturer)->withoutCategory()->create([
+        'name' => 'Body sob orçamento',
+        'base_quantity' => 0,
+        'allow_quote_when_out_of_stock' => true,
+    ]);
+    ProductVariation::create([
+        'product_id' => $product->id,
+        'variation_type_id' => $color->id,
+    ]);
+    ProductVariantStock::factory()->create([
+        'product_id' => $product->id,
+        'variation_key' => ['Cor' => 'Vermelho'],
+        'quantity' => 0,
+    ]);
+
+    $response = $this->get(route('public.catalog.show', [
+        'token' => $setting->public_token,
+        'variations' => [$color->id => ['Vermelho']],
+    ]));
+    $productProps = collect($response->inertiaProps('products.data'))->sole();
+
+    expect($productProps['allow_quote_when_out_of_stock'])->toBeTrue()
+        ->and($productProps['variations'][0]['values'])->toBe([[
+            'value' => 'Vermelho',
+            'hex' => '#ef4444',
+            'image_url' => null,
+        ]])
+        ->and(collect($response->inertiaProps('filter_options.variation_types.0.values'))->pluck('value')->all())
+        ->toBe(['Vermelho']);
 });
 
 it('does not match catalog filters against out of stock variation values', function () {

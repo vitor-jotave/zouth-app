@@ -85,6 +85,7 @@ class CatalogSettingUpdateRequest extends FormRequest
             'sections.*.type' => ['required', 'in:hero,collections,product_grid'],
             'sections.*.enabled' => ['required', 'boolean'],
             'sections.*.props' => ['sometimes', 'array'],
+            'sections.*.props.logo_size' => ['sometimes', 'integer', 'min:50', 'max:200'],
         ];
     }
 
@@ -108,6 +109,9 @@ class CatalogSettingUpdateRequest extends FormRequest
             'background_mode.in' => 'Escolha um tipo de fundo válido.',
             'pattern_id.in' => 'Escolha um padrão de fundo válido.',
             'gradient_id.in' => 'Escolha uma combinação de cores válida.',
+            'sections.*.props.logo_size.integer' => 'Escolha um tamanho válido para a logo.',
+            'sections.*.props.logo_size.min' => 'A logo não pode ser menor que 50%.',
+            'sections.*.props.logo_size.max' => 'A logo não pode ser maior que 200%.',
         ];
     }
 

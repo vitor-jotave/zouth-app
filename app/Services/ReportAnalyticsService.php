@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\OrderStatus;
+use App\Enums\OrderType;
 use App\Enums\ProductMediaType;
 use App\Models\CatalogVisit;
 use App\Models\Manufacturer;
@@ -61,8 +62,14 @@ class ReportAnalyticsService
     {
         $currentOrders = $this->ordersFor($manufacturer, $period['start'], $period['end']);
         $previousOrders = $this->ordersFor($manufacturer, $period['previous_start'], $period['previous_end']);
-        $commercialOrders = $currentOrders->reject(fn (Order $order): bool => $order->status === OrderStatus::Cancelled)->values();
-        $previousCommercialOrders = $previousOrders->reject(fn (Order $order): bool => $order->status === OrderStatus::Cancelled)->values();
+        $commercialOrders = $currentOrders->reject(
+            fn (Order $order): bool => $order->status === OrderStatus::Cancelled
+                || $order->order_type === OrderType::Quote,
+        )->values();
+        $previousCommercialOrders = $previousOrders->reject(
+            fn (Order $order): bool => $order->status === OrderStatus::Cancelled
+                || $order->order_type === OrderType::Quote,
+        )->values();
         $currentVisits = $this->visitsFor($manufacturer, $period['start'], $period['end']);
         $previousVisits = $this->visitsFor($manufacturer, $period['previous_start'], $period['previous_end']);
         $products = $this->productsFor($manufacturer);
@@ -76,7 +83,9 @@ class ReportAnalyticsService
         $customers = $this->customerReport($manufacturer, $commercialOrders, $period['end']);
         $representatives = $this->representativeReport($manufacturer, $commercialOrders);
         $catalog = $this->catalogReport($commercialOrders, $previousCommercialOrders, $currentVisits, $previousVisits);
-        $operations = $this->operationsReport($currentOrders);
+        $operations = $this->operationsReport(
+            $currentOrders->reject(fn (Order $order): bool => $order->order_type === OrderType::Quote)->values(),
+        );
 
         return [
             'period' => [

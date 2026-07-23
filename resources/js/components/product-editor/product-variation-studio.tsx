@@ -12,10 +12,12 @@ type ProductVariationStudioProps = {
     variations: ProductVariationSelection[];
     stocks: ProductVariantStockValue[];
     baseQuantity: number;
+    allowQuoteWhenOutOfStock: boolean;
     errors: ProductEditorErrors;
     onToggleType: (typeId: number, checked: boolean) => void;
     onToggleValue: (typeId: number, value: string) => void;
     onBaseQuantityChange: (quantity: number) => void;
+    onAllowQuoteWhenOutOfStockChange: (enabled: boolean) => void;
     onStockChange: (
         key: Record<string, string>,
         field: 'quantity' | 'price' | 'sku_variant',
@@ -50,10 +52,12 @@ export function ProductVariationStudio({
     variations,
     stocks,
     baseQuantity,
+    allowQuoteWhenOutOfStock,
     errors,
     onToggleType,
     onToggleValue,
     onBaseQuantityChange,
+    onAllowQuoteWhenOutOfStockChange,
     onStockChange,
 }: ProductVariationStudioProps) {
     const selectedTypeIds = new Set(
@@ -267,6 +271,86 @@ export function ProductVariationStudio({
                         : 'Informe a disponibilidade geral. Se adicionar variações, o estoque passa a ser definido por combinação.'
                 }
             >
+                <div className="mb-8 border border-border bg-[#e7e3dc]/25 p-4 sm:p-5">
+                    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(19rem,0.85fr)] lg:items-center">
+                        <div>
+                            <p className="font-zouth-display text-base font-semibold tracking-[-0.025em] text-foreground">
+                                Quando o estoque acabar
+                            </p>
+                            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+                                Decida se a peça encerra os pedidos ou continua
+                                despertando interesse como uma solicitação de
+                                orçamento.
+                            </p>
+                        </div>
+                        <div
+                            className="grid grid-cols-2 border border-border bg-[#f6f4f0]"
+                            role="group"
+                            aria-label="Comportamento da peça sem estoque"
+                        >
+                            {[
+                                {
+                                    value: false,
+                                    label: 'Mostrar esgotada',
+                                    detail: 'Sem novos pedidos',
+                                },
+                                {
+                                    value: true,
+                                    label: 'Aceitar orçamento',
+                                    detail: 'Mantém o interesse aberto',
+                                },
+                            ].map((option) => {
+                                const selected =
+                                    allowQuoteWhenOutOfStock === option.value;
+
+                                return (
+                                    <button
+                                        key={String(option.value)}
+                                        type="button"
+                                        aria-pressed={selected}
+                                        onClick={() =>
+                                            onAllowQuoteWhenOutOfStockChange(
+                                                option.value,
+                                            )
+                                        }
+                                        className={`min-h-[72px] border-r border-border px-3 text-left last:border-r-0 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#ff4d3d] ${
+                                            selected
+                                                ? 'bg-[#18181f] text-[#f6f4f0]'
+                                                : 'text-foreground hover:bg-[#e7e3dc]/55'
+                                        }`}
+                                    >
+                                        <span className="flex items-center gap-2 font-zouth-display text-xs font-semibold sm:text-sm">
+                                            {selected && (
+                                                <Check
+                                                    className="size-4 shrink-0"
+                                                    aria-hidden="true"
+                                                />
+                                            )}
+                                            {option.label}
+                                        </span>
+                                        <span
+                                            className={`mt-1 block text-[0.65rem] leading-4 ${
+                                                selected
+                                                    ? 'text-[#f6f4f0]/65'
+                                                    : 'text-muted-foreground'
+                                            }`}
+                                        >
+                                            {option.detail}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                    {allowQuoteWhenOutOfStock && (
+                        <p className="mt-4 border-l-2 border-[#ff4d3d] pl-3 text-xs leading-5 text-muted-foreground">
+                            Se a quantidade escolhida superar o saldo, toda a
+                            seleção será enviada como orçamento e nenhum estoque
+                            será reservado.
+                        </p>
+                    )}
+                </div>
+
                 {variations.length === 0 ? (
                     <EditorField
                         label="Quantidade disponível"

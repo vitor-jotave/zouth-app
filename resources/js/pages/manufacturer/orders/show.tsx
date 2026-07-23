@@ -83,6 +83,8 @@ type Order = {
     customer_id: number | null;
     status: string;
     status_label: string;
+    order_type: 'standard' | 'quote';
+    order_type_label: string;
     customer_name: string;
     customer_phone: string | null;
     customer_email: string | null;
@@ -223,7 +225,21 @@ function itemVariationSummary(item: OrderItem): string | null {
     );
 }
 
-function transitionActionLabel(transition: AllowedTransition): string {
+function transitionActionLabel(
+    transition: AllowedTransition,
+    isQuote = false,
+): string {
+    if (isQuote) {
+        return (
+            {
+                confirmed: 'Iniciar negociação',
+                preparing: 'Marcar como aprovado',
+                shipped: 'Marcar como formalizado',
+                delivered: 'Concluir orçamento',
+            }[transition.value] ?? transition.label
+        );
+    }
+
     return (
         {
             confirmed: 'Confirmar pedido',
@@ -398,6 +414,7 @@ function DetailRow({
 }
 
 export default function OrderShow({ order }: Props) {
+    const isQuote = order.order_type === 'quote';
     const [internalNotes, setInternalNotes] = useState(
         order.internal_notes ?? '',
     );
@@ -481,7 +498,9 @@ export default function OrderShow({ order }: Props) {
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title={`Pedido #${String(order.id).padStart(4, '0')}`} />
+            <Head
+                title={`${order.order_type_label} #${String(order.id).padStart(4, '0')}`}
+            />
 
             <div className="mx-auto flex w-full max-w-[1720px] flex-1 flex-col px-5 py-8 sm:px-7 md:px-9 lg:pt-8 lg:pb-12 xl:px-12 2xl:px-14">
                 <Link
@@ -493,7 +512,7 @@ export default function OrderShow({ order }: Props) {
                 </Link>
 
                 <AppPageHeader
-                    eyebrow={`Pedido #${String(order.id).padStart(4, '0')}`}
+                    eyebrow={`${order.order_type_label} #${String(order.id).padStart(4, '0')}`}
                     title={
                         <>
                             {order.customer_name}
@@ -505,7 +524,9 @@ export default function OrderShow({ order }: Props) {
                             <StatusLabel
                                 tone={statusTone[order.status] ?? 'neutral'}
                             >
-                                {order.status_label}
+                                {isQuote
+                                    ? `Orçamento · ${order.status_label}`
+                                    : order.status_label}
                             </StatusLabel>
                             <span>
                                 Recebido em {formatDateTime(order.created_at)}
@@ -536,7 +557,10 @@ export default function OrderShow({ order }: Props) {
                                     )}
                                     {updatingStatus
                                         ? 'Atualizando…'
-                                        : transitionActionLabel(nextTransition)}
+                                        : transitionActionLabel(
+                                              nextTransition,
+                                              isQuote,
+                                          )}
                                 </Button>
                             ) : (
                                 <div className="mt-4 flex min-h-12 items-center gap-3 border-l-2 border-[#2e705a] pl-4 text-sm font-semibold">
@@ -555,7 +579,9 @@ export default function OrderShow({ order }: Props) {
                                     className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 text-sm font-bold text-[#b42318] transition-colors hover:bg-[#ff4d3d]/[0.07] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff4d3d]"
                                 >
                                     <X className="size-4" aria-hidden="true" />
-                                    Cancelar pedido
+                                    {isQuote
+                                        ? 'Encerrar orçamento'
+                                        : 'Cancelar pedido'}
                                 </button>
                             )}
                         </section>
@@ -567,7 +593,9 @@ export default function OrderShow({ order }: Props) {
                     className="mt-7"
                     items={[
                         {
-                            label: 'Total líquido',
+                            label: isQuote
+                                ? 'Estimativa atual'
+                                : 'Total líquido',
                             value: (
                                 <span className="text-[1.28rem] whitespace-nowrap sm:text-[1.65rem] xl:text-[2.2rem]">
                                     {formatCurrency(order.total_amount)}
@@ -618,13 +646,31 @@ export default function OrderShow({ order }: Props) {
                 <div className="mt-7 grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(21rem,0.8fr)] xl:items-start">
                     <div className="min-w-0 space-y-6">
                         <section className="border border-border bg-background">
+                            {isQuote && (
+                                <div className="flex gap-3 border-b border-[#ff4d3d]/35 bg-[#fff3ef] px-5 py-4 text-sm sm:px-7">
+                                    <CircleDot
+                                        className="mt-0.5 size-4 shrink-0 text-[#ff4d3d]"
+                                        aria-hidden="true"
+                                    />
+                                    <p className="leading-6 text-[#5f5b55]">
+                                        Solicitação sem reserva de estoque.
+                                        Confirme disponibilidade, valores e
+                                        prazo com o cliente antes de seguir com
+                                        o atendimento.
+                                    </p>
+                                </div>
+                            )}
                             <div className="flex min-h-16 items-center justify-between gap-4 border-b border-border px-5 sm:px-7">
                                 <div>
                                     <p className="text-[0.64rem] font-bold tracking-[0.17em] text-[#ff4d3d] uppercase">
-                                        Pedido em mãos
+                                        {isQuote
+                                            ? 'Seleção para negociar'
+                                            : 'Pedido em mãos'}
                                     </p>
                                     <h2 className="mt-1 font-zouth-display text-xl font-semibold tracking-[-0.035em]">
-                                        Seleção comprada
+                                        {isQuote
+                                            ? 'Peças solicitadas'
+                                            : 'Seleção comprada'}
                                     </h2>
                                 </div>
                                 <p className="text-xs text-muted-foreground">
@@ -671,7 +717,11 @@ export default function OrderShow({ order }: Props) {
                                         </p>
                                     )}
                                     <p className="mt-1 flex justify-between gap-6 border-t border-border pt-2 font-zouth-display text-lg font-semibold tracking-[-0.03em]">
-                                        <span>Total líquido</span>
+                                        <span>
+                                            {isQuote
+                                                ? 'Estimativa atual'
+                                                : 'Total líquido'}
+                                        </span>
                                         <span className="tabular-nums">
                                             {formatCurrency(order.total_amount)}
                                         </span>
@@ -954,18 +1004,20 @@ export default function OrderShow({ order }: Props) {
                 <AlertDialogContent className="rounded-[2px] border-[#18181f] bg-[#f6f4f0] shadow-none">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="font-zouth-display text-2xl tracking-[-0.035em]">
-                            Cancelar o pedido #
+                            {isQuote
+                                ? 'Encerrar o orçamento #'
+                                : 'Cancelar o pedido #'}
                             {String(order.id).padStart(4, '0')}?
                         </AlertDialogTitle>
                         <AlertDialogDescription className="leading-6">
-                            O pedido sai do fluxo comercial e o estoque
-                            reservado é devolvido. Esta ação fica registrada no
-                            histórico.
+                            {isQuote
+                                ? 'A solicitação sai do fluxo comercial. Nenhuma peça foi reservada e esta ação fica registrada no histórico.'
+                                : 'O pedido sai do fluxo comercial e o estoque reservado é devolvido. Esta ação fica registrada no histórico.'}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel className="min-h-11 rounded-[2px] border-[#18181f] bg-transparent shadow-none">
-                            Manter pedido
+                            {isQuote ? 'Manter orçamento' : 'Manter pedido'}
                         </AlertDialogCancel>
                         <AlertDialogAction
                             onClick={() =>
@@ -975,7 +1027,11 @@ export default function OrderShow({ order }: Props) {
                             disabled={updatingStatus}
                             className="min-h-11 rounded-[2px] bg-[#b42318] text-white shadow-none hover:bg-[#8f1c13]"
                         >
-                            {updatingStatus ? 'Cancelando…' : 'Sim, cancelar'}
+                            {updatingStatus
+                                ? 'Atualizando…'
+                                : isQuote
+                                  ? 'Sim, encerrar'
+                                  : 'Sim, cancelar'}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

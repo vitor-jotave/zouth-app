@@ -107,11 +107,18 @@ class PublicCatalogController extends Controller
                     }
 
                     $query->where(function ($variationQuery) use ($typeName, $values) {
-                        $variationQuery->whereHas('variantStocks', function ($stockQuery) use ($typeName, $values) {
-                            $stockQuery
-                                ->where('quantity', '>', 0)
-                                ->whereIn("variation_key->{$typeName}", $values);
-                        });
+                        $variationQuery
+                            ->whereHas('variantStocks', function ($stockQuery) use ($typeName, $values) {
+                                $stockQuery
+                                    ->where('quantity', '>', 0)
+                                    ->whereIn("variation_key->{$typeName}", $values);
+                            })
+                            ->orWhere(function ($quoteQuery) use ($typeName, $values) {
+                                $quoteQuery
+                                    ->where('allow_quote_when_out_of_stock', true)
+                                    ->whereHas('variantStocks', fn ($stockQuery) => $stockQuery
+                                        ->whereIn("variation_key->{$typeName}", $values));
+                            });
                     });
                 }
             })
@@ -281,7 +288,11 @@ class PublicCatalogController extends Controller
     private function buildFilterOptions(CatalogSetting $setting): array
     {
         $activeVariantStocks = ProductVariantStock::query()
-            ->where('quantity', '>', 0)
+            ->where(function ($query) {
+                $query->where('quantity', '>', 0)
+                    ->orWhereHas('product', fn ($productQuery) => $productQuery
+                        ->where('allow_quote_when_out_of_stock', true));
+            })
             ->whereHas('product', function ($query) use ($setting) {
                 $query->where('manufacturer_id', $setting->manufacturer_id)
                     ->where('is_active', true)

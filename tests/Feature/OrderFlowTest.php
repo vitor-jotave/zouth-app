@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\OrderStatus;
+use App\Enums\OrderType;
 use App\Enums\UserType;
 use App\Models\CatalogSetting;
 use App\Models\Manufacturer;
@@ -188,6 +189,87 @@ it('rejects an order when the requested stock is unavailable', function () {
 
     expect(Order::count())->toBe(0)
         ->and($this->product1->fresh()->base_quantity)->toBe(1);
+});
+
+it('creates a quote request without document address customer or stock reservation', function () {
+    $this->product1->update([
+        'base_quantity' => 0,
+        'allow_quote_when_out_of_stock' => true,
+    ]);
+
+    $response = $this->post(
+        "/catalog/{$this->catalogSetting->public_token}/orders",
+        [
+            'request_quote' => true,
+            'customer_name' => 'Loja interessada',
+            'customer_email' => 'compras@lojainfantil.test',
+            'items' => [['product_id' => $this->product1->id, 'quantity' => 12]],
+        ],
+    );
+
+    $order = Order::query()->firstOrFail();
+
+    expect($order->order_type)->toBe(OrderType::Quote)
+        ->and($order->customer_id)->toBeNull()
+        ->and($order->customer_document)->toBeNull()
+        ->and($order->customer_street)->toBeNull()
+        ->and($order->inventory_reserved_at)->toBeNull()
+        ->and($this->product1->fresh()->base_quantity)->toBe(0)
+        ->and($order->items)->toHaveCount(1)
+        ->and($order->items->first()->quantity)->toBe(12);
+
+    $response->assertRedirect(route('public.order.show', $order->public_token));
+
+    $this->get(route('public.order.show', $order->public_token))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('order.order_type', OrderType::Quote->value)
+            ->where('order.order_type_label', 'Orçamento')
+            ->where('order.status_label', 'Recebido')
+        );
+});
+
+it('does not reserve any item when one product turns the cart into a quote', function () {
+    $this->product1->update([
+        'base_quantity' => 0,
+        'allow_quote_when_out_of_stock' => true,
+    ]);
+    $this->product2->update(['base_quantity' => 5]);
+
+    $this->post(
+        "/catalog/{$this->catalogSetting->public_token}/orders",
+        [
+            'request_quote' => true,
+            'customer_name' => 'Loja mista',
+            'customer_phone' => '(11) 98888-7777',
+            'items' => [
+                ['product_id' => $this->product1->id, 'quantity' => 4],
+                ['product_id' => $this->product2->id, 'quantity' => 2],
+            ],
+        ],
+    )->assertRedirect();
+
+    $order = Order::query()->firstOrFail();
+
+    expect($order->order_type)->toBe(OrderType::Quote)
+        ->and($order->inventory_reserved_at)->toBeNull()
+        ->and($this->product1->fresh()->base_quantity)->toBe(0)
+        ->and($this->product2->fresh()->base_quantity)->toBe(5);
+});
+
+it('rejects a forged quote request for a cart that is fully available', function () {
+    $this->post(
+        "/catalog/{$this->catalogSetting->public_token}/orders",
+        [
+            'request_quote' => true,
+            'customer_name' => 'Cliente',
+            'customer_email' => 'cliente@example.com',
+            'items' => [['product_id' => $this->product1->id, 'quantity' => 1]],
+        ],
+    )->assertSessionHasErrors('items');
+
+    expect(Order::query()->count())->toBe(0)
+        ->and($this->product1->fresh()->base_quantity)->toBe(20);
 });
 
 it('returns reserved stock when an order is cancelled', function () {
@@ -476,6 +558,14 @@ it('lists orders for the current manufacturer', function () {
         'unit_price' => '129.90',
         'quantity' => 2,
     ]);
+    $quote = Order::factory()->forManufacturer($this->manufacturer)->create([
+        'order_type' => OrderType::Quote,
+    ]);
+    OrderItem::factory()->create([
+        'order_id' => $quote->id,
+        'unit_price' => '999.90',
+        'quantity' => 1,
+    ]);
 
     // Other manufacturer's order should not appear
     $other = Manufacturer::factory()->create(['is_active' => true]);
@@ -491,13 +581,13 @@ it('lists orders for the current manufacturer', function () {
     $response->assertOk();
     $response->assertInertia(fn ($page) => $page
         ->component('manufacturer/orders/index')
-        ->has('orders.data', 3)
+        ->has('orders.data', 4)
         ->has('board_stages', 5)
         ->where('board_stages.0.value', OrderStatus::New->value)
-        ->has('board_stages.0.orders', 3)
-        ->where('order_summary.total_orders', 3)
-        ->where('order_summary.in_progress', 3)
-        ->where('order_summary.awaiting_confirmation', 3)
+        ->has('board_stages.0.orders', 4)
+        ->where('order_summary.total_orders', 4)
+        ->where('order_summary.in_progress', 4)
+        ->where('order_summary.awaiting_confirmation', 4)
         ->where('order_summary.total_amount', '259.80')
         ->where('filters.view', 'board')
     );

@@ -57,6 +57,37 @@ it('creates a product without variants', function () {
     expect(ProductVariantStock::count())->toBe(0);
 });
 
+it('persists whether an out of stock product can receive quote requests', function () {
+    $payload = [
+        'name' => 'Peça sob orçamento',
+        'sku' => 'SKU-QUOTE',
+        'base_quantity' => 0,
+        'is_active' => true,
+        'allow_quote_when_out_of_stock' => true,
+        'variations' => [],
+        'variant_stocks' => [],
+    ];
+
+    $this->post('/manufacturer/products', $payload)->assertRedirect();
+
+    $product = Product::query()->where('sku', 'SKU-QUOTE')->firstOrFail();
+
+    expect($product->allow_quote_when_out_of_stock)->toBeTrue();
+
+    $this->get(route('manufacturer.products.edit', $product))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('product.allow_quote_when_out_of_stock', true)
+        );
+
+    $this->put(route('manufacturer.products.update', $product), [
+        ...$payload,
+        'allow_quote_when_out_of_stock' => false,
+    ])->assertRedirect();
+
+    expect($product->fresh()->allow_quote_when_out_of_stock)->toBeFalse();
+});
+
 it('updates and reloads product description', function () {
     $product = Product::factory()->forManufacturer($this->manufacturer)->withoutCategory()->create([
         'description' => null,
