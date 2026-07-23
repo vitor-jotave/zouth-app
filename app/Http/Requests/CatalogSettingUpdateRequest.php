@@ -103,6 +103,11 @@ class CatalogSettingUpdateRequest extends FormRequest
             'heading_font_family.in' => 'A fonte de titulos selecionada e invalida.',
             'body_font_family.in' => 'A fonte de corpo selecionada e invalida.',
             'hide_prices.boolean' => 'Escolha uma forma de negociação válida.',
+            'layout_density.in' => 'Escolha um respiro válido entre as peças.',
+            'card_style.in' => 'Escolha um acabamento válido para as peças.',
+            'background_mode.in' => 'Escolha um tipo de fundo válido.',
+            'pattern_id.in' => 'Escolha um padrão de fundo válido.',
+            'gradient_id.in' => 'Escolha uma combinação de cores válida.',
         ];
     }
 

@@ -85,6 +85,33 @@ it('creates a complete commercial showroom and reveals the password once', funct
 
     $catalog = $manufacturer->catalogSetting()->sole();
     $this->get(route('public.catalog.show', $catalog->public_token))->assertOk();
+
+    expect($catalog->layout_preset)->toBe('minimal')
+        ->and($catalog->layout_density)->toBe('comfortable')
+        ->and($catalog->card_style)->toBe('soft');
+
+    actingAs($owner)
+        ->put(route('manufacturer.catalog-settings.update'), [
+            'brand_name' => $catalog->brand_name,
+            'show_brand_name' => $catalog->show_brand_name,
+            'show_logo' => $catalog->show_logo,
+            'hide_prices' => $catalog->hide_prices,
+            'primary_color' => $catalog->primary_color,
+            'secondary_color' => $catalog->secondary_color,
+            'accent_color' => $catalog->accent_color,
+            'background_color' => $catalog->background_color,
+            'font_family' => $catalog->font_family,
+            'heading_font_family' => $catalog->heading_font_family,
+            'body_font_family' => $catalog->body_font_family,
+            'public_link_active' => $catalog->public_link_active,
+            'layout_preset' => $catalog->layout_preset,
+            'layout_density' => $catalog->layout_density,
+            'card_style' => $catalog->card_style,
+            'background_mode' => $catalog->background_mode,
+            'sections' => $catalog->sections,
+        ])
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
 });
 
 it('rebuilds the showroom without duplicating data or touching real manufacturers', function () {

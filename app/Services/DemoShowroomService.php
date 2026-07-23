@@ -253,9 +253,9 @@ class DemoShowroomService
             'heading_font_family' => 'fraunces',
             'body_font_family' => 'manrope',
             'public_link_active' => true,
-            'layout_preset' => 'editorial',
-            'layout_density' => 'airy',
-            'card_style' => 'borderless',
+            'layout_preset' => 'minimal',
+            'layout_density' => 'comfortable',
+            'card_style' => 'soft',
             'background_mode' => 'solid',
             'sections' => [
                 [
