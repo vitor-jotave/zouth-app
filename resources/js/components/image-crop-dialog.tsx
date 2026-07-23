@@ -41,6 +41,7 @@ interface ImageCropDialogProps {
     aspectRatio?: number | null;
     title?: string;
     description?: string;
+    allowTransparentBackground?: boolean;
 }
 
 function createInitialCrop(
@@ -68,13 +69,20 @@ export function ImageCropDialog({
     aspectRatio = DEFAULT_ASPECT_RATIO,
     title = 'Ajustar imagem',
     description = DEFAULT_DESCRIPTION,
+    allowTransparentBackground = false,
 }: ImageCropDialogProps) {
     const [crop, setCrop] = useState<Crop>();
     const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
     const [processing, setProcessing] = useState(false);
     const [scale, setScale] = useState(1);
-    const [bgColor, setBgColor] = useState('#ffffff');
+    const [bgColor, setBgColor] = useState<string | null>('#ffffff');
     const imgRef = useRef<HTMLImageElement>(null);
+    const canUseTransparency =
+        allowTransparentBackground &&
+        imageFile !== null &&
+        (imageFile.type === 'image/png' ||
+            imageFile.type === 'image/webp' ||
+            /\.(png|webp)$/i.test(imageFile.name));
 
     // Cria a blob URL uma única vez por arquivo e revoga quando o componente desmonta
     // ou o arquivo muda — evita recriar a URL a cada render e recarregar a imagem.
@@ -94,8 +102,9 @@ export function ImageCropDialog({
     // Reset state when a new image file is provided
     useEffect(() => {
         setScale(1);
+        setBgColor(canUseTransparency ? null : '#ffffff');
         prevScaleRef.current = 1;
-    }, [imageFile]);
+    }, [imageFile, canUseTransparency]);
 
     // When zoom changes, adjust the crop area proportionally so the
     // output actually reflects the zoom level (zoom in → smaller crop → more detail).
@@ -184,7 +193,11 @@ export function ImageCropDialog({
                 imgRef.current,
                 completedCrop,
                 imageFile.name,
-                { backgroundColor: bgColor, scale },
+                {
+                    backgroundColor: bgColor,
+                    scale,
+                    preserveTransparency: bgColor === null,
+                },
             );
 
             onCropped(file);
@@ -219,7 +232,19 @@ export function ImageCropDialog({
                 {imageUrl && (
                     <div
                         className="flex items-start justify-center overflow-hidden rounded-md p-2"
-                        style={{ backgroundColor: bgColor }}
+                        style={{
+                            backgroundColor: bgColor ?? '#ffffff',
+                            backgroundImage:
+                                bgColor === null
+                                    ? 'linear-gradient(45deg, #e2e0dc 25%, transparent 25%), linear-gradient(-45deg, #e2e0dc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e2e0dc 75%), linear-gradient(-45deg, transparent 75%, #e2e0dc 75%)'
+                                    : undefined,
+                            backgroundPosition:
+                                bgColor === null
+                                    ? '0 0, 0 8px, 8px -8px, -8px 0'
+                                    : undefined,
+                            backgroundSize:
+                                bgColor === null ? '16px 16px' : undefined,
+                        }}
                     >
                         <ReactCrop
                             crop={crop}
@@ -270,15 +295,39 @@ export function ImageCropDialog({
 
                     {/* Background color */}
                     <div className="space-y-2">
-                        <Label className="text-xs">
-                            Cor de fundo (para transparências)
-                        </Label>
+                        <Label className="text-xs">Fundo da imagem</Label>
                         <div className="flex flex-wrap items-center gap-2">
+                            {canUseTransparency && (
+                                <button
+                                    type="button"
+                                    title="Preservar transparência"
+                                    aria-label="Preservar transparência"
+                                    aria-pressed={bgColor === null}
+                                    onClick={() => setBgColor(null)}
+                                    className={cn(
+                                        'relative size-8 overflow-hidden rounded-md border-2 transition-all',
+                                        bgColor === null
+                                            ? 'scale-110 border-primary shadow-md'
+                                            : 'border-transparent hover:border-muted-foreground/50',
+                                    )}
+                                    style={{
+                                        backgroundColor: '#ffffff',
+                                        backgroundImage:
+                                            'linear-gradient(45deg, #d7d4ce 25%, transparent 25%), linear-gradient(-45deg, #d7d4ce 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #d7d4ce 75%), linear-gradient(-45deg, transparent 75%, #d7d4ce 75%)',
+                                        backgroundPosition:
+                                            '0 0, 0 6px, 6px -6px, -6px 0',
+                                        backgroundSize: '12px 12px',
+                                    }}
+                                />
+                            )}
+
                             {BG_PRESETS.map((preset) => (
                                 <button
                                     key={preset.value}
                                     type="button"
                                     title={preset.label}
+                                    aria-label={`Usar fundo ${preset.label.toLocaleLowerCase('pt-BR')}`}
+                                    aria-pressed={bgColor === preset.value}
                                     onClick={() => setBgColor(preset.value)}
                                     className={cn(
                                         'size-8 rounded-md border-2 transition-all',
@@ -293,14 +342,15 @@ export function ImageCropDialog({
                             {/* Custom color picker */}
                             <input
                                 type="color"
-                                value={bgColor}
+                                value={bgColor ?? '#ffffff'}
                                 onChange={(e) => setBgColor(e.target.value)}
                                 title="Cor personalizada"
+                                aria-label="Escolher cor de fundo personalizada"
                                 className="size-8 cursor-pointer rounded-md border border-input p-0.5"
                             />
 
                             <span className="font-mono text-xs text-muted-foreground">
-                                {bgColor}
+                                {bgColor ?? 'Transparente'}
                             </span>
                         </div>
                     </div>

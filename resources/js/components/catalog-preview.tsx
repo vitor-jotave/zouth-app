@@ -1,6 +1,11 @@
 import { ArrowRight, Box, Eye, Package } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
-import { GRADIENTS, PATTERNS } from '@/lib/catalog-theming';
+import {
+    CATALOG_LOGO_SIZE,
+    catalogLogoStyle,
+    GRADIENTS,
+    PATTERNS,
+} from '@/lib/catalog-theming';
 import { cn } from '@/lib/utils';
 
 type CatalogSectionType = 'hero' | 'collections' | 'product_grid';
@@ -73,7 +78,11 @@ const fontMap: Record<string, string> = {
 };
 
 const fallbackSections: CatalogSection[] = [
-    { type: 'hero', enabled: true, props: {} },
+    {
+        type: 'hero',
+        enabled: true,
+        props: { logo_size: CATALOG_LOGO_SIZE.default },
+    },
     { type: 'collections', enabled: true, props: {} },
     { type: 'product_grid', enabled: true, props: {} },
 ];
@@ -293,11 +302,17 @@ export default function CatalogPreview({
                                                             settings.brand_name ||
                                                             manufacturerName
                                                         }
-                                                        className={cn(
-                                                            'h-auto w-auto object-contain',
+                                                        className="h-auto object-contain"
+                                                        style={catalogLogoStyle(
+                                                            sectionValue(
+                                                                section,
+                                                                'logo_size',
+                                                                CATALOG_LOGO_SIZE.default,
+                                                            ),
                                                             isMobile
-                                                                ? 'max-h-10 max-w-32'
-                                                                : 'max-h-12 max-w-40',
+                                                                ? 128
+                                                                : 160,
+                                                            isMobile ? 40 : 48,
                                                         )}
                                                     />
                                                 )}

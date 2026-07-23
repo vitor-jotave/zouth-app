@@ -18,6 +18,8 @@ interface Order {
     public_token: string;
     status: string;
     status_label: string;
+    order_type: 'standard' | 'quote';
+    order_type_label: string;
     customer_name: string;
     total_items: number;
     subtotal_amount: string;
@@ -102,7 +104,10 @@ export default function RepOrdersIndex({ orders }: Props) {
                             {orders.data.map((order) => (
                                 <TableRow key={order.id}>
                                     <TableCell className="font-mono text-xs">
-                                        #{order.id}
+                                        {order.order_type === 'quote'
+                                            ? 'ORÇ '
+                                            : '#'}
+                                        {order.id}
                                     </TableCell>
                                     <TableCell className="font-medium">
                                         {order.customer_name}
@@ -114,7 +119,9 @@ export default function RepOrdersIndex({ orders }: Props) {
                                                 'outline'
                                             }
                                         >
-                                            {order.status_label}
+                                            {order.order_type === 'quote'
+                                                ? `Orçamento · ${order.status_label}`
+                                                : order.status_label}
                                         </Badge>
                                     </TableCell>
                                     <TableCell>{order.total_items}</TableCell>
@@ -129,7 +136,10 @@ export default function RepOrdersIndex({ orders }: Props) {
                                             </span>
                                         )}
                                         <strong className="block">
-                                            Total R$ {order.total_amount}
+                                            {order.order_type === 'quote'
+                                                ? 'Estimativa'
+                                                : 'Total'}{' '}
+                                            R$ {order.total_amount}
                                         </strong>
                                     </TableCell>
                                     <TableCell className="text-xs text-muted-foreground">

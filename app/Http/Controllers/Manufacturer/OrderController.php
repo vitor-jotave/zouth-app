@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Manufacturer;
 
 use App\Enums\OrderStatus;
+use App\Enums\OrderType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateOrderStatusRequest;
 use App\Http\Resources\OrderResource;
@@ -156,6 +157,7 @@ class OrderController extends Controller
     ): float {
         $query = Order::query()
             ->where('manufacturer_id', $manufacturerId)
+            ->where('order_type', OrderType::Standard)
             ->with('items');
 
         if ($status) {
@@ -197,7 +199,10 @@ class OrderController extends Controller
 
         return redirect()
             ->back()
-            ->with('success', "Pedido atualizado para \"{$newStatus->label()}\".");
+            ->with(
+                'success',
+                "{$order->order_type->label()} atualizado para \"{$order->statusLabel($newStatus)}\"."
+            );
     }
 
     public function updateNotes(Request $request, Order $order): RedirectResponse

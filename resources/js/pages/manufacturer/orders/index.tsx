@@ -64,6 +64,8 @@ type Order = {
     public_token: string;
     status: string;
     status_label: string;
+    order_type: 'standard' | 'quote';
+    order_type_label: string;
     customer_name: string;
     customer_phone: string | null;
     customer_email: string | null;
@@ -216,7 +218,21 @@ function nextOperationalTransition(order: Order): AllowedTransition | null {
     );
 }
 
-function transitionActionLabel(transition: AllowedTransition): string {
+function transitionActionLabel(
+    transition: AllowedTransition,
+    isQuote = false,
+): string {
+    if (isQuote) {
+        return (
+            {
+                confirmed: 'Iniciar negociação',
+                preparing: 'Marcar como aprovado',
+                shipped: 'Marcar como formalizado',
+                delivered: 'Concluir orçamento',
+            }[transition.value] ?? transition.label
+        );
+    }
+
     return (
         {
             confirmed: 'Confirmar pedido',
@@ -310,7 +326,8 @@ function OrderCard({
         >
             <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
                 <p className="font-zouth-display text-[0.72rem] font-bold tracking-[0.08em] text-muted-foreground uppercase tabular-nums">
-                    Pedido #{String(order.id).padStart(4, '0')}
+                    {order.order_type_label} #
+                    {String(order.id).padStart(4, '0')}
                 </p>
                 <button
                     type="button"
@@ -339,7 +356,9 @@ function OrderCard({
                 <div className="mt-5 grid grid-cols-2 gap-3 border-t border-border pt-4">
                     <div>
                         <p className="text-[0.62rem] font-bold tracking-[0.14em] text-muted-foreground uppercase">
-                            Valor
+                            {order.order_type === 'quote'
+                                ? 'Estimativa'
+                                : 'Valor'}
                         </p>
                         <p className="mt-1 font-zouth-display text-base font-semibold tracking-[-0.02em] text-foreground tabular-nums">
                             {formatCurrency(order.total_amount)}
@@ -383,7 +402,10 @@ function OrderCard({
                         <span>
                             {isUpdating
                                 ? 'Atualizando pedido…'
-                                : transitionActionLabel(nextTransition)}
+                                : transitionActionLabel(
+                                      nextTransition,
+                                      order.order_type === 'quote',
+                                  )}
                         </span>
                         <ArrowRight className="size-4" aria-hidden="true" />
                     </button>
@@ -898,11 +920,13 @@ export default function OrdersIndex({
                                                 'neutral'
                                             }
                                         >
-                                            {order.status_label}
+                                            {order.order_type === 'quote'
+                                                ? `Orçamento · ${order.status_label}`
+                                                : order.status_label}
                                         </StatusLabel>
                                     }
-                                    description={`#${String(order.id).padStart(4, '0')} · ${orderItemsLabel(order.total_items)} · ${order.customer_phone ?? order.customer_email ?? 'Contato não informado'}`}
-                                    value={formatCurrency(order.total_amount)}
+                                    description={`${order.order_type_label} #${String(order.id).padStart(4, '0')} · ${orderItemsLabel(order.total_items)} · ${order.customer_phone ?? order.customer_email ?? 'Contato não informado'}`}
+                                    value={`${order.order_type === 'quote' ? 'Estim. ' : ''}${formatCurrency(order.total_amount)}`}
                                     meta={formatOrderDate(order.created_at)}
                                 />
                             ))}

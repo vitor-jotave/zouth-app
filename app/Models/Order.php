@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\OrderStatus;
+use App\Enums\OrderType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -22,6 +23,7 @@ class Order extends Model
         'sales_rep_id',
         'public_token',
         'status',
+        'order_type',
         'subtotal_cents',
         'discount_cents',
         'total_cents',
@@ -55,6 +57,7 @@ class Order extends Model
     {
         return [
             'status' => OrderStatus::class,
+            'order_type' => OrderType::class,
             'subtotal_cents' => 'integer',
             'discount_cents' => 'integer',
             'total_cents' => 'integer',
@@ -92,6 +95,29 @@ class Order extends Model
     public function totalItems(): int
     {
         return (int) $this->items()->sum('quantity');
+    }
+
+    public function isQuote(): bool
+    {
+        return $this->order_type === OrderType::Quote;
+    }
+
+    public function statusLabel(?OrderStatus $status = null): string
+    {
+        $resolvedStatus = $status ?? $this->status;
+
+        if (! $this->isQuote()) {
+            return $resolvedStatus->label();
+        }
+
+        return match ($resolvedStatus) {
+            OrderStatus::New => 'Recebido',
+            OrderStatus::Confirmed => 'Em negociação',
+            OrderStatus::Preparing => 'Aprovado',
+            OrderStatus::Shipped => 'Formalizado',
+            OrderStatus::Delivered => 'Concluído',
+            OrderStatus::Cancelled => 'Encerrado',
+        };
     }
 
     public function totalAmount(): float

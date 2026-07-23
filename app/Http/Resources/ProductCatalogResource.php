@@ -33,7 +33,7 @@ class ProductCatalogResource extends JsonResource
                 $type = $pv->variationType;
                 $typeName = $type->name ?? '';
                 $stockValues = $variantStocks
-                    ->filter(fn ($stock) => (int) $stock->quantity > 0)
+                    ->filter(fn ($stock) => (int) $stock->quantity > 0 || $this->allow_quote_when_out_of_stock)
                     ->map(fn ($stock) => data_get($stock->variation_key, $typeName))
                     ->map(fn (mixed $value) => (string) $value)
                     ->filter()
@@ -100,6 +100,7 @@ class ProductCatalogResource extends JsonResource
                 'quantity' => $item->quantity,
             ])->values() ?? [],
             'total_stock' => $this->getTotalStock(),
+            'allow_quote_when_out_of_stock' => (bool) $this->allow_quote_when_out_of_stock,
             'price_cents' => $this->when(! $hidePrices, $this->price_cents),
         ];
     }

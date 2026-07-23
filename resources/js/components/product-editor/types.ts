@@ -50,6 +50,7 @@ export interface ProductEditorPayload {
     product_category_id?: number | null;
     base_quantity: number;
     is_active: boolean;
+    allow_quote_when_out_of_stock: boolean;
     sort_order: number;
     price_cents?: number | null;
     media?: ProductMediaItem[];
@@ -99,6 +100,7 @@ export interface ProductEditorData {
     product_category_id: string | number;
     base_quantity: number;
     is_active: boolean;
+    allow_quote_when_out_of_stock: boolean;
     sort_order: number;
     price: string;
     variations: ProductVariationSelection[];

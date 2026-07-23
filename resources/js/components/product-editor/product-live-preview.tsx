@@ -137,6 +137,12 @@ export function ProductLivePreview({
                                 ? 'Disponível no catálogo'
                                 : 'Oculto no catálogo'}
                         </StatusLabel>
+                        {data.allow_quote_when_out_of_stock && (
+                            <p className="mt-3 border-l-2 border-[#ff4d3d] pl-3 text-xs leading-5 text-muted-foreground">
+                                Continua disponível para orçamento quando o
+                                estoque terminar.
+                            </p>
+                        )}
                         <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs font-medium text-muted-foreground">
                             <span className="inline-flex items-center gap-2">
                                 <ImageIcon

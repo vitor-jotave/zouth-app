@@ -9,15 +9,15 @@ const RESIZE_FACTOR = 0.8;
 
 /**
  * Draw the cropped region of an image onto a new canvas.
- * `backgroundColor` fills the canvas before drawing — important for PNGs with
- * transparency, since JPEG output doesn't support alpha channels.
+ * `backgroundColor` fills the canvas before drawing. Pass `null` to preserve
+ * the alpha channel for formats that support transparency.
  * `scale` controls zoom: >1 = zoom in (handled via crop coords), <1 = zoom out
  * (image is centred on a larger canvas padded with backgroundColor).
  */
 export function cropToCanvas(
     image: HTMLImageElement,
     crop: PixelCrop,
-    backgroundColor: string = '#ffffff',
+    backgroundColor: string | null = '#ffffff',
     scale: number = 1,
 ): HTMLCanvasElement {
     const canvas = document.createElement('canvas');
@@ -63,9 +63,10 @@ export function cropToCanvas(
 
     ctx.imageSmoothingQuality = 'high';
 
-    // Fill background before drawing so transparent / padded areas use the chosen color
-    ctx.fillStyle = backgroundColor;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (backgroundColor !== null) {
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
 
     if (scale >= 1) {
         // Draw the cropped portion filling the entire canvas
@@ -132,6 +133,31 @@ export async function compressCanvas(
 }
 
 /**
+ * Convert a canvas to PNG while preserving its alpha channel. PNG does not
+ * support lossy quality controls, so oversized files are reduced by dimension.
+ */
+export async function compressTransparentCanvas(
+    source: HTMLCanvasElement,
+    maxSizeBytes: number = MAX_FILE_SIZE,
+): Promise<Blob> {
+    let canvas = fitCanvasWithin(source, MAX_DIMENSION);
+
+    while (true) {
+        const blob = await canvasToBlob(canvas, 'image/png');
+
+        if (
+            blob.size <= maxSizeBytes ||
+            canvas.width <= 32 ||
+            canvas.height <= 32
+        ) {
+            return blob;
+        }
+
+        canvas = resizeCanvas(canvas, RESIZE_FACTOR);
+    }
+}
+
+/**
  * Full pipeline: crop an image using a PixelCrop, compress to ≤ maxSize,
  * and return a File object ready for upload.
  */
@@ -141,22 +167,32 @@ export async function cropAndCompress(
     fileName: string,
     options: {
         maxSizeBytes?: number;
-        backgroundColor?: string;
+        backgroundColor?: string | null;
         scale?: number;
+        preserveTransparency?: boolean;
     } = {},
 ): Promise<File> {
     const {
         maxSizeBytes = MAX_FILE_SIZE,
         backgroundColor = '#ffffff',
         scale = 1,
+        preserveTransparency = false,
     } = options;
-    const canvas = cropToCanvas(image, crop, backgroundColor, scale);
-    const blob = await compressCanvas(canvas, maxSizeBytes);
+    const canvas = cropToCanvas(
+        image,
+        crop,
+        preserveTransparency ? null : backgroundColor,
+        scale,
+    );
+    const blob = preserveTransparency
+        ? await compressTransparentCanvas(canvas, maxSizeBytes)
+        : await compressCanvas(canvas, maxSizeBytes);
 
-    // Preserve original name stem, always .jpg extension
     const stem = fileName.replace(/\.[^.]+$/, '');
+    const extension = preserveTransparency ? 'png' : 'jpg';
+    const type = preserveTransparency ? 'image/png' : 'image/jpeg';
 
-    return new File([blob], `${stem}.jpg`, { type: 'image/jpeg' });
+    return new File([blob], `${stem}.${extension}`, { type });
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +202,7 @@ export async function cropAndCompress(
 function canvasToBlob(
     canvas: HTMLCanvasElement,
     type: string,
-    quality: number,
+    quality?: number,
 ): Promise<Blob> {
     return new Promise((resolve, reject) => {
         canvas.toBlob(

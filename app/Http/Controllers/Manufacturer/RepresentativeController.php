@@ -34,7 +34,7 @@ class RepresentativeController extends Controller
         $performance = Order::query()
             ->where('manufacturer_id', $manufacturer->id)
             ->whereNotNull('sales_rep_id')
-            ->selectRaw('sales_rep_id, COUNT(*) as orders_count, COALESCE(SUM(total_cents), 0) as total_cents, MAX(created_at) as last_order_at')
+            ->selectRaw("sales_rep_id, COUNT(*) as orders_count, COALESCE(SUM(CASE WHEN order_type = 'standard' THEN total_cents ELSE 0 END), 0) as total_cents, MAX(created_at) as last_order_at")
             ->groupBy('sales_rep_id')
             ->get()
             ->keyBy('sales_rep_id');

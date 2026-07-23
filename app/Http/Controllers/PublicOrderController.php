@@ -84,7 +84,12 @@ class PublicOrderController extends Controller
 
         return redirect()
             ->route('public.order.show', $order->public_token)
-            ->with('success', 'Pedido enviado com sucesso!');
+            ->with(
+                'success',
+                $order->isQuote()
+                    ? 'Solicitação de orçamento enviada com sucesso!'
+                    : 'Pedido enviado com sucesso!'
+            );
     }
 
     public function show(Request $request, string $publicToken): Response
@@ -97,7 +102,9 @@ class PublicOrderController extends Controller
             'order' => [
                 'public_token' => $order->public_token,
                 'status' => $order->status->value,
-                'status_label' => $order->status->label(),
+                'status_label' => $order->statusLabel(),
+                'order_type' => $order->order_type->value,
+                'order_type_label' => $order->order_type->label(),
                 'customer_name' => $order->customer_name,
                 'items' => OrderItemResource::collection($order->items)->resolve($request),
                 'total_items' => $order->items->sum('quantity'),

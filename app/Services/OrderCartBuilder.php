@@ -11,7 +11,7 @@ class OrderCartBuilder
 {
     /**
      * @param  array<int, array{product_id: int, quantity: int, selected_variations?: array<string, string>|null}>  $items
-     * @return array{items: array<int, array{product_id: int, product_category_id: int|null, quantity: int, unit_price_cents: int|null}>, products: Collection<int, Product>}
+     * @return array{items: array<int, array{product_id: int, product_category_id: int|null, quantity: int, unit_price_cents: int|null}>, resolved_items: array<int, array{product_variant_stock_id: int|null, selected_variations: array<string, string>|null, unit_price_cents: int|null, requires_quote: bool}>, products: Collection<int, Product>, requires_quote: bool}
      */
     public function build(int $manufacturerId, array $items, bool $lockForUpdate = false): array
     {
@@ -38,31 +38,63 @@ class OrderCartBuilder
             ]);
         }
 
-        $cartItems = collect($items)->map(function (array $item) use ($products): array {
+        $resolvedItems = collect($items)->map(function (array $item) use ($products): array {
             /** @var Product $product */
             $product = $products->get($item['product_id']);
+            $resolved = $this->resolveSelection($product, $item);
+            $quantity = (int) $item['quantity'];
+            $requiresQuote = $quantity > $resolved['available_quantity'];
+
+            if ($requiresQuote && ! $product->allow_quote_when_out_of_stock) {
+                throw ValidationException::withMessages([
+                    'items' => "Estoque insuficiente para {$product->name}. Disponível para este pedido: {$resolved['available_quantity']}.",
+                ]);
+            }
 
             return [
                 'product_id' => $product->id,
                 'product_category_id' => $product->product_category_id,
-                'quantity' => (int) $item['quantity'],
-                'unit_price_cents' => $this->resolveUnitPrice($product, $item),
+                'quantity' => $quantity,
+                'unit_price_cents' => $resolved['unit_price_cents'],
+                'product_variant_stock_id' => $resolved['product_variant_stock_id'],
+                'selected_variations' => $resolved['selected_variations'],
+                'requires_quote' => $requiresQuote,
             ];
-        })->all();
+        });
+
+        $cartItems = $resolvedItems->map(fn (array $item): array => [
+            'product_id' => $item['product_id'],
+            'product_category_id' => $item['product_category_id'],
+            'quantity' => $item['quantity'],
+            'unit_price_cents' => $item['unit_price_cents'],
+        ])->all();
 
         return [
             'items' => $cartItems,
+            'resolved_items' => $resolvedItems->map(fn (array $item): array => [
+                'product_variant_stock_id' => $item['product_variant_stock_id'],
+                'selected_variations' => $item['selected_variations'],
+                'unit_price_cents' => $item['unit_price_cents'],
+                'requires_quote' => $item['requires_quote'],
+            ])->all(),
             'products' => $products,
+            'requires_quote' => $resolvedItems->contains(fn (array $item): bool => $item['requires_quote']),
         ];
     }
 
     /**
      * @param  array{selected_variations?: array<string, string>|null}  $item
+     * @return array{product_variant_stock_id: int|null, selected_variations: array<string, string>|null, unit_price_cents: int|null, available_quantity: int}
      */
-    private function resolveUnitPrice(Product $product, array $item): ?int
+    private function resolveSelection(Product $product, array $item): array
     {
         if ($product->isCombo() || $product->productVariations->isEmpty()) {
-            return $product->price_cents;
+            return [
+                'product_variant_stock_id' => null,
+                'selected_variations' => null,
+                'unit_price_cents' => $product->price_cents,
+                'available_quantity' => $product->getTotalStock(),
+            ];
         }
 
         $selectedVariations = $this->normalizeVariations($item['selected_variations'] ?? []);
@@ -83,7 +115,12 @@ class OrderCartBuilder
             ]);
         }
 
-        return $variantStock->price_cents ?? $product->price_cents;
+        return [
+            'product_variant_stock_id' => $variantStock->id,
+            'selected_variations' => $selectedVariations,
+            'unit_price_cents' => $variantStock->price_cents ?? $product->price_cents,
+            'available_quantity' => (int) $variantStock->quantity,
+        ];
     }
 
     /**

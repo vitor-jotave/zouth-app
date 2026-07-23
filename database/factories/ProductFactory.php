@@ -29,6 +29,7 @@ class ProductFactory extends Factory
             'description' => fake()->sentence(),
             'base_quantity' => 20,
             'is_active' => true,
+            'allow_quote_when_out_of_stock' => false,
             'sort_order' => 0,
             'price_cents' => fake()->numberBetween(990, 99900),
         ];
