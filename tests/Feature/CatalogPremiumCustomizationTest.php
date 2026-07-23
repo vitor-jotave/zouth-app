@@ -31,6 +31,16 @@ it('keeps the catalog studio controls accessible while the preview scrolls', fun
         ->toMatch('/data-testid="catalog-studio-inspector"[^>]+xl:sticky[^>]+xl:top-0[^>]+xl:max-h-svh[^>]+xl:overflow-y-auto/s');
 });
 
+it('renders the desktop preview at the same canonical width as the public catalog', function () {
+    $studio = file_get_contents(resource_path('js/pages/manufacturer/catalog-settings/index.tsx'));
+
+    expect($studio)
+        ->toContain("const previewCanvasWidth = viewport === 'mobile' ? 390 : 1280")
+        ->toContain('data-testid="catalog-preview-stage"')
+        ->toContain('width: `${previewCanvasWidth}px`')
+        ->toContain('zoom: previewScale');
+});
+
 it('reveals the section and field responsible for catalog validation errors', function () {
     $studio = file_get_contents(resource_path('js/pages/manufacturer/catalog-settings/index.tsx'));
 
@@ -56,13 +66,20 @@ it('places public catalog filters beside the collection navigation without repea
         ->not->toContain('{productGridTitle}');
 });
 
-it('keeps the catalog logo in the document flow above the hero copy', function () {
+it('keeps the catalog logo inside the shared hero surface', function () {
+    $hero = file_get_contents(resource_path('js/components/catalog-hero.tsx'));
+    $preview = file_get_contents(resource_path('js/components/catalog-preview.tsx'));
     $catalog = file_get_contents(resource_path('js/pages/public/catalog.tsx'));
 
-    expect($catalog)
-        ->toMatch('/data-testid="catalog-brand-bar"[^>]+className="[^"]*relative[^"]*"/s')
-        ->not->toMatch('/data-testid="catalog-brand-bar"[^>]+className="[^"]*absolute[^"]*"/s')
-        ->toContain('object-contain object-left');
+    expect($hero)
+        ->toContain('data-testid="catalog-hero-surface"')
+        ->toContain('data-testid="catalog-brand-bar"')
+        ->toMatch('/data-testid="catalog-hero-surface".*data-testid="catalog-brand-bar"/s')
+        ->toContain('brandReserve')
+        ->and($preview)
+        ->toContain('<CatalogHero')
+        ->and($catalog)
+        ->toContain('<CatalogHero');
 });
 
 it('uses the same explicit campaign image rule in the studio preview and public catalog', function () {
@@ -74,7 +91,7 @@ it('uses the same explicit campaign image rule in the studio preview and public 
     expect($theming)
         ->toContain('export function catalogCoverImageUrl(')
         ->and($preview)
-        ->toContain('catalogCoverImageUrl(settings, true)')
+        ->toContain('catalogCoverImageUrl(settings)')
         ->not->toContain('heroProduct?.primary_image')
         ->and($catalog)
         ->toContain('catalogCoverImageUrl(settings)')
@@ -82,6 +99,28 @@ it('uses the same explicit campaign image rule in the studio preview and public 
         ->and($studio)
         ->toContain('Sem ela, a capa permanece')
         ->not->toContain('usamos a primeira');
+});
+
+it('uses the same campaign image resizing in the studio preview and public catalog', function () {
+    $theming = file_get_contents(resource_path('js/lib/catalog-theming.ts'));
+    $hero = file_get_contents(resource_path('js/components/catalog-hero.tsx'));
+    $preview = file_get_contents(resource_path('js/components/catalog-preview.tsx'));
+    $catalog = file_get_contents(resource_path('js/pages/public/catalog.tsx'));
+    $studio = file_get_contents(resource_path('js/pages/manufacturer/catalog-settings/index.tsx'));
+
+    expect($theming)
+        ->toContain('export function catalogCoverImageStyle(')
+        ->toContain("fit === 'manual'")
+        ->and($hero)
+        ->toContain('catalogCoverImageStyle(')
+        ->and($preview)
+        ->toContain('<CatalogHero')
+        ->and($catalog)
+        ->toContain('<CatalogHero')
+        ->and($studio)
+        ->toContain('Como a foto ocupa a capa')
+        ->toContain('Tamanho manual')
+        ->toContain('Tamanho da imagem');
 });
 
 it('keeps one flexible catalog base while saving presentation choices', function () {
@@ -439,17 +478,47 @@ it('allows saving sections configuration', function () {
         [
             'type' => 'hero',
             'enabled' => true,
-            'props' => ['show_logo' => true, 'align' => 'center'],
+            'props' => [
+                'show_logo' => true,
+                'logo_size' => 135,
+                'image_fit' => 'cover',
+                'image_scale' => 150,
+                'eyebrow' => 'Nova coleção',
+                'headline' => 'Kattana',
+                'subtitle' => 'Leveza para acompanhar cada descoberta.',
+                'cta_text' => 'Conheça a coleção',
+                'show_cta' => true,
+                'show_product_count' => false,
+                'align' => 'center',
+            ],
         ],
         [
             'type' => 'product_grid',
             'enabled' => true,
-            'props' => ['columns_desktop' => 4],
+            'props' => [
+                'title' => 'Peças da coleção',
+                'columns_mobile' => 1,
+                'columns_tablet' => 3,
+                'columns_desktop' => 4,
+                'presentation' => 'editorial',
+                'show_price' => false,
+                'show_sku' => true,
+                'show_stock' => false,
+                'show_variations' => true,
+                'show_action' => true,
+                'show_badges' => false,
+                'sort' => 'manual',
+            ],
         ],
         [
             'type' => 'collections',
             'enabled' => false,
-            'props' => ['style' => 'chips'],
+            'props' => [
+                'title' => 'Capítulos da coleção',
+                'display' => 'chips',
+                'show_counts' => false,
+                'max_items' => 8,
+            ],
         ],
     ];
 
@@ -469,5 +538,24 @@ it('allows saving sections configuration', function () {
     $setting = CatalogSetting::where('manufacturer_id', $this->manufacturer->id)->first();
     expect($setting->sections)->toBeArray();
     expect($setting->sections)->toHaveCount(3);
-    expect(collect($setting->sections)->firstWhere('type', 'collections')['enabled'])->toBeFalse();
+    expect(collect($setting->sections)->firstWhere('type', 'hero')['props'])->toMatchArray([
+        'headline' => 'Kattana',
+        'align' => 'center',
+        'show_cta' => true,
+    ]);
+    expect(collect($setting->sections)->firstWhere('type', 'collections'))->toMatchArray([
+        'enabled' => false,
+        'props' => [
+            'title' => 'Capítulos da coleção',
+            'display' => 'chips',
+            'show_counts' => false,
+            'max_items' => 8,
+        ],
+    ]);
+    expect(collect($setting->sections)->firstWhere('type', 'product_grid')['props'])->toMatchArray([
+        'presentation' => 'editorial',
+        'columns_desktop' => 4,
+        'show_price' => false,
+        'sort' => 'manual',
+    ]);
 });

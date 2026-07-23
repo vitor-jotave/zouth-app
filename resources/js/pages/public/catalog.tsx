@@ -35,6 +35,7 @@ import {
     type MouseEvent,
     type ReactNode,
 } from 'react';
+import { CatalogHero } from '@/components/catalog-hero';
 import { Pagination } from '@/components/pagination';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -371,14 +372,6 @@ function blockingRuleRemaining(
 
 function booleanSetting(value: unknown, fallback: boolean): boolean {
     return typeof value === 'boolean' ? value : fallback;
-}
-
-function percentageSetting(value: number | null | undefined): number {
-    if (typeof value !== 'number' || Number.isNaN(value)) {
-        return 50;
-    }
-
-    return Math.min(100, Math.max(0, value));
 }
 
 function variationSummary(key: Record<string, string> | null): string | null {
@@ -2099,7 +2092,6 @@ function MinimalLayout({
         showStock: booleanSetting(productGridSection?.props?.show_stock, true),
     };
     const heroImage = catalogCoverImageUrl(settings);
-    const heroImagePosition = `${percentageSetting(settings.cover_image_focal_x)}% ${percentageSetting(settings.cover_image_focal_y)}%`;
     const productCount = products.meta?.total ?? products.data.length;
     const sectionOrder = (type: string): number => {
         const index = settings.sections?.findIndex(
@@ -2126,153 +2118,30 @@ function MinimalLayout({
                     className="relative -mx-6 -mt-12"
                     style={{ order: sectionOrder('hero') }}
                 >
-                    {(showBrandName || showLogo || showProductCount) && (
-                        <div
-                            data-testid="catalog-brand-bar"
-                            className="relative z-20 flex flex-col items-start justify-between gap-4 px-8 py-6 sm:flex-row sm:items-center sm:px-10 sm:py-8"
-                        >
-                            <div className="flex max-w-full flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6">
-                                {showLogo && (
-                                    <div
-                                        className="inline-flex max-w-full shrink-0 items-center justify-start"
-                                        style={{ borderRadius: tokens.radius }}
-                                    >
-                                        <img
-                                            src={settings.logo_url ?? undefined}
-                                            alt={
-                                                settings.brand_name ??
-                                                manufacturer.name
-                                            }
-                                            className="h-auto object-contain object-left"
-                                            style={catalogLogoStyle(
-                                                logoSize,
-                                                320,
-                                                112,
-                                            )}
-                                        />
-                                    </div>
-                                )}
-                                <div className="min-w-0">
-                                    {showBrandName && (
-                                        <p
-                                            className="text-2xl font-semibold tracking-[-0.04em]"
-                                            style={{ fontFamily: headingFont }}
-                                        >
-                                            {settings.brand_name ??
-                                                manufacturer.name}
-                                        </p>
-                                    )}
-                                    {settings.tagline && (
-                                        <p className="mt-1 text-sm opacity-70">
-                                            {settings.tagline}
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
-                            {showProductCount && (
-                                <Badge className="shrink-0 bg-[var(--brand-primary)] text-white">
-                                    {productCount}{' '}
-                                    {productCount === 1
-                                        ? 'produto'
-                                        : 'produtos'}
-                                </Badge>
-                            )}
-                        </div>
-                    )}
-
-                    <div
-                        className={cn(
-                            'relative grid overflow-hidden bg-white/45',
-                            heroAlign === 'center'
-                                ? heroImage
-                                    ? 'min-h-[clamp(32rem,72vw,48rem)] place-items-center text-center text-white'
-                                    : 'text-center'
-                                : 'md:grid-cols-[0.8fr_1.2fr]',
-                        )}
-                    >
-                        {heroAlign === 'center' && heroImage && (
-                            <>
-                                <img
-                                    src={heroImage}
-                                    alt=""
-                                    loading="eager"
-                                    fetchPriority="high"
-                                    className="absolute inset-0 h-full w-full object-cover"
-                                    style={{
-                                        objectPosition: heroImagePosition,
-                                    }}
-                                />
-                                <div className="absolute inset-0 bg-black/35" />
-                            </>
-                        )}
-                        <div
-                            className={cn(
-                                'relative z-10 flex min-h-[24rem] flex-col justify-center px-8 py-12 sm:px-10 sm:py-16 md:min-h-72',
-                                heroAlign === 'center' &&
-                                    'mx-auto max-w-4xl items-center py-16 sm:py-24',
-                            )}
-                        >
-                            <p
-                                className="text-xs font-semibold tracking-[0.16em] uppercase"
-                                style={{
-                                    color:
-                                        heroAlign === 'center' && heroImage
-                                            ? 'currentColor'
-                                            : 'var(--brand-accent)',
-                                }}
-                            >
-                                {heroEyebrow}
-                            </p>
-                            <h1
-                                className="mt-4 text-4xl leading-[0.98] font-semibold tracking-[-0.05em] sm:text-5xl lg:text-7xl"
-                                style={{ fontFamily: headingFont }}
-                            >
-                                {heroHeadline}
-                            </h1>
-                            {heroSubtitle && (
-                                <p className="mt-5 max-w-xl text-sm leading-6 opacity-65">
-                                    {heroSubtitle}
-                                </p>
-                            )}
-                            {showHeroCta &&
-                                productGridEnabled &&
-                                heroCtaText.trim() !== '' && (
-                                    <a
-                                        href="#catalog-products"
-                                        className="group mt-7 inline-flex min-h-10 w-fit items-center gap-2 border-b pb-1 text-xs font-semibold transition-opacity hover:opacity-70"
-                                        style={{
-                                            borderColor:
-                                                heroAlign === 'center' &&
-                                                heroImage
-                                                    ? 'currentColor'
-                                                    : 'var(--brand-accent)',
-                                            color:
-                                                heroAlign === 'center' &&
-                                                heroImage
-                                                    ? 'currentColor'
-                                                    : 'var(--brand-accent)',
-                                        }}
-                                    >
-                                        {heroCtaText}
-                                        <ChevronRight className="size-4 transition-transform group-hover:translate-x-1" />
-                                    </a>
-                                )}
-                        </div>
-                        {heroAlign !== 'center' && heroImage && (
-                            <div className="min-h-80 overflow-hidden md:min-h-[40rem]">
-                                <img
-                                    src={heroImage}
-                                    alt={heroHeadline}
-                                    loading="eager"
-                                    fetchPriority="high"
-                                    className="h-full min-h-80 w-full object-cover md:min-h-[40rem]"
-                                    style={{
-                                        objectPosition: heroImagePosition,
-                                    }}
-                                />
-                            </div>
-                        )}
-                    </div>
+                    <CatalogHero
+                        brandName={settings.brand_name ?? manufacturer.name}
+                        brandTagline={settings.tagline}
+                        showBrandName={showBrandName}
+                        showLogo={showLogo}
+                        logoUrl={settings.logo_url}
+                        logoSize={logoSize}
+                        showProductCount={showProductCount}
+                        productCount={productCount}
+                        coverImage={heroImage}
+                        coverImageFit={heroSection?.props?.image_fit}
+                        coverImageScale={heroSection?.props?.image_scale}
+                        coverImageFocalX={settings.cover_image_focal_x}
+                        coverImageFocalY={settings.cover_image_focal_y}
+                        alignment={heroAlign}
+                        eyebrow={heroEyebrow}
+                        headline={heroHeadline}
+                        subtitle={heroSubtitle}
+                        showCta={showHeroCta && productGridEnabled}
+                        ctaText={heroCtaText}
+                        ctaHref="#catalog-products"
+                        headingFont={headingFont}
+                        accentColor={settings.accent_color}
+                    />
                 </header>
             )}
 

@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react';
+
 /**
  * Catalog theming utilities for premium customization
  */
@@ -106,6 +108,22 @@ export const CATALOG_LOGO_SIZE = {
     step: 5,
 } as const;
 
+export const CATALOG_COVER_SCALE = {
+    min: 50,
+    max: 200,
+    default: 100,
+    step: 5,
+} as const;
+
+export const CATALOG_COVER_FITS = [
+    'cover',
+    'contain',
+    'fill',
+    'manual',
+] as const;
+
+export type CatalogCoverFit = (typeof CATALOG_COVER_FITS)[number];
+
 interface CatalogCoverMedia {
     cover_image_url?: string | null;
     cover_thumbnail_url?: string | null;
@@ -134,6 +152,53 @@ export function normalizeCatalogLogoSize(value: unknown): number {
         CATALOG_LOGO_SIZE.max,
         Math.max(CATALOG_LOGO_SIZE.min, value),
     );
+}
+
+export function normalizeCatalogCoverFit(value: unknown): CatalogCoverFit {
+    return CATALOG_COVER_FITS.includes(value as CatalogCoverFit)
+        ? (value as CatalogCoverFit)
+        : 'cover';
+}
+
+export function normalizeCatalogCoverScale(value: unknown): number {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+        return CATALOG_COVER_SCALE.default;
+    }
+
+    return Math.min(
+        CATALOG_COVER_SCALE.max,
+        Math.max(CATALOG_COVER_SCALE.min, value),
+    );
+}
+
+function normalizeCatalogCoverPosition(value: unknown): number {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+        return 50;
+    }
+
+    return Math.min(100, Math.max(0, value));
+}
+
+export function catalogCoverImageStyle(
+    fitValue: unknown,
+    scaleValue: unknown,
+    focalXValue: unknown,
+    focalYValue: unknown,
+): CSSProperties {
+    const fit = normalizeCatalogCoverFit(fitValue);
+    const focalX = normalizeCatalogCoverPosition(focalXValue);
+    const focalY = normalizeCatalogCoverPosition(focalYValue);
+    const style: CSSProperties = {
+        objectFit: fit === 'manual' ? 'contain' : fit,
+        objectPosition: `${focalX}% ${focalY}%`,
+    };
+
+    if (fit === 'manual') {
+        style.transform = `scale(${normalizeCatalogCoverScale(scaleValue) / 100})`;
+        style.transformOrigin = `${focalX}% ${focalY}%`;
+    }
+
+    return style;
 }
 
 export function catalogLogoStyle(

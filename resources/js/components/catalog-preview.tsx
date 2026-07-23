@@ -1,9 +1,9 @@
 import { ArrowRight, Box, Eye, Package } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
+import { CatalogHero } from '@/components/catalog-hero';
 import {
     CATALOG_LOGO_SIZE,
     catalogCoverImageUrl,
-    catalogLogoStyle,
     GRADIENTS,
     PATTERNS,
 } from '@/lib/catalog-theming';
@@ -64,6 +64,7 @@ interface Product {
 interface CatalogPreviewProps {
     settings: CatalogSettings;
     products?: Product[];
+    productCount?: number;
     manufacturerName?: string;
     viewport?: 'desktop' | 'mobile';
     selectedSection?: CatalogSectionType | null;
@@ -168,6 +169,7 @@ function EditableSection({
 export default function CatalogPreview({
     settings,
     products = [],
+    productCount = products.length,
     manufacturerName = 'Sua marca',
     viewport = 'desktop',
     selectedSection = null,
@@ -190,7 +192,7 @@ export default function CatalogPreview({
                 .filter((category): category is string => Boolean(category)),
         ),
     ).slice(0, 4);
-    const coverImage = catalogCoverImageUrl(settings, true);
+    const coverImage = catalogCoverImageUrl(settings);
     const featuredProducts = products.slice(0, isMobile ? 4 : 6);
     const backgroundStyle: CSSProperties = {};
 
@@ -252,33 +254,45 @@ export default function CatalogPreview({
 
             <div
                 className={cn(
-                    'relative mx-auto flex min-h-full w-full flex-col',
-                    isMobile ? 'max-w-[390px] px-5 py-6' : 'px-8 py-7',
+                    'relative mx-auto flex min-h-full w-full flex-col px-6 py-12',
+                    isMobile && 'max-w-[390px]',
                 )}
                 style={{
                     gap:
                         settings.layout_density === 'compact'
-                            ? '1.5rem'
-                            : '2.5rem',
+                            ? '2.5rem'
+                            : '4rem',
                 }}
             >
                 {sections.map((section) => {
                     if (section.type === 'hero') {
-                        const headline = sectionValue(
-                            section,
-                            'headline',
-                            settings.tagline || 'Nova coleção',
-                        );
-                        const subtitle = sectionValue(
-                            section,
-                            'subtitle',
-                            settings.description ||
-                                'Peças criadas para acompanhar cada descoberta.',
-                        );
+                        const headline =
+                            (section.props?.headline as
+                                | string
+                                | null
+                                | undefined) ||
+                            settings.tagline ||
+                            settings.brand_name ||
+                            manufacturerName;
+                        const subtitle =
+                            (section.props?.subtitle as
+                                | string
+                                | null
+                                | undefined) || settings.description;
                         const alignment = sectionValue<string>(
                             section,
                             'align',
                             'left',
+                        );
+                        const ctaText =
+                            (section.props?.cta_text as
+                                | string
+                                | null
+                                | undefined) || 'Conheça a coleção';
+                        const productGridEnabled = sections.some(
+                            (candidate) =>
+                                candidate.type === 'product_grid' &&
+                                candidate.enabled,
                         );
 
                         return (
@@ -287,188 +301,67 @@ export default function CatalogPreview({
                                 type={section.type}
                                 selected={selectedSection === section.type}
                                 onSelect={onSelectSection}
+                                className="-mx-6 -mt-12"
                             >
-                                <header className="border-b border-black/10 pb-6">
-                                    <div className="flex min-h-10 items-center justify-between gap-4 border-b border-black/10 pb-4">
-                                        <div className="flex min-w-0 items-center gap-4">
-                                            {settings.show_logo &&
-                                                settings.logo_url && (
-                                                    <img
-                                                        src={settings.logo_url}
-                                                        alt={
-                                                            settings.brand_name ||
-                                                            manufacturerName
-                                                        }
-                                                        className="h-auto object-contain"
-                                                        style={catalogLogoStyle(
-                                                            sectionValue(
-                                                                section,
-                                                                'logo_size',
-                                                                CATALOG_LOGO_SIZE.default,
-                                                            ),
-                                                            isMobile
-                                                                ? 128
-                                                                : 160,
-                                                            isMobile ? 40 : 48,
-                                                        )}
-                                                    />
-                                                )}
-                                            {settings.show_brand_name && (
-                                                <span
-                                                    className="truncate text-base font-semibold tracking-[-0.04em]"
-                                                    style={{
-                                                        fontFamily:
-                                                            'var(--catalog-display)',
-                                                    }}
-                                                >
-                                                    {settings.brand_name ||
-                                                        manufacturerName}
-                                                </span>
-                                            )}
-                                        </div>
-                                        {sectionValue(
+                                <CatalogHero
+                                    brandName={
+                                        settings.brand_name || manufacturerName
+                                    }
+                                    brandTagline={settings.tagline}
+                                    showBrandName={
+                                        settings.show_brand_name ?? true
+                                    }
+                                    showLogo={Boolean(
+                                        settings.show_logo && settings.logo_url,
+                                    )}
+                                    logoUrl={settings.logo_url}
+                                    logoSize={sectionValue(
+                                        section,
+                                        'logo_size',
+                                        CATALOG_LOGO_SIZE.default,
+                                    )}
+                                    showProductCount={sectionValue(
+                                        section,
+                                        'show_product_count',
+                                        false,
+                                    )}
+                                    productCount={productCount}
+                                    coverImage={coverImage}
+                                    coverImageFit={sectionValue(
+                                        section,
+                                        'image_fit',
+                                        'cover',
+                                    )}
+                                    coverImageScale={sectionValue(
+                                        section,
+                                        'image_scale',
+                                        100,
+                                    )}
+                                    coverImageFocalX={
+                                        settings.cover_image_focal_x
+                                    }
+                                    coverImageFocalY={
+                                        settings.cover_image_focal_y
+                                    }
+                                    alignment={alignment}
+                                    eyebrow={sectionValue(
+                                        section,
+                                        'eyebrow',
+                                        'Nova coleção',
+                                    )}
+                                    headline={headline}
+                                    subtitle={subtitle}
+                                    showCta={
+                                        sectionValue(
                                             section,
-                                            'show_product_count',
-                                            false,
-                                        ) && (
-                                            <span className="text-[9px] font-semibold tracking-[0.08em] uppercase opacity-55">
-                                                {products.length} produtos
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div
-                                        className={cn(
-                                            'relative grid overflow-hidden border-b border-black/10',
-                                            isMobile
-                                                ? 'grid-cols-1'
-                                                : alignment === 'center'
-                                                  ? 'grid-cols-1 text-center'
-                                                  : 'grid-cols-[0.78fr_1.22fr]',
-                                        )}
-                                    >
-                                        {alignment === 'center' &&
-                                            coverImage && (
-                                                <>
-                                                    <img
-                                                        src={coverImage}
-                                                        alt=""
-                                                        className="absolute inset-0 h-full w-full object-cover"
-                                                        style={{
-                                                            objectPosition: `${settings.cover_image_focal_x ?? 50}% ${settings.cover_image_focal_y ?? 50}%`,
-                                                        }}
-                                                    />
-                                                    <div className="absolute inset-0 bg-black/35" />
-                                                </>
-                                            )}
-                                        <div
-                                            className={cn(
-                                                'relative z-10 flex flex-col justify-center',
-                                                isMobile
-                                                    ? 'min-h-80 px-5 py-10'
-                                                    : 'min-h-[25rem] px-8 py-12',
-                                                alignment === 'center' &&
-                                                    'mx-auto max-w-2xl items-center',
-                                                alignment === 'center' &&
-                                                    coverImage &&
-                                                    'text-white',
-                                            )}
-                                        >
-                                            <p
-                                                className="text-[9px] font-bold tracking-[0.18em] uppercase"
-                                                style={{
-                                                    color:
-                                                        alignment ===
-                                                            'center' &&
-                                                        coverImage
-                                                            ? 'currentColor'
-                                                            : settings.accent_color,
-                                                }}
-                                            >
-                                                {sectionValue(
-                                                    section,
-                                                    'eyebrow',
-                                                    'Nova coleção',
-                                                )}
-                                            </p>
-                                            <p
-                                                className={cn(
-                                                    'mt-5 font-semibold tracking-[-0.055em]',
-                                                    isMobile
-                                                        ? 'max-w-[9ch] text-4xl leading-[0.92]'
-                                                        : 'max-w-[9ch] text-[clamp(2.75rem,5vw,5rem)] leading-[0.88]',
-                                                )}
-                                                style={{
-                                                    fontFamily:
-                                                        'var(--catalog-display)',
-                                                }}
-                                            >
-                                                {headline}
-                                            </p>
-                                            <p
-                                                className={cn(
-                                                    'mt-5 max-w-sm text-xs leading-5 opacity-70',
-                                                    alignment === 'center' &&
-                                                        'mx-auto',
-                                                )}
-                                            >
-                                                {subtitle}
-                                            </p>
-                                            {sectionValue(
-                                                section,
-                                                'show_cta',
-                                                true,
-                                            ) && (
-                                                <span
-                                                    className="mt-7 flex w-full max-w-44 items-center justify-between gap-4 border-b pb-2 text-[10px] font-semibold"
-                                                    style={{
-                                                        borderColor:
-                                                            alignment ===
-                                                                'center' &&
-                                                            coverImage
-                                                                ? 'currentColor'
-                                                                : settings.accent_color,
-                                                        color:
-                                                            alignment ===
-                                                                'center' &&
-                                                            coverImage
-                                                                ? 'currentColor'
-                                                                : settings.accent_color,
-                                                    }}
-                                                >
-                                                    {sectionValue(
-                                                        section,
-                                                        'cta_text',
-                                                        'Conheça a coleção',
-                                                    )}
-                                                    <ArrowRight
-                                                        className="size-3.5"
-                                                        aria-hidden="true"
-                                                    />
-                                                </span>
-                                            )}
-                                        </div>
-                                        {coverImage &&
-                                            alignment !== 'center' && (
-                                                <div
-                                                    className={cn(
-                                                        'overflow-hidden',
-                                                        isMobile
-                                                            ? 'aspect-[4/5]'
-                                                            : 'min-h-[25rem]',
-                                                    )}
-                                                >
-                                                    <img
-                                                        src={coverImage}
-                                                        alt="Imagem de campanha da coleção"
-                                                        className="h-full w-full object-cover"
-                                                        style={{
-                                                            objectPosition: `${settings.cover_image_focal_x ?? 50}% ${settings.cover_image_focal_y ?? 50}%`,
-                                                        }}
-                                                    />
-                                                </div>
-                                            )}
-                                    </div>
-                                </header>
+                                            'show_cta',
+                                            true,
+                                        ) && productGridEnabled
+                                    }
+                                    ctaText={ctaText}
+                                    headingFont="var(--catalog-display)"
+                                    accentColor={settings.accent_color}
+                                />
                             </EditableSection>
                         );
                     }
