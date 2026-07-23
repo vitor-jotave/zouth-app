@@ -7,6 +7,7 @@ import {
     Mail,
     MapPin,
     RefreshCw,
+    ReceiptText,
     Search,
     Send,
     ShieldCheck,
@@ -65,6 +66,20 @@ interface Affiliation {
         orders_count: number;
         total_cents: number;
         last_order_at: string | null;
+    };
+    sales_history: {
+        orders: Array<{
+            id: number;
+            status: string;
+            status_label: string;
+            order_type: 'standard' | 'quote';
+            order_type_label: string;
+            customer_name: string;
+            total_items: number;
+            total_cents: number;
+            created_at: string;
+        }>;
+        has_more: boolean;
     };
     catalog_url: string | null;
 }
@@ -182,6 +197,15 @@ function statusPresentation(status: AffiliationStatus | InvitationStatus): {
 
     return statuses[status];
 }
+
+const orderStatusTone: Record<string, StatusLabelTone> = {
+    new: 'coral',
+    confirmed: 'plum',
+    preparing: 'neutral',
+    shipped: 'muted',
+    delivered: 'mineral',
+    cancelled: 'coral',
+};
 
 function Fact({
     icon,
@@ -334,6 +358,126 @@ function InvitationRow({
     );
 }
 
+function SalesHistory({ affiliation }: { affiliation: Affiliation }) {
+    const orders = affiliation.sales_history.orders;
+
+    return (
+        <section
+            id={`sales-history-${affiliation.id}`}
+            className="mt-8 scroll-mt-4 border-t border-border pt-7"
+        >
+            <div className="flex items-end justify-between gap-4">
+                <div>
+                    <p className="text-[0.62rem] font-bold tracking-[0.18em] text-[#ff4d3d] uppercase">
+                        Histórico de vendas
+                    </p>
+                    <h3 className="mt-2 font-zouth-display text-xl font-semibold tracking-[-0.035em] text-foreground">
+                        Negócios movimentados
+                        <span className="text-[#ff4d3d]">.</span>
+                    </h3>
+                </div>
+                <span className="font-zouth-display text-sm font-semibold text-muted-foreground tabular-nums">
+                    {affiliation.performance.orders_count}
+                </span>
+            </div>
+
+            {orders.length > 0 ? (
+                <div className="mt-5 border-y border-border">
+                    {orders.map((order) => (
+                        <Link
+                            key={order.id}
+                            href={manufacturer.orders.show(order.id).url}
+                            prefetch
+                            className="group block border-b border-border py-4 outline-none last:border-b-0 focus-visible:ring-2 focus-visible:ring-[#ff4d3d] focus-visible:ring-inset"
+                        >
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-[0.62rem] font-bold tracking-[0.14em] text-muted-foreground uppercase">
+                                        {order.order_type_label} #
+                                        {String(order.id).padStart(4, '0')}
+                                    </p>
+                                    <p className="mt-1.5 truncate text-sm font-semibold text-foreground">
+                                        {order.customer_name}
+                                    </p>
+                                </div>
+                                <ArrowRight
+                                    className="mt-1 size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-[#d9382b]"
+                                    aria-hidden="true"
+                                />
+                            </div>
+                            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+                                <StatusLabel
+                                    tone={
+                                        orderStatusTone[order.status] ??
+                                        'neutral'
+                                    }
+                                >
+                                    {order.status_label}
+                                </StatusLabel>
+                                <span className="text-xs text-muted-foreground">
+                                    {formatDate(order.created_at)}
+                                </span>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between gap-3 text-xs">
+                                <span className="text-muted-foreground">
+                                    {order.total_items === 1
+                                        ? '1 peça'
+                                        : `${order.total_items} peças`}
+                                </span>
+                                <span className="font-zouth-display font-semibold text-foreground tabular-nums">
+                                    {order.order_type === 'quote'
+                                        ? 'Estim. '
+                                        : ''}
+                                    {formatMoney(order.total_cents)}
+                                </span>
+                            </div>
+                        </Link>
+                    ))}
+                </div>
+            ) : (
+                <div className="mt-5 border border-dashed border-border bg-[#f6f4f0] px-5 py-6">
+                    <ReceiptText
+                        className="size-5 text-muted-foreground"
+                        aria-hidden="true"
+                    />
+                    <p className="mt-3 text-sm font-semibold text-foreground">
+                        Ainda sem vendas atribuídas.
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Os pedidos gerados pelo link deste representante
+                        aparecerão aqui.
+                    </p>
+                </div>
+            )}
+
+            {orders.length > 0 && (
+                <Button
+                    asChild
+                    variant="outline"
+                    className="mt-4 min-h-11 w-full rounded-[2px] shadow-none"
+                >
+                    <Link
+                        href={
+                            manufacturer.orders.index({
+                                query: {
+                                    sales_rep: affiliation.user.id,
+                                    view: 'list',
+                                },
+                            }).url
+                        }
+                        prefetch
+                    >
+                        {affiliation.sales_history.has_more
+                            ? 'Ver histórico completo'
+                            : 'Abrir em pedidos'}
+                        <ArrowRight className="size-4" aria-hidden="true" />
+                    </Link>
+                </Button>
+            )}
+        </section>
+    );
+}
+
 function FocusPanel({ item }: { item: SelectedItem | null }) {
     const [copied, setCopied] = useState(false);
 
@@ -444,7 +588,7 @@ function FocusPanel({ item }: { item: SelectedItem | null }) {
     };
 
     return (
-        <aside className="border border-border bg-white p-7 xl:sticky xl:top-24">
+        <aside className="border border-border bg-white p-7 xl:sticky xl:top-24 xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto">
             <div className="flex items-start justify-between gap-4">
                 <div>
                     <p className="text-[0.65rem] font-bold tracking-[0.2em] text-[#ff4d3d] uppercase">
@@ -481,6 +625,21 @@ function FocusPanel({ item }: { item: SelectedItem | null }) {
                 </Fact>
             </div>
 
+            {!isPending && affiliation.performance.orders_count > 0 && (
+                <a
+                    href={`#sales-history-${affiliation.id}`}
+                    className="mt-5 flex min-h-11 items-center justify-between gap-3 border border-border px-4 text-sm font-semibold text-foreground transition-colors hover:border-[#18181f] hover:bg-[#f6f4f0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff4d3d]"
+                >
+                    <span className="inline-flex items-center gap-2">
+                        <ReceiptText className="size-4" aria-hidden="true" />
+                        Ver histórico de vendas
+                    </span>
+                    <span className="font-zouth-display text-xs text-muted-foreground tabular-nums">
+                        {affiliation.performance.orders_count}
+                    </span>
+                </a>
+            )}
+
             {(affiliation.profile.presentation ||
                 affiliation.application_note) && (
                 <div className="mt-6 space-y-4">
@@ -496,6 +655,8 @@ function FocusPanel({ item }: { item: SelectedItem | null }) {
                     )}
                 </div>
             )}
+
+            {!isPending && <SalesHistory affiliation={affiliation} />}
 
             {isPending && (
                 <div className="mt-8 grid grid-cols-2 gap-3">

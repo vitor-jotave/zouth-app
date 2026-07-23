@@ -89,6 +89,11 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasOne(SalesRepresentativeProfile::class);
     }
 
+    public function representedOrders(): HasMany
+    {
+        return $this->hasMany(Order::class, 'sales_rep_id');
+    }
+
     public function representativeInvitations(): HasMany
     {
         return $this->hasMany(RepresentativeInvitation::class, 'invited_by_user_id');
