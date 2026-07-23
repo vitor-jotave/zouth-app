@@ -3,6 +3,7 @@
 use App\Enums\UserType;
 use App\Models\Manufacturer;
 use App\Models\ManufacturerAffiliation;
+use App\Models\Order;
 use App\Models\Plan;
 use App\Models\User;
 
@@ -54,6 +55,79 @@ it('lists all affiliations for manufacturer owner', function () {
             )
             ->etc()
         )
+    );
+});
+
+it('shows the recent sales history for each representative without crossing manufacturers', function () {
+    ManufacturerAffiliation::factory()->active()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'user_id' => $this->salesRep->id,
+    ]);
+
+    $orders = collect(range(1, 6))->map(fn (int $daysAgo): Order => Order::factory()
+        ->forManufacturer($this->manufacturer)
+        ->create([
+            'sales_rep_id' => $this->salesRep->id,
+            'total_cents' => $daysAgo * 10000,
+            'customer_name' => "Lojista {$daysAgo}",
+            'created_at' => now()->subDays($daysAgo),
+        ]));
+
+    $otherManufacturer = Manufacturer::factory()->create();
+    Order::factory()
+        ->forManufacturer($otherManufacturer)
+        ->create([
+            'sales_rep_id' => $this->salesRep->id,
+            'customer_name' => 'Lojista de outra fabricante',
+            'created_at' => now(),
+        ]);
+
+    $response = $this->actingAs($this->manufacturerOwner)
+        ->get('/manufacturer/representatives?segment=active');
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page
+        ->where('affiliations.0.performance.orders_count', 6)
+        ->has('affiliations.0.sales_history.orders', 5)
+        ->where('affiliations.0.sales_history.orders.0.id', $orders->first()->id)
+        ->where('affiliations.0.sales_history.orders.0.customer_name', 'Lojista 1')
+        ->where('affiliations.0.sales_history.has_more', true)
+    );
+});
+
+it('opens the complete order history filtered by representative', function () {
+    ManufacturerAffiliation::factory()->active()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'user_id' => $this->salesRep->id,
+    ]);
+    $otherSalesRep = User::factory()->create([
+        'user_type' => UserType::SalesRep,
+    ]);
+    ManufacturerAffiliation::factory()->active()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'user_id' => $otherSalesRep->id,
+    ]);
+
+    Order::factory()
+        ->forManufacturer($this->manufacturer)
+        ->count(2)
+        ->create(['sales_rep_id' => $this->salesRep->id]);
+    Order::factory()
+        ->forManufacturer($this->manufacturer)
+        ->create(['sales_rep_id' => $otherSalesRep->id]);
+
+    $response = $this->actingAs($this->manufacturerOwner)
+        ->get("/manufacturer/orders?view=list&sales_rep={$this->salesRep->id}");
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page
+        ->component('manufacturer/orders/index')
+        ->has('orders.data', 2)
+        ->where('orders.data.0.sales_rep.id', $this->salesRep->id)
+        ->where('orders.data.1.sales_rep.id', $this->salesRep->id)
+        ->where('filters.sales_rep', $this->salesRep->id)
+        ->where('filters.sales_rep_name', $this->salesRep->name)
+        ->where('order_summary.total_orders', 2)
     );
 });
 

@@ -122,6 +122,8 @@ type Props = {
         status: string;
         search: string;
         view: 'board' | 'list';
+        sales_rep: number | null;
+        sales_rep_name: string | null;
     };
     statuses: Array<{ value: string; label: string }>;
 };
@@ -613,6 +615,7 @@ export default function OrdersIndex({
             search: searchValue || undefined,
             status: filters.status || undefined,
             view: filters.view,
+            sales_rep: filters.sales_rep || undefined,
             ...changes,
         };
 
@@ -699,6 +702,10 @@ export default function OrdersIndex({
         navigate({ status: undefined });
     };
 
+    const clearRepresentativeFilter = () => {
+        navigate({ sales_rep: undefined });
+    };
+
     const showStageInList = (status: string) => {
         navigate({ view: 'list', status });
     };
@@ -727,6 +734,38 @@ export default function OrdersIndex({
                         </div>
                     }
                 />
+
+                {filters.sales_rep_name && (
+                    <div className="mt-7 flex flex-col gap-4 border-l-2 border-[#ff4d3d] bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p className="text-[0.62rem] font-bold tracking-[0.17em] text-[#d9382b] uppercase">
+                                Histórico do representante
+                            </p>
+                            <p className="mt-1.5 font-zouth-display text-lg font-semibold tracking-[-0.025em] text-foreground">
+                                {filters.sales_rep_name}
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-4">
+                            <Link
+                                href={
+                                    manufacturer.representatives.index({
+                                        query: { segment: 'active' },
+                                    }).url
+                                }
+                                className="text-xs font-bold text-foreground underline decoration-[#ff4d3d] underline-offset-4"
+                            >
+                                Voltar para representantes
+                            </Link>
+                            <button
+                                type="button"
+                                onClick={clearRepresentativeFilter}
+                                className="text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"
+                            >
+                                Ver todos os pedidos
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 <MetricRail
                     variant="open"

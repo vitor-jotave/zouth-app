@@ -7,6 +7,7 @@ use App\Enums\OrderType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateOrderStatusRequest;
 use App\Http\Resources\OrderResource;
+use App\Models\ManufacturerAffiliation;
 use App\Models\Order;
 use App\Services\OrderService;
 use App\Services\TenantManager;
@@ -32,11 +33,31 @@ class OrderController extends Controller
         $search = trim($request->string('search')->toString());
         $status = OrderStatus::tryFrom($request->string('status')->toString());
         $view = $request->string('view')->toString() === 'list' ? 'list' : 'board';
+        $salesRepId = $request->integer('sales_rep') ?: null;
+        $salesRepName = null;
+
+        if ($salesRepId !== null) {
+            $affiliation = ManufacturerAffiliation::query()
+                ->where('manufacturer_id', $manufacturer->id)
+                ->where('user_id', $salesRepId)
+                ->with('user:id,name')
+                ->first();
+
+            if ($affiliation) {
+                $salesRepName = $affiliation->user->name;
+            } else {
+                $salesRepId = null;
+            }
+        }
 
         $query = Order::query()
             ->where('manufacturer_id', $manufacturer->id)
             ->with(['items', 'salesRep'])
             ->latest();
+
+        if ($salesRepId !== null) {
+            $query->where('sales_rep_id', $salesRepId);
+        }
 
         if ($status) {
             $query->where('status', $status);
@@ -52,12 +73,14 @@ class OrderController extends Controller
             );
         $statusCounts = Order::query()
             ->where('manufacturer_id', $manufacturer->id)
+            ->when($salesRepId !== null, fn (Builder $query): Builder => $query->where('sales_rep_id', $salesRepId))
             ->selectRaw('status, COUNT(*) as aggregate')
             ->groupBy('status')
             ->pluck('aggregate', 'status');
         $totalAmount = $this->ordersTotal(
             $manufacturer->id,
             excludedStatus: OrderStatus::Cancelled,
+            salesRepId: $salesRepId,
         );
         $inProgressStatuses = [
             OrderStatus::New,
@@ -73,6 +96,7 @@ class OrderController extends Controller
                 $manufacturer->id,
                 $boardStatuses,
                 $search,
+                $salesRepId,
             ),
             'order_summary' => [
                 'total_orders' => (int) $statusCounts->sum(),
@@ -86,6 +110,8 @@ class OrderController extends Controller
                 'status' => $status?->value ?? '',
                 'search' => $search,
                 'view' => $view,
+                'sales_rep' => $salesRepId,
+                'sales_rep_name' => $salesRepName,
             ],
             'statuses' => collect(OrderStatus::cases())->map(fn (OrderStatus $s) => [
                 'value' => $s->value,
@@ -103,13 +129,18 @@ class OrderController extends Controller
         int $manufacturerId,
         Collection $statuses,
         string $search,
+        ?int $salesRepId = null,
     ): Collection {
-        return $statuses->map(function (OrderStatus $status) use ($request, $manufacturerId, $search): array {
+        return $statuses->map(function (OrderStatus $status) use ($request, $manufacturerId, $search, $salesRepId): array {
             $query = Order::query()
                 ->where('manufacturer_id', $manufacturerId)
                 ->where('status', $status)
                 ->with(['items', 'salesRep'])
                 ->latest();
+
+            if ($salesRepId !== null) {
+                $query->where('sales_rep_id', $salesRepId);
+            }
 
             $this->applySearch($query, $search);
 
@@ -121,7 +152,7 @@ class OrderController extends Controller
                 'label' => $status->label(),
                 'count' => $count,
                 'total_amount' => number_format(
-                    $this->ordersTotal($manufacturerId, $status, search: $search),
+                    $this->ordersTotal($manufacturerId, $status, search: $search, salesRepId: $salesRepId),
                     2,
                     '.',
                     '',
@@ -154,11 +185,16 @@ class OrderController extends Controller
         ?OrderStatus $status = null,
         ?OrderStatus $excludedStatus = null,
         string $search = '',
+        ?int $salesRepId = null,
     ): float {
         $query = Order::query()
             ->where('manufacturer_id', $manufacturerId)
             ->where('order_type', OrderType::Standard)
             ->with('items');
+
+        if ($salesRepId !== null) {
+            $query->where('sales_rep_id', $salesRepId);
+        }
 
         if ($status) {
             $query->where('status', $status);

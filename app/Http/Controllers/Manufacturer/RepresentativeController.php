@@ -8,6 +8,7 @@ use App\Models\ManufacturerAffiliation;
 use App\Models\Order;
 use App\Models\RepresentativeInvitation;
 use App\Services\PlanLimitService;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -27,7 +28,15 @@ class RepresentativeController extends Controller
             ->findOrFail($request->user()->current_manufacturer_id);
         $affiliations = ManufacturerAffiliation::query()
             ->where('manufacturer_id', $manufacturer->id)
-            ->with(['user:id,name,email', 'user.salesRepresentativeProfile'])
+            ->with([
+                'user:id,name,email',
+                'user.salesRepresentativeProfile',
+                'user.representedOrders' => fn (HasMany $query): HasMany => $query
+                    ->where('manufacturer_id', $manufacturer->id)
+                    ->with('items:id,order_id,unit_price,quantity')
+                    ->latest()
+                    ->limit(5),
+            ])
             ->latest('updated_at')
             ->get();
 
@@ -72,6 +81,23 @@ class RepresentativeController extends Controller
                     'orders_count' => (int) ($repPerformance?->orders_count ?? 0),
                     'total_cents' => (int) ($repPerformance?->total_cents ?? 0),
                     'last_order_at' => $repPerformance?->last_order_at,
+                ],
+                'sales_history' => [
+                    'orders' => $affiliation->user->representedOrders
+                        ->map(fn (Order $order): array => [
+                            'id' => $order->id,
+                            'status' => $order->status->value,
+                            'status_label' => $order->statusLabel(),
+                            'order_type' => $order->order_type->value,
+                            'order_type_label' => $order->order_type->label(),
+                            'customer_name' => $order->customer_name,
+                            'total_items' => $order->totalItems(),
+                            'total_cents' => $order->totalCents(),
+                            'created_at' => $order->created_at->toIso8601String(),
+                        ])
+                        ->values(),
+                    'has_more' => (int) ($repPerformance?->orders_count ?? 0)
+                        > $affiliation->user->representedOrders->count(),
                 ],
                 'catalog_url' => $catalogUrl,
             ];

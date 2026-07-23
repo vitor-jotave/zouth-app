@@ -94,7 +94,9 @@ class Order extends Model
 
     public function totalItems(): int
     {
-        return (int) $this->items()->sum('quantity');
+        return $this->relationLoaded('items')
+            ? (int) $this->items->sum('quantity')
+            : (int) $this->items()->sum('quantity');
     }
 
     public function isQuote(): bool
