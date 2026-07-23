@@ -11,9 +11,11 @@ use App\Models\WhatsappAutomation;
 use App\Models\WhatsappConversation;
 use App\Models\WhatsappFunnel;
 use App\Models\WhatsappQuickReply;
+use App\Rules\Cnpj;
 use App\Services\PlanLimitService;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Inertia\Testing\AssertableInertia as Assert;
 
 use function Pest\Laravel\actingAs;
@@ -104,6 +106,26 @@ it('rebuilds the showroom without duplicating data or touching real manufacturer
         ->and(User::query()->where('email', 'primeiro@zouth.app')->exists())->toBeFalse()
         ->and(User::query()->where('email', 'novo@zouth.app')->exists())->toBeTrue()
         ->and(Manufacturer::query()->whereKey($realManufacturer->id)->exists())->toBeTrue();
+});
+
+it('generates an exclusive valid cnpj instead of colliding with a real manufacturer', function () {
+    $realManufacturer = Manufacturer::factory()->create([
+        'cnpj' => '11222333000181',
+    ]);
+
+    actingAs($this->superadmin)->post(route('admin.demo-showroom.store'), [
+        'email' => 'showroom@zouth.app',
+    ])->assertRedirect(route('admin.demo-showroom.show'));
+
+    $showroom = Manufacturer::query()->where('is_demo', true)->sole();
+
+    expect($showroom->cnpj)
+        ->not->toBe($realManufacturer->cnpj)
+        ->and(Validator::make(
+            ['cnpj' => $showroom->cnpj],
+            ['cnpj' => [new Cnpj]],
+        )->passes())
+        ->toBeTrue();
 });
 
 it('does not allow the showroom email to steal an existing account', function () {
