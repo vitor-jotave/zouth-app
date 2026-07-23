@@ -140,7 +140,7 @@ class DemoShowroomService
             'onboarding_email_confirmed_at' => $now,
             'onboarding_completed_at' => $now,
             'onboarding_context' => ['source' => 'superadmin_showroom', 'journey' => 'catalog_and_whatsapp'],
-            'cnpj' => '11222333000181',
+            'cnpj' => $this->generateUniqueCnpj(),
             'phone' => '(11) 99999-2026',
             'zip_code' => '01415-001',
             'state' => 'SP',
@@ -150,6 +150,45 @@ class DemoShowroomService
             'address_number' => '120',
             'complement' => 'Ateliê 4',
         ]);
+    }
+
+    private function generateUniqueCnpj(): string
+    {
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $digits = [];
+
+            for ($index = 0; $index < 8; $index++) {
+                $digits[] = random_int(0, 9);
+            }
+
+            $digits = [...$digits, 0, 0, 0, 1];
+            $digits[] = $this->calculateCnpjDigit($digits, [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+            $digits[] = $this->calculateCnpjDigit($digits, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+            $cnpj = implode('', $digits);
+
+            if (Manufacturer::query()->where('cnpj', $cnpj)->doesntExist()) {
+                return $cnpj;
+            }
+        }
+
+        throw new RuntimeException('Não foi possível gerar um CNPJ exclusivo para o showroom.');
+    }
+
+    /**
+     * @param  array<int, int>  $digits
+     * @param  array<int, int>  $weights
+     */
+    private function calculateCnpjDigit(array $digits, array $weights): int
+    {
+        $sum = 0;
+
+        foreach ($weights as $index => $weight) {
+            $sum += $digits[$index] * $weight;
+        }
+
+        $remainder = $sum % 11;
+
+        return $remainder < 2 ? 0 : 11 - $remainder;
     }
 
     private function createTeam(Manufacturer $manufacturer, string $email, string $password): User
