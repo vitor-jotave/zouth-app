@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Enums\ProductMediaType;
+use App\Support\ProductVideo;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Storage;
@@ -17,6 +18,10 @@ class ProductCatalogResource extends JsonResource
     public function toArray(Request $request): array
     {
         $hidePrices = $request->attributes->get('catalog_hide_prices', false) === true;
+        $allowOrdersWithoutStock = $request->attributes->get(
+            'catalog_allow_orders_without_stock',
+            false,
+        ) === true;
         $media = $this->displayMedia();
         $images = $media->filter(fn ($item) => ($item->type instanceof ProductMediaType)
             ? $item->type === ProductMediaType::Image
@@ -25,15 +30,20 @@ class ProductCatalogResource extends JsonResource
             ? $item->type === ProductMediaType::Video
             : $item->type === ProductMediaType::Video->value);
         $primaryImage = $images->first();
+        $linkedVideo = ProductVideo::fromUrl($this->video_url);
 
         $variantStocks = $this->variantStocks ?? collect();
 
         $variations = ($this->productVariations ?? collect())
-            ->map(function ($pv) use ($variantStocks) {
+            ->map(function ($pv) use ($variantStocks, $allowOrdersWithoutStock) {
                 $type = $pv->variationType;
                 $typeName = $type->name ?? '';
                 $stockValues = $variantStocks
-                    ->filter(fn ($stock) => (int) $stock->quantity > 0 || $this->allow_quote_when_out_of_stock)
+                    ->filter(
+                        fn ($stock) => $allowOrdersWithoutStock
+                            || (int) $stock->quantity > 0
+                            || $this->allow_quote_when_out_of_stock,
+                    )
                     ->map(fn ($stock) => data_get($stock->variation_key, $typeName))
                     ->map(fn (mixed $value) => (string) $value)
                     ->filter()
@@ -79,6 +89,7 @@ class ProductCatalogResource extends JsonResource
                 ->map(fn ($item) => Storage::disk('s3')->url($item->thumbnail_path ?: $item->path))
                 ->values(),
             'videos' => $videos->map(fn ($item) => Storage::disk('s3')->url($item->path))->values(),
+            'video' => $linkedVideo?->toArray(),
             'variations' => $variations,
             'variant_stocks' => $this->variantStocks?->map(function ($stock) use ($hidePrices): array {
                 $stockData = [

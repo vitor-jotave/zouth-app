@@ -33,6 +33,12 @@ class CatalogSettingUpdateRequest extends FormRequest
                 'hide_prices' => $this->boolean('hide_prices'),
             ]);
         }
+
+        if ($this->has('allow_orders_without_stock')) {
+            $this->merge([
+                'allow_orders_without_stock' => $this->boolean('allow_orders_without_stock'),
+            ]);
+        }
     }
 
     /**
@@ -55,6 +61,7 @@ class CatalogSettingUpdateRequest extends FormRequest
             'show_brand_name' => ['sometimes', 'boolean'],
             'show_logo' => ['sometimes', 'boolean'],
             'hide_prices' => ['sometimes', 'boolean'],
+            'allow_orders_without_stock' => ['sometimes', 'boolean'],
             'tagline' => ['nullable', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:600'],
             'primary_color' => ['required', 'regex:/^#[0-9A-Fa-f]{6}$/'],
@@ -129,6 +136,7 @@ class CatalogSettingUpdateRequest extends FormRequest
             'heading_font_family.in' => 'A fonte de titulos selecionada e invalida.',
             'body_font_family.in' => 'A fonte de corpo selecionada e invalida.',
             'hide_prices.boolean' => 'Escolha uma forma de negociação válida.',
+            'allow_orders_without_stock.boolean' => 'Escolha uma política de estoque válida.',
             'layout_density.in' => 'Escolha um respiro válido entre as peças.',
             'card_style.in' => 'Escolha um acabamento válido para as peças.',
             'background_mode.in' => 'Escolha um tipo de fundo válido.',

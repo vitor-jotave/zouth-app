@@ -47,6 +47,7 @@ export interface ProductEditorPayload {
     name: string;
     sku: string;
     description?: string | null;
+    video_url?: string | null;
     product_category_id?: number | null;
     base_quantity: number;
     is_active: boolean;
@@ -103,10 +104,10 @@ export interface ProductEditorData {
     allow_quote_when_out_of_stock: boolean;
     sort_order: number;
     price: string;
+    video_url: string;
     variations: ProductVariationSelection[];
     variant_stocks: ProductVariantStockValue[];
     images: File[];
-    video: File | null;
 }
 
 export type ProductEditorErrors = Partial<Record<string, string>>;

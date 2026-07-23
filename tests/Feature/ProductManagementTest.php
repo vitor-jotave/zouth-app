@@ -57,6 +57,43 @@ it('creates a product without variants', function () {
     expect(ProductVariantStock::count())->toBe(0);
 });
 
+it('stores and normalizes a product video link', function () {
+    $response = $this->post(route('manufacturer.products.store'), [
+        'name' => 'Vestido em movimento',
+        'sku' => 'SKU-VIDEO',
+        'video_url' => 'https://youtu.be/dQw4w9WgXcQ?t=10',
+        'base_quantity' => 8,
+        'variations' => [],
+        'variant_stocks' => [],
+    ]);
+
+    $response->assertRedirect(route('manufacturer.products.index'));
+
+    $this->assertDatabaseHas('products', [
+        'manufacturer_id' => $this->manufacturer->id,
+        'sku' => 'SKU-VIDEO',
+        'video_url' => 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    ]);
+});
+
+it('rejects an unsupported product video link', function () {
+    $response = $this->post(route('manufacturer.products.store'), [
+        'name' => 'Vestido sem vídeo válido',
+        'sku' => 'SKU-VIDEO-INVALID',
+        'video_url' => 'https://example.com/watch/collection',
+        'base_quantity' => 8,
+        'variations' => [],
+        'variant_stocks' => [],
+    ]);
+
+    $response->assertSessionHasErrors('video_url');
+
+    $this->assertDatabaseMissing('products', [
+        'manufacturer_id' => $this->manufacturer->id,
+        'sku' => 'SKU-VIDEO-INVALID',
+    ]);
+});
+
 it('persists whether an out of stock product can receive quote requests', function () {
     $payload = [
         'name' => 'Peça sob orçamento',
@@ -103,7 +140,7 @@ it('updates and reloads product description', function () {
         'variant_stocks' => [],
     ]);
 
-    $response->assertRedirect();
+    $response->assertRedirect(route('manufacturer.products.index'));
 
     $this->assertDatabaseHas('products', [
         'id' => $product->id,

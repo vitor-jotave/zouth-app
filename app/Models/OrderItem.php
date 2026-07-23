@@ -21,6 +21,7 @@ class OrderItem extends Model
         'product_sku',
         'unit_price',
         'quantity',
+        'reserved_quantity',
         'size',
         'color',
         'product_variant_stock_id',
@@ -33,6 +34,7 @@ class OrderItem extends Model
         return [
             'unit_price' => 'decimal:2',
             'quantity' => 'integer',
+            'reserved_quantity' => 'integer',
             'selected_variations' => 'array',
             'combo_components' => 'array',
         ];

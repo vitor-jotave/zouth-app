@@ -152,6 +152,29 @@ it('updates catalog branding settings', function () {
     ]);
 });
 
+it('saves the global policy for orders beyond available stock', function () {
+    $setting = createCatalogSettingFor($this->manufacturer);
+
+    $this->actingAs($this->user)
+        ->put(
+            route('manufacturer.catalog-settings.update'),
+            catalogSettingsUpdatePayload([
+                'allow_orders_without_stock' => true,
+            ]),
+        )
+        ->assertRedirect()
+        ->assertSessionDoesntHaveErrors();
+
+    expect($setting->fresh()->allow_orders_without_stock)->toBeTrue();
+
+    $this->actingAs($this->user)
+        ->get(route('manufacturer.catalog-settings.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('catalog_settings.allow_orders_without_stock', true)
+        );
+});
+
 it('saves the catalog logo size inside the cover settings', function () {
     $setting = createCatalogSettingFor($this->manufacturer);
     $sections = CatalogSetting::defaultSections();
@@ -648,6 +671,48 @@ it('keeps out of stock variation values available when the product accepts quote
     $productProps = collect($response->inertiaProps('products.data'))->sole();
 
     expect($productProps['allow_quote_when_out_of_stock'])->toBeTrue()
+        ->and($productProps['variations'][0]['values'])->toBe([[
+            'value' => 'Vermelho',
+            'hex' => '#ef4444',
+            'image_url' => null,
+        ]])
+        ->and(collect($response->inertiaProps('filter_options.variation_types.0.values'))->pluck('value')->all())
+        ->toBe(['Vermelho']);
+});
+
+it('keeps out of stock variation values available when global ordering beyond stock is enabled', function () {
+    $setting = createCatalogSettingFor($this->manufacturer);
+    $setting->update(['allow_orders_without_stock' => true]);
+    $color = VariationType::factory()->colorType()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+    ]);
+    VariationValue::factory()->create([
+        'variation_type_id' => $color->id,
+        'value' => 'Vermelho',
+        'hex' => '#ef4444',
+    ]);
+    $product = Product::factory()->forManufacturer($this->manufacturer)->withoutCategory()->create([
+        'name' => 'Body sob demanda',
+        'base_quantity' => 0,
+        'allow_quote_when_out_of_stock' => false,
+    ]);
+    ProductVariation::create([
+        'product_id' => $product->id,
+        'variation_type_id' => $color->id,
+    ]);
+    ProductVariantStock::factory()->create([
+        'product_id' => $product->id,
+        'variation_key' => ['Cor' => 'Vermelho'],
+        'quantity' => 0,
+    ]);
+
+    $response = $this->get(route('public.catalog.show', [
+        'token' => $setting->public_token,
+        'variations' => [$color->id => ['Vermelho']],
+    ]));
+    $productProps = collect($response->inertiaProps('products.data'))->sole();
+
+    expect($response->inertiaProps('catalog_settings.allow_orders_without_stock'))->toBeTrue()
         ->and($productProps['variations'][0]['values'])->toBe([[
             'value' => 'Vermelho',
             'hex' => '#ef4444',

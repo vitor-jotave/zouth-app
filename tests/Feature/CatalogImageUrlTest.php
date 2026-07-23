@@ -34,6 +34,28 @@ it('serializes public catalog product images from the s3 disk', function () {
         ->and($payload['images']->all())->toBe(['https://cdn.zouth.app/products/10/photo.jpg']);
 });
 
+it('serializes a safe embedded video for the public catalog', function () {
+    $product = Product::factory()->create([
+        'video_url' => 'https://vimeo.com/76979871',
+    ]);
+
+    $payload = (new ProductCatalogResource($product->load([
+        'category',
+        'media',
+        'productVariations.variationType.values',
+        'variantStocks',
+        'comboItems.componentProduct',
+        'comboItems.componentVariantStock',
+    ])))->resolve(request());
+
+    expect($payload['video'])->toBe([
+        'provider' => 'vimeo',
+        'kind' => 'embed',
+        'url' => 'https://vimeo.com/76979871',
+        'embed_url' => 'https://player.vimeo.com/video/76979871',
+    ]);
+});
+
 it('serializes catalog identity images from the catalog media disk', function () {
     config([
         'filesystems.default' => 's3',
@@ -75,5 +97,7 @@ it('allows configured s3 media hosts in the production content security policy',
     );
 
     expect($response->headers->get('Content-Security-Policy'))
-        ->toContain("img-src 'self' data: blob: https://cdn.zouth.app;");
+        ->toContain("img-src 'self' data: blob: https://cdn.zouth.app;")
+        ->toContain("media-src 'self' https: blob:;")
+        ->toContain('frame-src https://js.stripe.com https://hooks.stripe.com https://www.youtube-nocookie.com https://player.vimeo.com https://www.dailymotion.com https://www.loom.com;');
 });

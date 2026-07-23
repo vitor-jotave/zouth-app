@@ -67,6 +67,7 @@ class PublicCatalogController extends Controller
             ->where('manufacturer_id', $setting->manufacturer_id)
             ->whereIn('id', array_keys($variationFilters))
             ->pluck('name', 'id');
+        $allowOrdersWithoutStock = (bool) $setting->allow_orders_without_stock;
 
         $applySearchAndCategory = function ($query) use ($search, $categoryId) {
             return $query
@@ -98,11 +99,21 @@ class PublicCatalogController extends Controller
                 ->where('is_active', true)
                 ->where('product_type', 'product')
         )
-            ->when($variationTypeNames->isNotEmpty(), function ($query) use ($variationFilters, $variationTypeNames) {
+            ->when($variationTypeNames->isNotEmpty(), function ($query) use ($variationFilters, $variationTypeNames, $allowOrdersWithoutStock) {
                 foreach ($variationFilters as $typeId => $values) {
                     $typeName = $variationTypeNames->get($typeId);
 
                     if (! $typeName) {
+                        continue;
+                    }
+
+                    if ($allowOrdersWithoutStock) {
+                        $query->whereHas(
+                            'variantStocks',
+                            fn ($stockQuery) => $stockQuery
+                                ->whereIn("variation_key->{$typeName}", $values),
+                        );
+
                         continue;
                     }
 
@@ -140,6 +151,10 @@ class PublicCatalogController extends Controller
             ->get();
 
         $request->attributes->set('catalog_hide_prices', (bool) $setting->hide_prices);
+        $request->attributes->set(
+            'catalog_allow_orders_without_stock',
+            $allowOrdersWithoutStock,
+        );
 
         $orderRules = OrderRule::query()
             ->where('manufacturer_id', $setting->manufacturer_id)
@@ -288,11 +303,14 @@ class PublicCatalogController extends Controller
     private function buildFilterOptions(CatalogSetting $setting): array
     {
         $activeVariantStocks = ProductVariantStock::query()
-            ->where(function ($query) {
-                $query->where('quantity', '>', 0)
-                    ->orWhereHas('product', fn ($productQuery) => $productQuery
-                        ->where('allow_quote_when_out_of_stock', true));
-            })
+            ->when(
+                ! $setting->allow_orders_without_stock,
+                fn ($query) => $query->where(function ($query) {
+                    $query->where('quantity', '>', 0)
+                        ->orWhereHas('product', fn ($productQuery) => $productQuery
+                            ->where('allow_quote_when_out_of_stock', true));
+                }),
+            )
             ->whereHas('product', function ($query) use ($setting) {
                 $query->where('manufacturer_id', $setting->manufacturer_id)
                     ->where('is_active', true)

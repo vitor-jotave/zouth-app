@@ -14,23 +14,8 @@ import {
     useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import {
-    Film,
-    Grip,
-    ImagePlus,
-    Loader2,
-    Play,
-    Trash2,
-    Upload,
-    X,
-} from 'lucide-react';
-import {
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-    type CSSProperties,
-} from 'react';
+import { Film, Grip, ImagePlus, Loader2, Play, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { ImageDropzone } from '@/components/image-dropzone';
 import {
     AlertDialog,
@@ -42,7 +27,6 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
 import { EditorField, EditorSection } from './editor-section';
 import type {
     ProductEditorErrors,
@@ -54,16 +38,13 @@ type ProductMediaStudioProps = {
     mode: ProductEditorMode;
     mediaItems: ProductMediaItem[];
     stagedImages: File[];
-    stagedVideo: File | null;
-    pendingVideo: File | null;
+    videoUrl: string;
     maxImages: number;
     uploadingMedia: boolean;
     errors: ProductEditorErrors;
     onFilesSelected: (files: File[]) => void;
     onRemoveStagedImage: (index: number) => void;
-    onStagedVideoChange: (file: File | null) => void;
-    onPendingVideoChange: (file: File | null) => void;
-    onUploadVideo: () => void;
+    onVideoUrlChange: (url: string) => void;
     onReorder: (activeId: number, overId: number) => void;
     onDelete: (media: ProductMediaItem) => void;
 };
@@ -176,23 +157,19 @@ export function ProductMediaStudio({
     mode,
     mediaItems,
     stagedImages,
-    stagedVideo,
-    pendingVideo,
+    videoUrl,
     maxImages,
     uploadingMedia,
     errors,
     onFilesSelected,
     onRemoveStagedImage,
-    onStagedVideoChange,
-    onPendingVideoChange,
-    onUploadVideo,
+    onVideoUrlChange,
     onReorder,
     onDelete,
 }: ProductMediaStudioProps) {
     const [mediaToDelete, setMediaToDelete] = useState<ProductMediaItem | null>(
         null,
     );
-    const videoInputRef = useRef<HTMLInputElement>(null);
     const stagedImageUrls = useMemo(
         () => stagedImages.map((file) => URL.createObjectURL(file)),
         [stagedImages],
@@ -202,15 +179,8 @@ export function ProductMediaStudio({
     ).length;
     const imageCount =
         mode === 'create' ? stagedImages.length : existingImageCount;
-    const hasVideo =
-        Boolean(stagedVideo) ||
-        mediaItems.some((media) => media.type === 'video');
     const imageError = firstErrorStartingWith(errors, ['images', 'files']);
-    const videoError = firstErrorStartingWith(errors, [
-        'video',
-        'file',
-        'type',
-    ]);
+    const videoError = firstErrorStartingWith(errors, ['video_url']);
     const sensors = useSensors(
         useSensor(PointerSensor),
         useSensor(KeyboardSensor, {
@@ -223,12 +193,6 @@ export function ProductMediaStudio({
             stagedImageUrls.forEach((url) => URL.revokeObjectURL(url));
         };
     }, [stagedImageUrls]);
-
-    useEffect(() => {
-        if (!pendingVideo && videoInputRef.current) {
-            videoInputRef.current.value = '';
-        }
-    }, [pendingVideo]);
 
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event;
@@ -244,7 +208,7 @@ export function ProductMediaStudio({
         <>
             <EditorSection
                 id="images"
-                eyebrow="04 · Imagens"
+                eyebrow="04 · Imagens e vídeo"
                 title="A vitrine começa pela primeira foto."
                 description="Escolha a capa, organize o ritmo da galeria e mostre os detalhes que ajudam o lojista a decidir."
                 marker={
@@ -352,80 +316,58 @@ export function ProductMediaStudio({
                         </p>
                     )}
 
-                    <div className="grid gap-5 border-t border-border pt-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                    <div className="border-t border-border pt-6">
                         <EditorField
-                            label={
-                                hasVideo ? 'Vídeo da peça' : 'Adicionar vídeo'
-                            }
-                            htmlFor="product-video"
-                            hint={
-                                hasVideo
-                                    ? 'Uma peça aceita um vídeo por vez.'
-                                    : 'Opcional · MP4, MOV ou WebM · até 50 MB.'
-                            }
+                            label="Link do vídeo"
+                            htmlFor="product-video-url"
+                            hint="Opcional · YouTube, Vimeo, Dailymotion, Loom ou link direto em MP4/WebM."
                             error={videoError}
                         >
-                            <input
-                                ref={videoInputRef}
-                                id="product-video"
-                                type="file"
-                                accept="video/mp4,video/quicktime,video/webm"
-                                disabled={uploadingMedia || hasVideo}
-                                onChange={(event) => {
-                                    const file =
-                                        event.target.files?.[0] ?? null;
-
-                                    if (mode === 'create') {
-                                        onStagedVideoChange(file);
-                                    } else {
-                                        onPendingVideoChange(file);
+                            <div className="relative">
+                                <Play
+                                    className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground"
+                                    aria-hidden="true"
+                                />
+                                <input
+                                    id="product-video-url"
+                                    type="url"
+                                    inputMode="url"
+                                    value={videoUrl}
+                                    onChange={(event) =>
+                                        onVideoUrlChange(event.target.value)
                                     }
-                                }}
-                                className="block min-h-[52px] w-full rounded-[2px] border border-border bg-transparent px-3 py-3 text-sm file:mr-4 file:border-0 file:bg-[#18181f] file:px-3 file:py-2 file:text-xs file:font-bold file:tracking-[0.06em] file:text-[#f6f4f0] file:uppercase disabled:cursor-not-allowed disabled:opacity-55"
-                            />
+                                    placeholder="https://youtube.com/watch?v=..."
+                                    aria-invalid={Boolean(videoError)}
+                                    className="block min-h-[52px] w-full rounded-[2px] border border-border bg-transparent py-3 pr-4 pl-11 text-sm transition-colors outline-none placeholder:text-muted-foreground/65 focus:border-[#18181f] focus:ring-1 focus:ring-[#18181f] aria-invalid:border-[#b42318] aria-invalid:ring-[#b42318]"
+                                />
+                            </div>
                         </EditorField>
 
-                        {mode === 'edit' && pendingVideo && !hasVideo && (
-                            <Button
-                                type="button"
-                                onClick={onUploadVideo}
-                                disabled={uploadingMedia}
-                                className="min-h-[52px] rounded-[2px] bg-[#18181f] px-5 text-[#f6f4f0] hover:-translate-y-px hover:bg-[#18181f]"
-                            >
-                                {uploadingMedia ? (
-                                    <Loader2
-                                        className="size-4 animate-spin"
-                                        aria-hidden="true"
-                                    />
-                                ) : (
-                                    <Upload
-                                        className="size-4"
-                                        aria-hidden="true"
-                                    />
-                                )}
-                                Enviar vídeo
-                            </Button>
+                        {videoUrl && !videoError && (
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border border-border bg-[#e7e3dc]/35 px-4 py-3 text-sm">
+                                <span className="inline-flex items-center gap-2 font-medium">
+                                    <span className="size-2 rounded-full bg-[#ff4d3d]" />
+                                    O vídeo aparecerá no detalhe da peça.
+                                </span>
+                                <a
+                                    href={videoUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="font-semibold underline decoration-foreground/25 underline-offset-4 hover:decoration-foreground"
+                                >
+                                    Conferir link
+                                </a>
+                            </div>
+                        )}
+
+                        {mediaItems.some((media) => media.type === 'video') && (
+                            <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                                O arquivo enviado anteriormente continua
+                                guardado. Quando houver um link, ele será o
+                                vídeo principal no catálogo.
+                            </p>
                         )}
                     </div>
-
-                    {mode === 'create' && stagedVideo && (
-                        <div className="flex flex-wrap items-center gap-3 border border-border bg-[#e7e3dc]/35 px-4 py-3 text-sm">
-                            <Film
-                                className="size-4 shrink-0"
-                                aria-hidden="true"
-                            />
-                            <span className="min-w-0 flex-1 truncate">
-                                {stagedVideo.name}
-                            </span>
-                            <button
-                                type="button"
-                                onClick={() => onStagedVideoChange(null)}
-                                className="inline-flex min-h-11 items-center gap-2 px-2 font-semibold text-[#b42318] underline decoration-[#b42318]/30 underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff4d3d]"
-                            >
-                                Remover
-                            </button>
-                        </div>
-                    )}
 
                     {uploadingMedia && (
                         <div

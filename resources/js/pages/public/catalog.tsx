@@ -15,6 +15,7 @@ import {
     MessageCircle,
     Minus,
     Package,
+    Play,
     Plus,
     RotateCcw,
     Search,
@@ -91,6 +92,7 @@ interface CatalogSettings {
     show_brand_name: boolean;
     show_logo: boolean;
     hide_prices: boolean;
+    allow_orders_without_stock: boolean;
     tagline?: string | null;
     description?: string | null;
     logo_url?: string | null;
@@ -139,6 +141,12 @@ interface Product {
     images: string[];
     thumbnails?: string[];
     videos?: string[];
+    video?: {
+        provider: string;
+        kind: 'embed' | 'file';
+        url: string;
+        embed_url: string;
+    } | null;
     variations: Array<{
         type_name: string;
         is_color_type: boolean;
@@ -610,6 +618,7 @@ function ProductImageSlider({
             Boolean(image) && !failedImages.includes(image as string),
     );
     const hasMultipleImages = images.length > 1;
+    const hasVideo = Boolean(product.video || product.videos?.length);
 
     useEffect(() => {
         setCurrentIndex(0);
@@ -686,6 +695,13 @@ function ProductImageSlider({
 
             {children}
 
+            {hasVideo && (
+                <span className="pointer-events-none absolute top-3 right-3 z-10 inline-flex min-h-8 items-center gap-2 rounded-full bg-[#18181f]/88 px-3 text-[0.68rem] font-semibold tracking-[0.04em] text-white backdrop-blur-sm">
+                    <Play className="size-3 fill-current" aria-hidden="true" />
+                    Vídeo
+                </span>
+            )}
+
             {onOpen && (
                 <div className="pointer-events-none absolute top-3 left-3 z-10 inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-gray-900 opacity-0 shadow-sm transition group-hover:opacity-100">
                     <Maximize2 className="h-3.5 w-3.5" />
@@ -729,6 +745,67 @@ function ProductImageSlider({
                 </>
             )}
         </div>
+    );
+}
+
+function ProductVideoShowcase({ product }: { product: Product }) {
+    const linkedVideo = product.video;
+    const legacyVideoUrl = linkedVideo ? null : product.videos?.[0];
+
+    if (!linkedVideo && !legacyVideoUrl) {
+        return null;
+    }
+
+    const isEmbed = linkedVideo?.kind === 'embed';
+    const playerUrl = linkedVideo?.embed_url ?? legacyVideoUrl ?? undefined;
+
+    return (
+        <section className="space-y-3 border-t pt-5">
+            <div className="flex items-center justify-between gap-3">
+                <div>
+                    <p className="text-[0.65rem] font-semibold tracking-[0.16em] text-gray-500 uppercase">
+                        Em movimento
+                    </p>
+                    <h3 className="mt-1 text-sm font-semibold">
+                        Veja a peça por outros ângulos
+                    </h3>
+                </div>
+                {linkedVideo && (
+                    <a
+                        href={linkedVideo.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="shrink-0 text-xs font-semibold underline decoration-current/25 underline-offset-4 hover:decoration-current"
+                    >
+                        Abrir vídeo
+                    </a>
+                )}
+            </div>
+
+            <div className="aspect-video overflow-hidden rounded-sm bg-[#18181f] ring-1 ring-black/10">
+                {isEmbed && linkedVideo ? (
+                    <iframe
+                        src={linkedVideo.embed_url}
+                        title={`Vídeo de ${product.name}`}
+                        loading="lazy"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        referrerPolicy="strict-origin-when-cross-origin"
+                        allowFullScreen
+                        className="size-full border-0"
+                    />
+                ) : (
+                    <video
+                        src={playerUrl}
+                        controls
+                        playsInline
+                        preload="metadata"
+                        className="size-full bg-[#18181f] object-contain"
+                    >
+                        Seu navegador não conseguiu reproduzir este vídeo.
+                    </video>
+                )}
+            </div>
+        </section>
     );
 }
 
@@ -815,6 +892,7 @@ function ProductQuickViewModal({
     primaryColor,
     accentColor,
     showPrice,
+    allowOrdersWithoutStock,
     onClose,
     onSelectVariation,
     onAddToCart,
@@ -827,6 +905,7 @@ function ProductQuickViewModal({
     primaryColor: string;
     accentColor: string;
     showPrice: boolean;
+    allowOrdersWithoutStock: boolean;
     onClose: () => void;
     onSelectVariation: (variationName: string, value: string) => void;
     onAddToCart: (product: Product) => void;
@@ -840,7 +919,9 @@ function ProductQuickViewModal({
     const availableStock = availableStockForSelection(product, selectedValues);
     const canAdd =
         availableStock !== null &&
-        (availableStock > 0 || product.allow_quote_when_out_of_stock);
+        (availableStock > 0 ||
+            allowOrdersWithoutStock ||
+            product.allow_quote_when_out_of_stock);
 
     return (
         <Dialog
@@ -906,6 +987,8 @@ function ProductQuickViewModal({
                             </div>
                         )}
 
+                        <ProductVideoShowcase product={product} />
+
                         <ComboSummary product={product} />
 
                         {product.variations.length > 0 && (
@@ -927,9 +1010,11 @@ function ProductQuickViewModal({
                                     ? `${product.total_stock} unidade(s) disponíveis`
                                     : availableStock > 0
                                       ? `${availableStock} unidade(s) nesta opção`
-                                      : product.allow_quote_when_out_of_stock
-                                        ? 'Sem estoque imediato · disponível para orçamento'
-                                        : 'Opção sem estoque disponível'}
+                                      : allowOrdersWithoutStock
+                                        ? 'Disponível para pedido sob demanda'
+                                        : product.allow_quote_when_out_of_stock
+                                          ? 'Sem estoque imediato · disponível para orçamento'
+                                          : 'Opção sem estoque disponível'}
                             </p>
                             <Button
                                 type="button"
@@ -945,6 +1030,9 @@ function ProductQuickViewModal({
                                 <AddToCartContent
                                     isAdded={isAdded}
                                     availableStock={availableStock}
+                                    acceptsOrderWithoutStock={
+                                        allowOrdersWithoutStock
+                                    }
                                     acceptsQuote={
                                         product.allow_quote_when_out_of_stock
                                     }
@@ -1459,10 +1547,12 @@ function CatalogCollections({
 function AddToCartContent({
     isAdded,
     availableStock,
+    acceptsOrderWithoutStock = false,
     acceptsQuote = false,
 }: {
     isAdded: boolean;
     availableStock: number | null;
+    acceptsOrderWithoutStock?: boolean;
     acceptsQuote?: boolean;
 }) {
     if (isAdded) {
@@ -1479,6 +1569,15 @@ function AddToCartContent({
     }
 
     if (availableStock === 0) {
+        if (acceptsOrderWithoutStock) {
+            return (
+                <>
+                    <Plus className="h-4 w-4" />
+                    Adicionar ao pedido
+                </>
+            );
+        }
+
         return acceptsQuote ? (
             <>
                 <MessageCircle className="h-4 w-4" />
@@ -1747,7 +1846,10 @@ function ComboGridSection({
                                                 onClick={() =>
                                                     onAddToCart(combo)
                                                 }
-                                                disabled={availableStock === 0}
+                                                disabled={
+                                                    availableStock === 0 &&
+                                                    !settings.allow_orders_without_stock
+                                                }
                                                 aria-live="polite"
                                                 className="inline-flex items-center gap-1.5 transition-opacity hover:opacity-60 disabled:cursor-not-allowed disabled:opacity-35"
                                                 style={{
@@ -1760,6 +1862,9 @@ function ComboGridSection({
                                                     isAdded={isAdded}
                                                     availableStock={
                                                         availableStock
+                                                    }
+                                                    acceptsOrderWithoutStock={
+                                                        settings.allow_orders_without_stock
                                                     }
                                                 />
                                             </button>
@@ -1926,7 +2031,10 @@ function ComboGridSection({
                                                 onClick={() =>
                                                     onAddToCart(combo)
                                                 }
-                                                disabled={availableStock === 0}
+                                                disabled={
+                                                    availableStock === 0 &&
+                                                    !settings.allow_orders_without_stock
+                                                }
                                                 aria-live="polite"
                                                 className="inline-flex min-w-28 items-center justify-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                                                 style={{
@@ -1939,6 +2047,9 @@ function ComboGridSection({
                                                     isAdded={isAdded}
                                                     availableStock={
                                                         availableStock
+                                                    }
+                                                    acceptsOrderWithoutStock={
+                                                        settings.allow_orders_without_stock
                                                     }
                                                 />
                                             </button>
@@ -2236,6 +2347,7 @@ function MinimalLayout({
                                 const canAdd =
                                     availableStock !== null &&
                                     (availableStock > 0 ||
+                                        settings.allow_orders_without_stock ||
                                         product.allow_quote_when_out_of_stock);
                                 const visibleStock =
                                     availableStock ?? product.total_stock;
@@ -2450,6 +2562,9 @@ function MinimalLayout({
                                                                         availableStock={
                                                                             availableStock
                                                                         }
+                                                                        acceptsOrderWithoutStock={
+                                                                            settings.allow_orders_without_stock
+                                                                        }
                                                                         acceptsQuote={
                                                                             product.allow_quote_when_out_of_stock
                                                                         }
@@ -2483,6 +2598,9 @@ function MinimalLayout({
                                                                     }
                                                                     availableStock={
                                                                         availableStock
+                                                                    }
+                                                                    acceptsOrderWithoutStock={
+                                                                        settings.allow_orders_without_stock
                                                                     }
                                                                     acceptsQuote={
                                                                         product.allow_quote_when_out_of_stock
@@ -2690,6 +2808,7 @@ function PlayfulLayout({
                             const canAdd =
                                 availableStock !== null &&
                                 (availableStock > 0 ||
+                                    settings.allow_orders_without_stock ||
                                     product.allow_quote_when_out_of_stock);
 
                             return (
@@ -2806,6 +2925,9 @@ function PlayfulLayout({
                                             <AddToCartContent
                                                 isAdded={isAdded}
                                                 availableStock={availableStock}
+                                                acceptsOrderWithoutStock={
+                                                    settings.allow_orders_without_stock
+                                                }
                                                 acceptsQuote={
                                                     product.allow_quote_when_out_of_stock
                                                 }
@@ -3005,6 +3127,7 @@ function BoutiqueLayout({
                             const canAdd =
                                 availableStock !== null &&
                                 (availableStock > 0 ||
+                                    settings.allow_orders_without_stock ||
                                     product.allow_quote_when_out_of_stock);
 
                             return (
@@ -3022,13 +3145,14 @@ function BoutiqueLayout({
                                         }}
                                         onOpen={() => onOpenQuickView(product)}
                                     >
-                                        {product.total_stock === 0 && (
-                                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-                                                <span className="font-serif text-sm tracking-widest text-white uppercase">
-                                                    Esgotado
-                                                </span>
-                                            </div>
-                                        )}
+                                        {product.total_stock === 0 &&
+                                            !settings.allow_orders_without_stock && (
+                                                <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                                                    <span className="font-serif text-sm tracking-widest text-white uppercase">
+                                                        Esgotado
+                                                    </span>
+                                                </div>
+                                            )}
                                     </ProductImageSlider>
                                     <div className="space-y-3">
                                         <div>
@@ -3097,6 +3221,9 @@ function BoutiqueLayout({
                                             <AddToCartContent
                                                 isAdded={isAdded}
                                                 availableStock={availableStock}
+                                                acceptsOrderWithoutStock={
+                                                    settings.allow_orders_without_stock
+                                                }
                                                 acceptsQuote={
                                                     product.allow_quote_when_out_of_stock
                                                 }
@@ -3194,18 +3321,20 @@ export default function PublicCatalog({
         ? `${cartCompositionTotal} ${cartCompositionTotal === 1 ? 'composição' : 'composições'}`
         : `${cartTotal} ${cartTotal === 1 ? 'seleção' : 'seleções'}`;
     const cartPieceLabel = `${cartPieceTotal} ${cartPieceTotal === 1 ? 'peça' : 'peças'}`;
-    const cartRequiresQuote = cart.some((item) => {
-        const availableStock = availableStockForSelection(
-            item.product,
-            item.selected_variations ?? {},
-        );
+    const cartRequiresQuote =
+        !catalog_settings.allow_orders_without_stock &&
+        cart.some((item) => {
+            const availableStock = availableStockForSelection(
+                item.product,
+                item.selected_variations ?? {},
+            );
 
-        return (
-            item.product.allow_quote_when_out_of_stock &&
-            availableStock !== null &&
-            item.quantity > availableStock
-        );
-    });
+            return (
+                item.product.allow_quote_when_out_of_stock &&
+                availableStock !== null &&
+                item.quantity > availableStock
+            );
+        });
     const whatsappMessage = whatsapp_checkout.enabled
         ? buildWhatsappCartMessage(
               catalog_settings.brand_name ?? manufacturer.name,
@@ -3315,7 +3444,9 @@ export default function PublicCatalog({
 
             if (
                 availableStock === null ||
-                (availableStock === 0 && !product.allow_quote_when_out_of_stock)
+                (availableStock === 0 &&
+                    !catalog_settings.allow_orders_without_stock &&
+                    !product.allow_quote_when_out_of_stock)
             ) {
                 return;
             }
@@ -3331,6 +3462,7 @@ export default function PublicCatalog({
                             ? {
                                   ...item,
                                   quantity:
+                                      catalog_settings.allow_orders_without_stock ||
                                       product.allow_quote_when_out_of_stock
                                           ? Math.min(item.quantity + 1, 9999)
                                           : Math.min(
@@ -3357,7 +3489,7 @@ export default function PublicCatalog({
                 ];
             });
         },
-        [selectedVariations],
+        [catalog_settings.allow_orders_without_stock, selectedVariations],
     );
 
     const updateQuantity = (itemKey: string, quantity: number) => {
@@ -3379,9 +3511,11 @@ export default function PublicCatalog({
 
                 return {
                     ...item,
-                    quantity: item.product.allow_quote_when_out_of_stock
-                        ? Math.min(quantity, 9999)
-                        : Math.min(quantity, availableStock),
+                    quantity:
+                        catalog_settings.allow_orders_without_stock ||
+                        item.product.allow_quote_when_out_of_stock
+                            ? Math.min(quantity, 9999)
+                            : Math.min(quantity, availableStock),
                 };
             }),
         );
@@ -3617,6 +3751,9 @@ export default function PublicCatalog({
                 primaryColor={catalog_settings.primary_color}
                 accentColor={catalog_settings.accent_color}
                 showPrice={!whatsapp_checkout.enabled}
+                allowOrdersWithoutStock={
+                    catalog_settings.allow_orders_without_stock
+                }
                 onClose={() => setQuickViewProduct(null)}
                 onSelectVariation={(variationName, value) => {
                     if (!quickViewProduct) {
@@ -3765,8 +3902,19 @@ export default function PublicCatalog({
                                                     </p>
                                                 )}
 
-                                                {item.product
-                                                    .allow_quote_when_out_of_stock &&
+                                                {catalog_settings.allow_orders_without_stock &&
+                                                    availableStock !== null &&
+                                                    item.quantity >
+                                                        availableStock && (
+                                                        <span className="mt-3 inline-flex min-h-7 items-center gap-2 bg-[#ff4d3d]/10 px-2.5 text-[0.65rem] font-bold tracking-[0.08em] text-[#b52e24] uppercase">
+                                                            <Package className="size-3.5" />
+                                                            Produção sob demanda
+                                                        </span>
+                                                    )}
+
+                                                {!catalog_settings.allow_orders_without_stock &&
+                                                    item.product
+                                                        .allow_quote_when_out_of_stock &&
                                                     availableStock !== null &&
                                                     item.quantity >
                                                         availableStock && (
@@ -3839,6 +3987,9 @@ export default function PublicCatalog({
                                                             size="icon"
                                                             className="size-10 rounded-none hover:bg-[#e7e3dc]"
                                                             disabled={
+                                                                !catalog_settings.allow_orders_without_stock &&
+                                                                !item.product
+                                                                    .allow_quote_when_out_of_stock &&
                                                                 availableStock !==
                                                                     null &&
                                                                 item.quantity >=

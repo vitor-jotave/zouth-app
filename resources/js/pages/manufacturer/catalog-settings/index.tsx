@@ -78,6 +78,7 @@ interface CatalogSettings {
     show_brand_name: boolean;
     show_logo: boolean;
     hide_prices: boolean;
+    allow_orders_without_stock: boolean;
     tagline?: string | null;
     description?: string | null;
     logo_url?: string | null;
@@ -275,7 +276,13 @@ function panelForError(
         return 'product_grid';
     }
 
-    if (['hide_prices', 'public_link_active'].includes(errorKey)) {
+    if (
+        [
+            'hide_prices',
+            'allow_orders_without_stock',
+            'public_link_active',
+        ].includes(errorKey)
+    ) {
         return 'publish';
     }
 
@@ -539,6 +546,8 @@ export default function CatalogSettings({
         show_brand_name: settings.show_brand_name ?? true,
         show_logo: settings.show_logo ?? true,
         hide_prices: settings.hide_prices ?? false,
+        allow_orders_without_stock:
+            settings.allow_orders_without_stock ?? false,
         tagline: settings.tagline ?? '',
         description: settings.description ?? '',
         primary_color: settings.primary_color ?? '#0F766E',
@@ -1787,7 +1796,7 @@ export default function CatalogSettings({
                                 }
                             />
                             <SegmentedControl
-                                label="Respiro entre as peças"
+                                label="Distância entre as peças"
                                 value={settingsForm.data.layout_density}
                                 options={[
                                     {
@@ -2527,6 +2536,84 @@ export default function CatalogSettings({
                             )}
                         </div>
                         <InputError message={settingsForm.errors.hide_prices} />
+                    </div>
+                </InspectorSection>
+                <InspectorSection title="Disponibilidade dos pedidos">
+                    <div
+                        className="space-y-4"
+                        data-catalog-error="allow_orders_without_stock"
+                    >
+                        <div className="flex items-start justify-between gap-5">
+                            <div>
+                                <p className="text-sm font-semibold">
+                                    Aceitar pedidos além do estoque
+                                </p>
+                                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                    Permite que o lojista peça qualquer
+                                    quantidade, mesmo quando o saldo imediato
+                                    não cobre toda a seleção.
+                                </p>
+                            </div>
+                            <Switch
+                                checked={
+                                    settingsForm.data.allow_orders_without_stock
+                                }
+                                onCheckedChange={(checked) =>
+                                    settingsForm.setData(
+                                        'allow_orders_without_stock',
+                                        checked,
+                                    )
+                                }
+                                aria-label="Aceitar pedidos além do estoque"
+                                className="mt-0.5 shrink-0 data-[state=checked]:bg-[#ff4d3d]"
+                            />
+                        </div>
+
+                        <div
+                            className={cn(
+                                'border-l-2 px-3 py-1.5 text-xs leading-5',
+                                settingsForm.data.allow_orders_without_stock
+                                    ? 'border-[#ff4d3d] text-foreground'
+                                    : 'border-[#cac4ba] text-muted-foreground',
+                            )}
+                        >
+                            {settingsForm.data.allow_orders_without_stock ? (
+                                <>
+                                    <p className="font-semibold">
+                                        Produção sob demanda ativa
+                                    </p>
+                                    <p className="mt-1 text-muted-foreground">
+                                        O que estiver disponível será baixado
+                                        até zero. O restante entra no pedido sem
+                                        criar estoque negativo.
+                                    </p>
+                                </>
+                            ) : (
+                                <>
+                                    <p className="font-semibold text-foreground">
+                                        Respeitar o saldo disponível
+                                    </p>
+                                    <p className="mt-1">
+                                        O catálogo limita cada peça à quantidade
+                                        registrada em estoque.
+                                    </p>
+                                </>
+                            )}
+                        </div>
+
+                        {settingsForm.data.hide_prices && (
+                            <p className="text-[0.68rem] leading-4 text-muted-foreground">
+                                Esta política vale para pedidos fechados com
+                                preços. Seleções enviadas ao WhatsApp continuam
+                                seguindo a conversa comercial.
+                            </p>
+                        )}
+
+                        <InputError
+                            message={
+                                settingsForm.errors.allow_orders_without_stock
+                            }
+                        />
                     </div>
                 </InspectorSection>
                 <InspectorSection>

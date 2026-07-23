@@ -37,6 +37,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import manufacturer from '@/routes/manufacturer';
 
 export const PRODUCT_EDITOR_FORM_ID = 'product-editor-form';
@@ -87,8 +88,15 @@ const sectionLinks: Array<{
     },
     {
         key: 'images',
-        label: 'Imagens',
-        errorPrefixes: ['images', 'files', 'video', 'file', 'type'],
+        label: 'Mídia',
+        errorPrefixes: [
+            'images',
+            'files',
+            'video',
+            'video_url',
+            'file',
+            'type',
+        ],
     },
 ];
 
@@ -252,10 +260,10 @@ export function ProductForm({
             product?.allow_quote_when_out_of_stock ?? false,
         sort_order: product?.sort_order ?? 0,
         price: centsToDisplay(product?.price_cents),
+        video_url: product?.video_url ?? '',
         variations: initialVariations,
         variant_stocks: initialStocks,
         images: [],
-        video: null,
     });
     const formErrors = errors as ProductEditorErrors;
     const [activeSection, setActiveSection] =
@@ -263,7 +271,6 @@ export function ProductForm({
     const [mediaItems, setMediaItems] = useState<ProductMediaItem[]>(
         product?.media ?? [],
     );
-    const [pendingVideo, setPendingVideo] = useState<File | null>(null);
     const [cropQueue, setCropQueue] = useState<File[]>([]);
     const [cropDialogOpen, setCropDialogOpen] = useState(false);
     const [uploadingMedia, setUploadingMedia] = useState(false);
@@ -279,6 +286,8 @@ export function ProductForm({
     );
     const errorCount = Object.keys(formErrors).length;
     const currentCropFile = cropQueue[0] ?? null;
+
+    useUnsavedChangesGuard(isDirty);
 
     useEffect(() => {
         setMediaItems(product?.media ?? []);
@@ -299,23 +308,6 @@ export function ProductForm({
             });
         });
     }, [formErrors]);
-
-    useEffect(() => {
-        const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-            if (!isDirty) {
-                return;
-            }
-
-            event.preventDefault();
-            event.returnValue = '';
-        };
-
-        window.addEventListener('beforeunload', handleBeforeUnload);
-
-        return () => {
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-        };
-    }, [isDirty]);
 
     useEffect(() => {
         const observer = new IntersectionObserver(
@@ -523,25 +515,6 @@ export function ProductForm({
             return nextQueue;
         });
     }, []);
-
-    const handleVideoUpload = useCallback(() => {
-        if (!product || !pendingVideo) {
-            return;
-        }
-
-        setUploadingMedia(true);
-        router.post(
-            manufacturer.products.media.store(product.id).url,
-            { type: 'video', file: pendingVideo },
-            {
-                forceFormData: true,
-                preserveScroll: true,
-                preserveState: true,
-                onSuccess: () => setPendingVideo(null),
-                onFinish: () => setUploadingMedia(false),
-            },
-        );
-    }, [pendingVideo, product]);
 
     const reorderMedia = (activeId: number, overId: number) => {
         if (!product) {
@@ -940,8 +913,7 @@ export function ProductForm({
                         mode={mode}
                         mediaItems={mediaItems}
                         stagedImages={data.images}
-                        stagedVideo={data.video}
-                        pendingVideo={pendingVideo}
+                        videoUrl={data.video_url}
                         maxImages={MAX_IMAGES}
                         uploadingMedia={uploadingMedia}
                         errors={formErrors}
@@ -954,9 +926,7 @@ export function ProductForm({
                                 ),
                             )
                         }
-                        onStagedVideoChange={(file) => setData('video', file)}
-                        onPendingVideoChange={setPendingVideo}
-                        onUploadVideo={handleVideoUpload}
+                        onVideoUrlChange={(url) => setData('video_url', url)}
                         onReorder={reorderMedia}
                         onDelete={deleteMedia}
                     />
