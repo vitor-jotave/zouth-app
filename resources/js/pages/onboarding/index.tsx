@@ -17,6 +17,7 @@ import {
     progress,
     store,
 } from '@/actions/App/Http/Controllers/OnboardingController';
+import PasswordRequirements from '@/components/password-requirements';
 import { logout } from '@/routes';
 import { privacy, terms } from '@/routes/legal';
 import './onboarding.css';
@@ -456,8 +457,13 @@ export default function OnboardingIndex() {
                                         setPassword(event.target.value)
                                     }
                                     autoComplete="new-password"
+                                    aria-describedby="onboarding-password-requirements"
                                 />
                             </label>
+                            <PasswordRequirements
+                                id="onboarding-password-requirements"
+                                className="text-[#77726d]"
+                            />
                             {fieldError(props.errors, 'password')}
                             <label className="zo-check">
                                 <input

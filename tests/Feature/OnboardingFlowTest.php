@@ -159,17 +159,35 @@ it('still throttles repeated account creation attempts from the same visitor', f
         ->assertTooManyRequests();
 });
 
-it('translates generic and secure password validation messages to Portuguese', function () {
+it('applies the shared password policy with clear Portuguese messages', function () {
     $required = Validator::make([], ['email' => ['required']]);
-    $password = Validator::make(
-        ['password' => 'SenhaSemSimbolo2026'],
-        ['password' => [Password::min(12)->symbols()]],
+    $tooShort = Validator::make(
+        ['password' => 'Abc1'],
+        ['password' => [Password::default()]],
+    );
+    $withoutUppercase = Validator::make(
+        ['password' => 'abcdef1'],
+        ['password' => [Password::default()]],
+    );
+    $withoutNumber = Validator::make(
+        ['password' => 'Abcdef'],
+        ['password' => [Password::default()]],
+    );
+    $validWithoutSymbol = Validator::make(
+        ['password' => 'ABC123'],
+        ['password' => [Password::default()]],
     );
 
     expect($required->errors()->first('email'))
         ->toBe('O campo e-mail é obrigatório.')
-        ->and($password->errors()->first('password'))
-        ->toBe('O campo senha deve conter pelo menos um símbolo.');
+        ->and($tooShort->errors()->first('password'))
+        ->toBe('O campo senha deve ter pelo menos 6 caracteres.')
+        ->and($withoutUppercase->errors()->first('password'))
+        ->toBe('A senha deve conter pelo menos uma letra maiúscula.')
+        ->and($withoutNumber->errors()->first('password'))
+        ->toBe('O campo senha deve conter pelo menos um número.')
+        ->and($validWithoutSymbol->passes())
+        ->toBeTrue();
 });
 
 it('stores the preview and sends the branded verification message only after value is shown', function () {

@@ -167,26 +167,55 @@ const stageBorder: Record<string, string> = {
     cancelled: 'border-t-[#b42318]',
 };
 
-const allowedTransitionsByStatus: Record<string, AllowedTransition[]> = {
-    new: [
-        { value: 'confirmed', label: 'Confirmado' },
-        { value: 'cancelled', label: 'Cancelado' },
-    ],
-    confirmed: [
-        { value: 'preparing', label: 'Em preparação' },
-        { value: 'cancelled', label: 'Cancelado' },
-    ],
-    preparing: [
-        { value: 'shipped', label: 'Enviado' },
-        { value: 'cancelled', label: 'Cancelado' },
-    ],
-    shipped: [
-        { value: 'delivered', label: 'Entregue' },
-        { value: 'cancelled', label: 'Cancelado' },
-    ],
-    delivered: [],
-    cancelled: [],
+const operationalStatusOrder = [
+    'new',
+    'confirmed',
+    'preparing',
+    'shipped',
+    'delivered',
+];
+
+const standardStatusLabels: Record<string, string> = {
+    new: 'Novo',
+    confirmed: 'Confirmado',
+    preparing: 'Em preparação',
+    shipped: 'Enviado',
+    delivered: 'Entregue',
+    cancelled: 'Cancelado',
 };
+
+const quoteStatusLabels: Record<string, string> = {
+    new: 'Recebido',
+    confirmed: 'Em negociação',
+    preparing: 'Aprovado',
+    shipped: 'Formalizado',
+    delivered: 'Concluído',
+    cancelled: 'Encerrado',
+};
+
+function allowedTransitionsForStatus(
+    status: string,
+    orderType: Order['order_type'],
+): AllowedTransition[] {
+    if (status === 'cancelled') {
+        return [];
+    }
+
+    const labels =
+        orderType === 'quote' ? quoteStatusLabels : standardStatusLabels;
+    const transitions = operationalStatusOrder
+        .filter((value) => value !== status)
+        .map((value) => ({ value, label: labels[value] }));
+
+    if (status !== 'delivered') {
+        transitions.push({
+            value: 'cancelled',
+            label: labels.cancelled,
+        });
+    }
+
+    return transitions;
+}
 
 function formatCurrency(value: string | number): string {
     return new Intl.NumberFormat('pt-BR', {
@@ -211,9 +240,16 @@ function orderItemsLabel(count: number): string {
 }
 
 function nextOperationalTransition(order: Order): AllowedTransition | null {
+    const currentIndex = operationalStatusOrder.indexOf(order.status);
+    const nextStatus = operationalStatusOrder[currentIndex + 1];
+
+    if (!nextStatus) {
+        return null;
+    }
+
     return (
         order.allowed_transitions.find(
-            (transition) => transition.value !== 'cancelled',
+            (transition) => transition.value === nextStatus,
         ) ?? null
     );
 }
@@ -253,7 +289,10 @@ function moveOrderBetweenStages(
         ...order,
         status: transition.value,
         status_label: transition.label,
-        allowed_transitions: allowedTransitionsByStatus[transition.value] ?? [],
+        allowed_transitions: allowedTransitionsForStatus(
+            transition.value,
+            order.order_type,
+        ),
     };
 
     return stages.map((stage) => {
@@ -683,7 +722,7 @@ export default function OrdersIndex({
                         <div className="border-l-2 border-[#ff4d3d] pl-5">
                             <p className="mt-2 text-sm leading-6 text-foreground">
                                 Arraste um pedido ou use a ação do cartão para
-                                avançar a próxima etapa.
+                                mudar de etapa. Se precisar, arraste de volta.
                             </p>
                         </div>
                     }
@@ -849,7 +888,7 @@ export default function OrdersIndex({
                         <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
                             <p>
                                 {filters.view === 'board'
-                                    ? 'Arraste pelos puxadores. Cada movimento respeita o fluxo do pedido.'
+                                    ? 'Arraste pelos puxadores para qualquer etapa. Cada mudança fica registrada no histórico.'
                                     : `${orders.meta?.total ?? orders.data.length} pedidos na seleção atual.`}
                             </p>
                             {filters.status && (

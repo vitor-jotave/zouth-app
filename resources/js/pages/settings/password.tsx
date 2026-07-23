@@ -4,6 +4,7 @@ import { useRef } from 'react';
 import PasswordController from '@/actions/App/Http/Controllers/Settings/PasswordController';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
+import PasswordRequirements from '@/components/password-requirements';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -34,7 +35,7 @@ export default function Password() {
                     <Heading
                         variant="small"
                         title="Atualizar senha"
-                        description="Certifique-se de que sua conta esteja usando uma senha longa e segura"
+                        description="Atualize sua senha sempre que precisar reforçar a segurança da conta"
                     />
 
                     <Form
@@ -92,8 +93,10 @@ export default function Password() {
                                         className="mt-1 block w-full"
                                         autoComplete="new-password"
                                         placeholder="Nova senha"
+                                        aria-describedby="settings-password-requirements"
                                     />
 
+                                    <PasswordRequirements id="settings-password-requirements" />
                                     <InputError message={errors.password} />
                                 </div>
 

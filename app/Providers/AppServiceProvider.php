@@ -6,6 +6,7 @@ use App\Http\Responses\LoginResponse;
 use App\Http\Responses\RegisterResponse;
 use App\Http\Responses\VerifyEmailResponse;
 use App\Listeners\StripeEventListener;
+use App\Rules\ContainsUppercaseLetter;
 use App\Services\EvolutionApiService;
 use App\Services\TenantManager;
 use Carbon\CarbonImmutable;
@@ -156,14 +157,8 @@ class AppServiceProvider extends ServiceProvider
             app()->isProduction(),
         );
 
-        Password::defaults(fn (): ?Password => app()->isProduction()
-            ? Password::min(12)
-                ->mixedCase()
-                ->letters()
-                ->numbers()
-                ->symbols()
-                ->uncompromised()
-            : null
-        );
+        Password::defaults(fn (): Password => Password::min(6)
+            ->numbers()
+            ->rules([new ContainsUppercaseLetter]));
     }
 }

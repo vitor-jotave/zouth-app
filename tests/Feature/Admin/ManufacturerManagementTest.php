@@ -3,6 +3,7 @@
 use App\Enums\UserType;
 use App\Models\Manufacturer;
 use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 
@@ -44,6 +45,7 @@ it('allows superadmin to create manufacturer with owner', function () {
         'owner_email' => 'owner@test.com',
         'cnpj' => '11222333000181',
         'phone' => '(11) 99999-9999',
+        'owner_temporary_password' => 'Senha1',
     ]);
 
     $response->assertRedirect('/admin/manufacturers');
@@ -57,6 +59,7 @@ it('allows superadmin to create manufacturer with owner', function () {
 
     expect($owner->user_type)->toBe(UserType::ManufacturerUser);
     expect($owner->current_manufacturer_id)->toBe($manufacturer->id);
+    expect(Hash::check('Senha1', $owner->password))->toBeTrue();
     expect($manufacturer->primary_owner_user_id)->toBe($owner->id);
 
     // Check pivot relationship

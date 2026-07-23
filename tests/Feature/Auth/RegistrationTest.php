@@ -2,7 +2,7 @@
 
 use App\Enums\UserType;
 use App\Models\User;
-use Illuminate\Auth\Notifications\VerifyEmail;
+use App\Notifications\ZouthVerifyEmailNotification;
 use Illuminate\Support\Facades\Notification;
 
 test('registration screen can be rendered', function () {
@@ -15,8 +15,8 @@ test('new users can register as sales reps', function () {
     $this->post('/register', [
         'name' => 'João Representante',
         'email' => 'rep@example.com',
-        'password' => 'password',
-        'password_confirmation' => 'password',
+        'password' => 'Senha1',
+        'password_confirmation' => 'Senha1',
         'terms' => true,
     ])->assertRedirect(route('verification.notice'));
 
@@ -24,15 +24,15 @@ test('new users can register as sales reps', function () {
 
     expect($user->user_type)->toBe(UserType::SalesRep);
     $this->assertAuthenticated();
-    Notification::assertSentTo($user, VerifyEmail::class);
+    Notification::assertSentTo($user, ZouthVerifyEmailNotification::class);
 });
 
 test('registered user has no current_manufacturer_id', function () {
     $this->post('/register', [
         'name' => 'Rep Test',
         'email' => 'rep2@example.com',
-        'password' => 'password',
-        'password_confirmation' => 'password',
+        'password' => 'Senha1',
+        'password_confirmation' => 'Senha1',
         'terms' => true,
     ]);
 
@@ -44,8 +44,8 @@ test('registered user has no current_manufacturer_id', function () {
 test('registration requires name', function () {
     $this->post('/register', [
         'email' => 'rep@example.com',
-        'password' => 'password',
-        'password_confirmation' => 'password',
+        'password' => 'Senha1',
+        'password_confirmation' => 'Senha1',
         'terms' => true,
     ])->assertSessionHasErrors('name');
 });
@@ -53,8 +53,8 @@ test('registration requires name', function () {
 test('registration requires email', function () {
     $this->post('/register', [
         'name' => 'João Rep',
-        'password' => 'password',
-        'password_confirmation' => 'password',
+        'password' => 'Senha1',
+        'password_confirmation' => 'Senha1',
         'terms' => true,
     ])->assertSessionHasErrors('email');
 });
@@ -65,8 +65,8 @@ test('registration requires unique email', function () {
     $this->post('/register', [
         'name' => 'Another Rep',
         'email' => 'existing@example.com',
-        'password' => 'password',
-        'password_confirmation' => 'password',
+        'password' => 'Senha1',
+        'password_confirmation' => 'Senha1',
         'terms' => true,
     ])->assertSessionHasErrors('email');
 });
@@ -75,7 +75,7 @@ test('registration requires password confirmation', function () {
     $this->post('/register', [
         'name' => 'João Rep',
         'email' => 'rep@example.com',
-        'password' => 'password',
+        'password' => 'Senha1',
         'password_confirmation' => 'different',
         'terms' => true,
     ])->assertSessionHasErrors('password');
@@ -85,8 +85,8 @@ test('registration requires acceptance of legal terms', function () {
     $this->post('/register', [
         'name' => 'João Rep',
         'email' => 'rep@example.com',
-        'password' => 'password',
-        'password_confirmation' => 'password',
+        'password' => 'Senha1',
+        'password_confirmation' => 'Senha1',
         'terms' => false,
     ])->assertSessionHasErrors('terms');
 

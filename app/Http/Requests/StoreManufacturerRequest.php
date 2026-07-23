@@ -7,6 +7,7 @@ use App\Rules\Cnpj;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 
 class StoreManufacturerRequest extends FormRequest
 {
@@ -46,7 +47,7 @@ class StoreManufacturerRequest extends FormRequest
             'complement' => ['nullable', 'string', 'max:100'],
             'owner_name' => ['required', 'string', 'max:255'],
             'owner_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
-            'owner_temporary_password' => ['nullable', 'string', 'min:12', 'max:255'],
+            'owner_temporary_password' => ['nullable', 'string', Password::default(), 'max:255'],
         ];
     }
 

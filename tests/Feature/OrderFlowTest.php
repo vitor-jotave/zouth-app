@@ -739,26 +739,42 @@ it('records status history for each transition', function () {
     expect($history->first()->changed_by_user_id)->toBe($this->owner->id);
 });
 
-it('rejects invalid status transitions', function () {
+it('allows moving directly to any operational status', function () {
     $order = Order::factory()->forManufacturer($this->manufacturer)->status(OrderStatus::New)->create();
 
-    // New → Shipped is not allowed (must go through Confirmed → Preparing first)
-    $response = $this->actingAs($this->owner)
-        ->post("/manufacturer/orders/{$order->id}/status", ['status' => 'shipped']);
-
-    $response->assertSessionHasErrors('status');
+    $this->actingAs($this->owner)
+        ->post("/manufacturer/orders/{$order->id}/status", ['status' => 'shipped'])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
 
     $order->refresh();
-    expect($order->status)->toBe(OrderStatus::New);
+    expect($order->status)->toBe(OrderStatus::Shipped);
 });
 
-it('rejects transitions from terminal states', function () {
+it('allows moving an order backwards after an accidental advance', function () {
     $order = Order::factory()->forManufacturer($this->manufacturer)->status(OrderStatus::Delivered)->create();
 
-    $response = $this->actingAs($this->owner)
-        ->post("/manufacturer/orders/{$order->id}/status", ['status' => 'new']);
+    $this->actingAs($this->owner)
+        ->post("/manufacturer/orders/{$order->id}/status", ['status' => 'preparing'])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
 
-    $response->assertSessionHasErrors('status');
+    expect($order->refresh()->status)->toBe(OrderStatus::Preparing);
+    expect(OrderStatusHistory::query()
+        ->where('order_id', $order->id)
+        ->where('from_status', OrderStatus::Delivered->value)
+        ->where('to_status', OrderStatus::Preparing->value)
+        ->exists())->toBeTrue();
+});
+
+it('keeps cancelled orders terminal because their stock was released', function () {
+    $order = Order::factory()->forManufacturer($this->manufacturer)->status(OrderStatus::Cancelled)->create();
+
+    $this->actingAs($this->owner)
+        ->post("/manufacturer/orders/{$order->id}/status", ['status' => 'new'])
+        ->assertSessionHasErrors('status');
+
+    expect($order->refresh()->status)->toBe(OrderStatus::Cancelled);
 });
 
 it('can cancel an order from any non-terminal state', function (OrderStatus $status) {

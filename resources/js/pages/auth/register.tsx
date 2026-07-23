@@ -1,5 +1,6 @@
 import { Form, Head } from '@inertiajs/react';
 import InputError from '@/components/input-error';
+import PasswordRequirements from '@/components/password-requirements';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -71,7 +72,9 @@ export default function Register() {
                                     autoComplete="new-password"
                                     name="password"
                                     placeholder="Senha"
+                                    aria-describedby="register-password-requirements"
                                 />
+                                <PasswordRequirements id="register-password-requirements" />
                                 <InputError message={errors.password} />
                             </div>
 
