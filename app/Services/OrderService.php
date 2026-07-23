@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
+use App\Models\CatalogSetting;
 use App\Models\Order;
 use App\Models\OrderRule;
 use App\Models\Product;
@@ -52,10 +53,14 @@ class OrderService
     public function createPublicOrder(array $data): Order
     {
         $order = DB::transaction(function () use ($data) {
+            $allowOrdersWithoutStock = (bool) CatalogSetting::query()
+                ->where('manufacturer_id', $data['manufacturer_id'])
+                ->value('allow_orders_without_stock');
             $cart = $this->orderCartBuilder->build(
                 $data['manufacturer_id'],
                 $data['items'],
                 lockForUpdate: true,
+                allowOrdersWithoutStock: $allowOrdersWithoutStock,
             );
             $requestedQuote = (bool) ($data['request_quote'] ?? false);
             $requiresQuote = $cart['requires_quote'];
@@ -136,8 +141,14 @@ class OrderService
                         'product_variant_stock_id' => $selection['product_variant_stock_id'],
                         'selected_variations' => $selection['selected_variations'],
                         'unit_price_cents' => $selection['unit_price_cents'],
+                        'reserved_quantity' => 0,
+                        'combo_component_reservations' => [],
                     ]
-                    : $this->inventoryReservationService->reserve($product, $item);
+                    : $this->inventoryReservationService->reserve(
+                        $product,
+                        $item,
+                        $allowOrdersWithoutStock,
+                    );
 
                 $order->items()->create([
                     'product_id' => $product->id,
@@ -147,12 +158,18 @@ class OrderService
                         ? $reservation['unit_price_cents'] / 100
                         : null,
                     'quantity' => $item['quantity'],
+                    'reserved_quantity' => $requiresQuote
+                        ? null
+                        : $reservation['reserved_quantity'],
                     'size' => $item['size'] ?? null,
                     'color' => $item['color'] ?? null,
                     'product_variant_stock_id' => $reservation['product_variant_stock_id'],
                     'selected_variations' => $reservation['selected_variations'],
                     'combo_components' => $product->isCombo()
-                        ? $this->comboComponentsSnapshot($product)
+                        ? $this->comboComponentsSnapshot(
+                            $product,
+                            $reservation['combo_component_reservations'],
+                        )
                         : null,
                 ]);
             }
@@ -177,17 +194,21 @@ class OrderService
     }
 
     /**
-     * @return array<int, array{product_id: int, product_name: string|null, product_sku: string|null, variation_key: array<string, string>|null, quantity: int}>
+     * @param  array<int, int>  $componentReservations
+     * @return array<int, array{product_id: int, product_name: string|null, product_sku: string|null, variation_key: array<string, string>|null, quantity: int, reserved_quantity: int|null}>
      */
-    private function comboComponentsSnapshot(Product $combo): array
-    {
-        return $combo->comboItems->map(fn ($item) => [
+    private function comboComponentsSnapshot(
+        Product $combo,
+        array $componentReservations,
+    ): array {
+        return $combo->comboItems->map(fn ($item): array => [
             'product_id' => $item->component_product_id,
             'product_name' => $item->componentProduct?->name,
             'product_sku' => $item->componentProduct?->sku,
             'variation_key' => $item->variation_key,
             'product_variant_stock_id' => $item->component_variant_stock_id,
             'quantity' => $item->quantity,
+            'reserved_quantity' => $componentReservations[$item->id] ?? null,
         ])->values()->all();
     }
 

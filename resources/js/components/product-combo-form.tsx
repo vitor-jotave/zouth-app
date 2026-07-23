@@ -37,6 +37,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import manufacturer from '@/routes/manufacturer';
 
 export const PRODUCT_COMBO_EDITOR_FORM_ID = 'product-combo-editor-form';
@@ -247,6 +248,8 @@ export function ProductComboForm({
     );
     const errorCount = Object.keys(formErrors).length;
 
+    useUnsavedChangesGuard(isDirty);
+
     useEffect(() => {
         const section = firstSectionWithErrors(formErrors);
 
@@ -262,22 +265,6 @@ export function ProductComboForm({
             });
         });
     }, [formErrors]);
-
-    useEffect(() => {
-        const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-            if (!isDirty) {
-                return;
-            }
-
-            event.preventDefault();
-            event.returnValue = '';
-        };
-
-        window.addEventListener('beforeunload', handleBeforeUnload);
-
-        return () =>
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, [isDirty]);
 
     useEffect(() => {
         const observer = new IntersectionObserver(

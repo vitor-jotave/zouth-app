@@ -13,8 +13,12 @@ class OrderCartBuilder
      * @param  array<int, array{product_id: int, quantity: int, selected_variations?: array<string, string>|null}>  $items
      * @return array{items: array<int, array{product_id: int, product_category_id: int|null, quantity: int, unit_price_cents: int|null}>, resolved_items: array<int, array{product_variant_stock_id: int|null, selected_variations: array<string, string>|null, unit_price_cents: int|null, requires_quote: bool}>, products: Collection<int, Product>, requires_quote: bool}
      */
-    public function build(int $manufacturerId, array $items, bool $lockForUpdate = false): array
-    {
+    public function build(
+        int $manufacturerId,
+        array $items,
+        bool $lockForUpdate = false,
+        bool $allowOrdersWithoutStock = false,
+    ): array {
         $productIds = collect($items)->pluck('product_id')->unique()->values();
         $query = Product::query()
             ->whereIn('id', $productIds)
@@ -38,14 +42,19 @@ class OrderCartBuilder
             ]);
         }
 
-        $resolvedItems = collect($items)->map(function (array $item) use ($products): array {
+        $resolvedItems = collect($items)->map(function (array $item) use ($products, $allowOrdersWithoutStock): array {
             /** @var Product $product */
             $product = $products->get($item['product_id']);
             $resolved = $this->resolveSelection($product, $item);
             $quantity = (int) $item['quantity'];
-            $requiresQuote = $quantity > $resolved['available_quantity'];
+            $requiresQuote = ! $allowOrdersWithoutStock
+                && $quantity > $resolved['available_quantity'];
 
-            if ($requiresQuote && ! $product->allow_quote_when_out_of_stock) {
+            if (
+                ! $allowOrdersWithoutStock
+                && $requiresQuote
+                && ! $product->allow_quote_when_out_of_stock
+            ) {
                 throw ValidationException::withMessages([
                     'items' => "Estoque insuficiente para {$product->name}. Disponível para este pedido: {$resolved['available_quantity']}.",
                 ]);

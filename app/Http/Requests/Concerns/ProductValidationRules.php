@@ -3,6 +3,8 @@
 namespace App\Http\Requests\Concerns;
 
 use App\Models\VariationType;
+use App\Rules\SupportedProductVideoUrl;
+use App\Support\ProductVideo;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\File;
@@ -28,6 +30,7 @@ trait ProductValidationRules
             'variations' => $this->input('variations', []),
             'variant_stocks' => $stocks,
             'price' => $this->normalizePrice($this->input('price')),
+            'video_url' => $this->normalizeVideoUrl($this->input('video_url')),
         ]);
     }
 
@@ -38,6 +41,17 @@ trait ProductValidationRules
         }
 
         return str_replace(',', '.', (string) $value);
+    }
+
+    private function normalizeVideoUrl(mixed $value): ?string
+    {
+        $url = trim((string) $value);
+
+        if ($url === '') {
+            return null;
+        }
+
+        return ProductVideo::fromUrl($url)?->url ?? $url;
     }
 
     protected function productRules(?int $manufacturerId, ?int $excludeProductId = null): array
@@ -53,6 +67,7 @@ trait ProductValidationRules
             'name' => ['required', 'string', 'max:255'],
             'sku' => ['required', 'string', 'max:255', $skuRule],
             'description' => ['nullable', 'string'],
+            'video_url' => ['nullable', 'string', 'max:2048', new SupportedProductVideoUrl],
             'product_category_id' => [
                 'nullable',
                 'integer',
@@ -105,6 +120,7 @@ trait ProductValidationRules
             'price.numeric' => 'O preco deve ser um numero valido.',
             'price.min' => 'O preco nao pode ser negativo.',
             'price.max' => 'O preco maximo e R$ 999.999,99.',
+            'video_url.max' => 'O link do vídeo pode ter no máximo 2.048 caracteres.',
         ];
     }
 

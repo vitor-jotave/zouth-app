@@ -191,6 +191,131 @@ it('rejects an order when the requested stock is unavailable', function () {
         ->and($this->product1->fresh()->base_quantity)->toBe(1);
 });
 
+it('accepts quantities beyond stock and reserves only the available units when enabled globally', function () {
+    $this->catalogSetting->update(['allow_orders_without_stock' => true]);
+    $this->product1->update(['base_quantity' => 3]);
+
+    $this->post(
+        "/catalog/{$this->catalogSetting->public_token}/orders",
+        ($this->validCustomerData)([
+            'items' => [['product_id' => $this->product1->id, 'quantity' => 7]],
+        ]),
+    )->assertRedirect();
+
+    $order = Order::query()->with('items')->firstOrFail();
+    $item = $order->items->sole();
+
+    expect($order->order_type)->toBe(OrderType::Standard)
+        ->and($order->inventory_reserved_at)->not->toBeNull()
+        ->and($item->quantity)->toBe(7)
+        ->and($item->reserved_quantity)->toBe(3)
+        ->and($this->product1->fresh()->base_quantity)->toBe(0);
+
+    $this->actingAs($this->owner)
+        ->post("/manufacturer/orders/{$order->id}/status", ['status' => 'cancelled'])
+        ->assertRedirect();
+
+    expect($this->product1->fresh()->base_quantity)->toBe(3);
+});
+
+it('keeps zero stock at zero when a global order is created without available units', function () {
+    $this->catalogSetting->update(['allow_orders_without_stock' => true]);
+    $this->product1->update(['base_quantity' => 0]);
+
+    $this->post(
+        "/catalog/{$this->catalogSetting->public_token}/orders",
+        ($this->validCustomerData)([
+            'items' => [['product_id' => $this->product1->id, 'quantity' => 5]],
+        ]),
+    )->assertRedirect();
+
+    $order = Order::query()->with('items')->firstOrFail();
+
+    expect($order->order_type)->toBe(OrderType::Standard)
+        ->and($order->items->sole()->reserved_quantity)->toBe(0)
+        ->and($this->product1->fresh()->base_quantity)->toBe(0);
+});
+
+it('partially reserves selected variation stock without turning the order into a quote', function () {
+    $this->catalogSetting->update(['allow_orders_without_stock' => true]);
+    $variationType = VariationType::factory()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'name' => 'Estampa',
+    ]);
+    ProductVariation::create([
+        'product_id' => $this->product1->id,
+        'variation_type_id' => $variationType->id,
+    ]);
+    $this->product1->update([
+        'base_quantity' => 0,
+        'allow_quote_when_out_of_stock' => false,
+    ]);
+    $variantStock = ProductVariantStock::factory()->create([
+        'product_id' => $this->product1->id,
+        'variation_key' => ['Estampa' => 'Bolinhas'],
+        'quantity' => 2,
+    ]);
+
+    $this->post(
+        "/catalog/{$this->catalogSetting->public_token}/orders",
+        ($this->validCustomerData)([
+            'items' => [[
+                'product_id' => $this->product1->id,
+                'quantity' => 6,
+                'selected_variations' => ['Estampa' => 'Bolinhas'],
+            ]],
+        ]),
+    )->assertRedirect();
+
+    $order = Order::query()->with('items')->firstOrFail();
+
+    expect($order->order_type)->toBe(OrderType::Standard)
+        ->and($order->items->sole()->reserved_quantity)->toBe(2)
+        ->and($variantStock->fresh()->quantity)->toBe(0);
+});
+
+it('records and restores only the combo component stock actually reserved', function () {
+    $this->catalogSetting->update(['allow_orders_without_stock' => true]);
+    $component = Product::factory()->forManufacturer($this->manufacturer)->create([
+        'name' => 'Body do combo',
+        'base_quantity' => 3,
+        'is_active' => true,
+    ]);
+    $combo = Product::factory()->forManufacturer($this->manufacturer)->create([
+        'name' => 'Combo sob demanda',
+        'product_type' => 'combo',
+        'base_quantity' => 0,
+        'is_active' => true,
+    ]);
+    $comboItem = $combo->comboItems()->create([
+        'component_product_id' => $component->id,
+        'quantity' => 2,
+    ]);
+
+    $this->post(
+        "/catalog/{$this->catalogSetting->public_token}/orders",
+        ($this->validCustomerData)([
+            'items' => [['product_id' => $combo->id, 'quantity' => 4]],
+        ]),
+    )->assertRedirect();
+
+    $order = Order::query()->with('items')->firstOrFail();
+    $orderItem = $order->items->sole();
+
+    expect($order->order_type)->toBe(OrderType::Standard)
+        ->and($component->fresh()->base_quantity)->toBe(0)
+        ->and($orderItem->reserved_quantity)->toBe(0)
+        ->and($orderItem->combo_components[0]['reserved_quantity'])->toBe(3)
+        ->and($orderItem->combo_components[0]['quantity'])->toBe(2)
+        ->and($comboItem->quantity)->toBe(2);
+
+    $this->actingAs($this->owner)
+        ->post("/manufacturer/orders/{$order->id}/status", ['status' => 'cancelled'])
+        ->assertRedirect();
+
+    expect($component->fresh()->base_quantity)->toBe(3);
+});
+
 it('creates a quote request without document address customer or stock reservation', function () {
     $this->product1->update([
         'base_quantity' => 0,

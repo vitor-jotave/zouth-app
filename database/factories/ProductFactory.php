@@ -27,6 +27,7 @@ class ProductFactory extends Factory
             'name' => fake()->words(3, true),
             'sku' => 'SKU-'.strtoupper(fake()->unique()->uuid()),
             'description' => fake()->sentence(),
+            'video_url' => null,
             'base_quantity' => 20,
             'is_active' => true,
             'allow_quote_when_out_of_stock' => false,

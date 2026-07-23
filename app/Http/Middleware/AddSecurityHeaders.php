@@ -39,7 +39,10 @@ class AddSecurityHeaders
                 ."img-src {$imageSources}; "
                 ."font-src 'self' data:; "
                 ."connect-src 'self' https://api.stripe.com; "
-                .'frame-src https://js.stripe.com https://hooks.stripe.com; '
+                .'media-src \'self\' https: blob:; '
+                .'frame-src https://js.stripe.com https://hooks.stripe.com '
+                .'https://www.youtube-nocookie.com https://player.vimeo.com '
+                .'https://www.dailymotion.com https://www.loom.com; '
                 ."object-src 'none'; "
                 ."base-uri 'self'"
             );

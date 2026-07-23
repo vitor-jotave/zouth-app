@@ -386,6 +386,7 @@ it('creates a public order with combo price and composition snapshot', function 
             'variation_key' => null,
             'product_variant_stock_id' => null,
             'quantity' => 3,
+            'reserved_quantity' => 6,
         ],
     ]);
     expect($component->fresh()->base_quantity)->toBe(3);

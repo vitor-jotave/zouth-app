@@ -212,7 +212,7 @@ class ProductController extends Controller
         $this->upsertService->updateProduct($product, $payload);
 
         return redirect()
-            ->back()
+            ->route('manufacturer.products.index')
             ->with('success', 'Produto atualizado com sucesso.');
     }
 

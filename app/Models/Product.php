@@ -25,6 +25,7 @@ class Product extends Model
         'name',
         'sku',
         'description',
+        'video_url',
         'base_quantity',
         'is_active',
         'allow_quote_when_out_of_stock',
