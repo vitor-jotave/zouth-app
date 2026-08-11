@@ -1,4 +1,4 @@
-import { ArrowRight, Box, Eye, Package } from 'lucide-react';
+import { ArrowRight, Box, Eye, Minus, Package, Plus } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { CatalogHero } from '@/components/catalog-hero';
 import {
@@ -460,6 +460,11 @@ export default function CatalogPreview({
                         'show_action',
                         true,
                     );
+                    const showQuantitySelector = sectionValue(
+                        section,
+                        'show_quantity_selector',
+                        true,
+                    );
                     const showBadges = sectionValue(
                         section,
                         'show_badges',
@@ -599,10 +604,38 @@ export default function CatalogPreview({
                                                             {
                                                                 product.total_stock
                                                             }{' '}
-                                                            disponível(is)
+                                                            {product.total_stock ===
+                                                            1
+                                                                ? 'disponível'
+                                                                : 'disponíveis'}
                                                         </span>
                                                     )}
                                                 </div>
+                                                {showAction &&
+                                                    showQuantitySelector && (
+                                                        <div className="mt-3 flex items-center justify-between gap-2 border-y border-black/10 py-1.5">
+                                                            <span className="text-[8px] font-semibold tracking-[0.12em] uppercase opacity-50">
+                                                                Quantidade
+                                                            </span>
+                                                            <div className="flex h-6 items-center border border-black/15 bg-white/50">
+                                                                <span className="flex size-6 items-center justify-center">
+                                                                    <Minus
+                                                                        className="size-2.5"
+                                                                        aria-hidden="true"
+                                                                    />
+                                                                </span>
+                                                                <span className="w-6 text-center text-[9px] font-semibold tabular-nums">
+                                                                    1
+                                                                </span>
+                                                                <span className="flex size-6 items-center justify-center">
+                                                                    <Plus
+                                                                        className="size-2.5"
+                                                                        aria-hidden="true"
+                                                                    />
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 {showAction && (
                                                     <p
                                                         className="mt-3 flex items-center justify-between border-b pb-1.5 text-[9px] font-semibold"

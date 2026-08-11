@@ -101,6 +101,16 @@ it('uses the same explicit campaign image rule in the studio preview and public 
         ->not->toContain('usamos a primeira');
 });
 
+it('uses the same stock visibility default in the preview and public catalog', function () {
+    $preview = file_get_contents(resource_path('js/components/catalog-preview.tsx'));
+    $catalog = file_get_contents(resource_path('js/pages/public/catalog.tsx'));
+
+    expect($preview)
+        ->toContain("sectionValue(section, 'show_stock', true)")
+        ->and($catalog)
+        ->toContain('booleanSetting(productGridSection?.props?.show_stock, true)');
+});
+
 it('uses the same campaign image resizing in the studio preview and public catalog', function () {
     $theming = file_get_contents(resource_path('js/lib/catalog-theming.ts'));
     $hero = file_get_contents(resource_path('js/components/catalog-hero.tsx'));
@@ -505,6 +515,7 @@ it('allows saving sections configuration', function () {
                 'show_sku' => true,
                 'show_stock' => false,
                 'show_variations' => true,
+                'show_quantity_selector' => false,
                 'show_action' => true,
                 'show_badges' => false,
                 'sort' => 'manual',
@@ -556,6 +567,13 @@ it('allows saving sections configuration', function () {
         'presentation' => 'editorial',
         'columns_desktop' => 4,
         'show_price' => false,
+        'show_quantity_selector' => false,
         'sort' => 'manual',
     ]);
+});
+
+it('shows the quantity selector on product cards by default', function () {
+    $productGrid = collect(CatalogSetting::defaultSections())->firstWhere('type', 'product_grid');
+
+    expect($productGrid['props']['show_quantity_selector'])->toBeTrue();
 });

@@ -158,7 +158,7 @@ export default function Dashboard({
                     }
                     title={
                         <>
-                            Bem vindo, {company.name}
+                            Bem-vindo, {company.name}
                             <span className="text-[#ff4d3d]">.</span>
                         </>
                     }

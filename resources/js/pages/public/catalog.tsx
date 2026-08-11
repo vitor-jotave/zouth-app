@@ -163,6 +163,7 @@ interface Product {
     }>;
     combo_items: Array<{
         product_id: number;
+        product_category_id: number | null;
         product_name: string | null;
         product_sku: string | null;
         variation_key: Record<string, string> | null;
@@ -192,6 +193,7 @@ interface ProductDisplayOptions {
     showSku: boolean;
     showStock: boolean;
     showVariations: boolean;
+    showQuantitySelector: boolean;
     showAction: boolean;
     showBadges: boolean;
 }
@@ -284,8 +286,10 @@ interface LayoutProps {
     products: Paginated<Product>;
     combos: Product[];
     tokens: typeof LAYOUT_TOKENS.minimal;
-    onAddToCart: (product: Product) => void;
+    onAddToCart: (product: Product, quantity?: number) => void;
     onOpenQuickView: (product: Product) => void;
+    requestedQuantities: Record<number, number>;
+    onQuantityChange: (product: Product, quantity: number) => void;
     addedProductId: number | null;
     selectedVariations: SelectedVariations;
     catalogToken: string;
@@ -380,6 +384,32 @@ function blockingRuleRemaining(
 
 function booleanSetting(value: unknown, fallback: boolean): boolean {
     return typeof value === 'boolean' ? value : fallback;
+}
+
+function maximumSelectableQuantity(
+    product: Product,
+    selectedValues: Record<string, string>,
+    allowOrdersWithoutStock: boolean,
+): number {
+    const availableStock = availableStockForSelection(product, selectedValues);
+
+    if (
+        availableStock === null ||
+        allowOrdersWithoutStock ||
+        product.allow_quote_when_out_of_stock
+    ) {
+        return 9999;
+    }
+
+    return Math.max(1, availableStock);
+}
+
+function normalizeRequestedQuantity(quantity: number, maximum: number): number {
+    if (!Number.isFinite(quantity)) {
+        return 1;
+    }
+
+    return Math.max(1, Math.min(Math.trunc(quantity), maximum));
 }
 
 function variationSummary(key: Record<string, string> | null): string | null {
@@ -487,6 +517,88 @@ function cartItemKey(
         .join('|');
 
     return `${productId}:${variationKey}`;
+}
+
+function ProductQuantitySelector({
+    productName,
+    quantity,
+    maximum,
+    disabled = false,
+    compact = false,
+    onChange,
+}: {
+    productName: string;
+    quantity: number;
+    maximum: number;
+    disabled?: boolean;
+    compact?: boolean;
+    onChange: (quantity: number) => void;
+}) {
+    const normalizedQuantity = normalizeRequestedQuantity(quantity, maximum);
+    const controlSize = compact ? 'size-8' : 'size-10';
+
+    return (
+        <div
+            className={cn(
+                'inline-flex items-center border border-black/15 bg-white/65',
+                disabled && 'opacity-45',
+            )}
+            role="group"
+            aria-label={`Quantidade de ${productName}`}
+        >
+            <button
+                type="button"
+                disabled={disabled || normalizedQuantity <= 1}
+                onClick={() => onChange(normalizedQuantity - 1)}
+                className={cn(
+                    'inline-flex items-center justify-center transition-colors hover:bg-black/5 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--brand-primary)] disabled:cursor-not-allowed disabled:opacity-25',
+                    controlSize,
+                )}
+                aria-label={`Diminuir quantidade de ${productName}`}
+            >
+                <Minus
+                    className={compact ? 'size-3' : 'size-4'}
+                    aria-hidden="true"
+                />
+            </button>
+            <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={maximum}
+                value={normalizedQuantity}
+                disabled={disabled}
+                onChange={(event) =>
+                    onChange(
+                        normalizeRequestedQuantity(
+                            Number(event.target.value),
+                            maximum,
+                        ),
+                    )
+                }
+                className={cn(
+                    '[appearance:textfield] border-x border-black/10 bg-transparent text-center font-semibold tabular-nums outline-none focus-visible:bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
+                    compact ? 'h-8 w-9 text-xs' : 'h-10 w-12 text-sm',
+                )}
+                aria-label={`Quantidade de ${productName}`}
+            />
+            <button
+                type="button"
+                disabled={disabled || normalizedQuantity >= maximum}
+                onClick={() => onChange(normalizedQuantity + 1)}
+                className={cn(
+                    'inline-flex items-center justify-center transition-colors hover:bg-black/5 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--brand-primary)] disabled:cursor-not-allowed disabled:opacity-25',
+                    controlSize,
+                )}
+                aria-label={`Aumentar quantidade de ${productName}`}
+            >
+                <Plus
+                    className={compact ? 'size-3' : 'size-4'}
+                    aria-hidden="true"
+                />
+            </button>
+        </div>
+    );
 }
 
 function ProductVariations({
@@ -893,8 +1005,10 @@ function ProductQuickViewModal({
     accentColor,
     showPrice,
     allowOrdersWithoutStock,
+    quantity,
     onClose,
     onSelectVariation,
+    onQuantityChange,
     onAddToCart,
     headingFont,
     bodyFont,
@@ -906,9 +1020,11 @@ function ProductQuickViewModal({
     accentColor: string;
     showPrice: boolean;
     allowOrdersWithoutStock: boolean;
+    quantity: number;
     onClose: () => void;
     onSelectVariation: (variationName: string, value: string) => void;
-    onAddToCart: (product: Product) => void;
+    onQuantityChange: (quantity: number) => void;
+    onAddToCart: (product: Product, quantity?: number) => void;
     headingFont?: string;
     bodyFont?: string;
 }) {
@@ -922,6 +1038,15 @@ function ProductQuickViewModal({
         (availableStock > 0 ||
             allowOrdersWithoutStock ||
             product.allow_quote_when_out_of_stock);
+    const maximumQuantity = maximumSelectableQuantity(
+        product,
+        selectedValues,
+        allowOrdersWithoutStock,
+    );
+    const selectedQuantity = normalizeRequestedQuantity(
+        quantity,
+        maximumQuantity,
+    );
 
     return (
         <Dialog
@@ -1005,21 +1130,37 @@ function ProductQuickViewModal({
                         )}
 
                         <div className="mt-auto grid gap-3 border-t pt-5">
-                            <p className="text-xs text-gray-500">
-                                {availableStock === null
-                                    ? `${product.total_stock} unidade(s) disponíveis`
-                                    : availableStock > 0
-                                      ? `${availableStock} unidade(s) nesta opção`
-                                      : allowOrdersWithoutStock
-                                        ? 'Disponível para pedido sob demanda'
-                                        : product.allow_quote_when_out_of_stock
-                                          ? 'Sem estoque imediato · disponível para orçamento'
-                                          : 'Opção sem estoque disponível'}
-                            </p>
+                            <div className="flex flex-wrap items-end justify-between gap-3">
+                                <div className="space-y-1">
+                                    <p className="text-[0.65rem] font-semibold tracking-[0.14em] text-gray-500 uppercase">
+                                        Quantidade
+                                    </p>
+                                    <ProductQuantitySelector
+                                        productName={product.name}
+                                        quantity={selectedQuantity}
+                                        maximum={maximumQuantity}
+                                        disabled={!canAdd}
+                                        onChange={onQuantityChange}
+                                    />
+                                </div>
+                                <p className="max-w-56 text-right text-xs text-gray-500">
+                                    {availableStock === null
+                                        ? `${product.total_stock} ${product.total_stock === 1 ? 'unidade disponível' : 'unidades disponíveis'}`
+                                        : availableStock > 0
+                                          ? `${availableStock} ${availableStock === 1 ? 'unidade nesta opção' : 'unidades nesta opção'}`
+                                          : allowOrdersWithoutStock
+                                            ? 'Disponível para pedido sob demanda'
+                                            : product.allow_quote_when_out_of_stock
+                                              ? 'Sem estoque imediato · disponível para orçamento'
+                                              : 'Opção sem estoque disponível'}
+                                </p>
+                            </div>
                             <Button
                                 type="button"
                                 disabled={!canAdd}
-                                onClick={() => onAddToCart(product)}
+                                onClick={() =>
+                                    onAddToCart(product, selectedQuantity)
+                                }
                                 className="h-11 w-full gap-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                                 style={{
                                     backgroundColor: isAdded
@@ -1729,15 +1870,19 @@ function ComboGridSection({
     onAddToCart,
     onOpenQuickView,
     addedProductId,
+    requestedQuantities = {},
+    onQuantityChange,
     displayOptions,
     headingFont,
 }: {
     combos: Product[];
     settings: CatalogSettings;
     variant: 'minimal' | 'playful' | 'boutique';
-    onAddToCart: (product: Product) => void;
+    onAddToCart: (product: Product, quantity?: number) => void;
     onOpenQuickView: (product: Product) => void;
     addedProductId: number | null;
+    requestedQuantities?: Record<number, number>;
+    onQuantityChange?: (product: Product, quantity: number) => void;
     displayOptions?: ProductDisplayOptions;
     headingFont?: string;
 }) {
@@ -1751,6 +1896,7 @@ function ComboGridSection({
         showSku: true,
         showStock: true,
         showVariations: true,
+        showQuantitySelector: true,
         showAction: true,
         showBadges: true,
     };
@@ -1788,6 +1934,19 @@ function ComboGridSection({
                     {combos.map((combo) => {
                         const isAdded = addedProductId === combo.id;
                         const availableStock = combo.total_stock;
+                        const canAdd =
+                            availableStock > 0 ||
+                            settings.allow_orders_without_stock ||
+                            combo.allow_quote_when_out_of_stock;
+                        const maximumQuantity = maximumSelectableQuantity(
+                            combo,
+                            {},
+                            settings.allow_orders_without_stock,
+                        );
+                        const quantity = normalizeRequestedQuantity(
+                            requestedQuantities[combo.id] ?? 1,
+                            maximumQuantity,
+                        );
 
                         return (
                             <article key={combo.id} className="group min-w-0">
@@ -1841,15 +2000,32 @@ function ComboGridSection({
 
                                     {options.showAction && (
                                         <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-black/10 pt-3 text-xs font-semibold">
+                                            {options.showQuantitySelector &&
+                                                onQuantityChange && (
+                                                    <ProductQuantitySelector
+                                                        productName={combo.name}
+                                                        quantity={quantity}
+                                                        maximum={
+                                                            maximumQuantity
+                                                        }
+                                                        disabled={!canAdd}
+                                                        compact
+                                                        onChange={(
+                                                            nextQuantity,
+                                                        ) =>
+                                                            onQuantityChange(
+                                                                combo,
+                                                                nextQuantity,
+                                                            )
+                                                        }
+                                                    />
+                                                )}
                                             <button
                                                 type="button"
                                                 onClick={() =>
-                                                    onAddToCart(combo)
+                                                    onAddToCart(combo, quantity)
                                                 }
-                                                disabled={
-                                                    availableStock === 0 &&
-                                                    !settings.allow_orders_without_stock
-                                                }
+                                                disabled={!canAdd}
                                                 aria-live="polite"
                                                 className="inline-flex items-center gap-1.5 transition-opacity hover:opacity-60 disabled:cursor-not-allowed disabled:opacity-35"
                                                 style={{
@@ -1865,6 +2041,9 @@ function ComboGridSection({
                                                     }
                                                     acceptsOrderWithoutStock={
                                                         settings.allow_orders_without_stock
+                                                    }
+                                                    acceptsQuote={
+                                                        combo.allow_quote_when_out_of_stock
                                                     }
                                                 />
                                             </button>
@@ -1950,6 +2129,19 @@ function ComboGridSection({
                     {combos.map((combo) => {
                         const isAdded = addedProductId === combo.id;
                         const availableStock = combo.total_stock;
+                        const canAdd =
+                            availableStock > 0 ||
+                            settings.allow_orders_without_stock ||
+                            combo.allow_quote_when_out_of_stock;
+                        const maximumQuantity = maximumSelectableQuantity(
+                            combo,
+                            {},
+                            settings.allow_orders_without_stock,
+                        );
+                        const quantity = normalizeRequestedQuantity(
+                            requestedQuantities[combo.id] ?? 1,
+                            maximumQuantity,
+                        );
 
                         return (
                             <article
@@ -2018,7 +2210,9 @@ function ComboGridSection({
                                             {options.showStock && (
                                                 <span>
                                                     {combo.total_stock}{' '}
-                                                    disponível(is)
+                                                    {combo.total_stock === 1
+                                                        ? 'disponível'
+                                                        : 'disponíveis'}
                                                 </span>
                                             )}
                                         </div>
@@ -2026,15 +2220,32 @@ function ComboGridSection({
 
                                     {options.showAction && (
                                         <div className="flex flex-wrap gap-2">
+                                            {options.showQuantitySelector &&
+                                                onQuantityChange && (
+                                                    <ProductQuantitySelector
+                                                        productName={combo.name}
+                                                        quantity={quantity}
+                                                        maximum={
+                                                            maximumQuantity
+                                                        }
+                                                        disabled={!canAdd}
+                                                        compact
+                                                        onChange={(
+                                                            nextQuantity,
+                                                        ) =>
+                                                            onQuantityChange(
+                                                                combo,
+                                                                nextQuantity,
+                                                            )
+                                                        }
+                                                    />
+                                                )}
                                             <button
                                                 type="button"
                                                 onClick={() =>
-                                                    onAddToCart(combo)
+                                                    onAddToCart(combo, quantity)
                                                 }
-                                                disabled={
-                                                    availableStock === 0 &&
-                                                    !settings.allow_orders_without_stock
-                                                }
+                                                disabled={!canAdd}
                                                 aria-live="polite"
                                                 className="inline-flex min-w-28 items-center justify-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                                                 style={{
@@ -2050,6 +2261,9 @@ function ComboGridSection({
                                                     }
                                                     acceptsOrderWithoutStock={
                                                         settings.allow_orders_without_stock
+                                                    }
+                                                    acceptsQuote={
+                                                        combo.allow_quote_when_out_of_stock
                                                     }
                                                 />
                                             </button>
@@ -2121,11 +2335,13 @@ function MinimalLayout({
     onAddToCart,
     onOpenQuickView,
     addedProductId,
+    requestedQuantities,
     selectedVariations,
     catalogToken,
     filters,
     filterOptions,
     onSelectVariation,
+    onQuantityChange,
 }: LayoutProps) {
     const heroSection = settings.sections?.find((s) => s.type === 'hero');
     const collectionsSection = settings.sections?.find(
@@ -2184,9 +2400,13 @@ function MinimalLayout({
             !settings.hide_prices &&
             booleanSetting(productGridSection?.props?.show_price, true),
         showSku: booleanSetting(productGridSection?.props?.show_sku, true),
-        showStock: booleanSetting(productGridSection?.props?.show_stock, false),
+        showStock: booleanSetting(productGridSection?.props?.show_stock, true),
         showVariations: booleanSetting(
             productGridSection?.props?.show_variations,
+            true,
+        ),
+        showQuantitySelector: booleanSetting(
+            productGridSection?.props?.show_quantity_selector,
             true,
         ),
         showAction: booleanSetting(
@@ -2305,6 +2525,8 @@ function MinimalLayout({
                         onAddToCart={onAddToCart}
                         onOpenQuickView={onOpenQuickView}
                         addedProductId={addedProductId}
+                        requestedQuantities={requestedQuantities}
+                        onQuantityChange={onQuantityChange}
                         displayOptions={comboDisplayOptions}
                         headingFont={headingFont}
                     />
@@ -2355,6 +2577,16 @@ function MinimalLayout({
                                     productPresentation === 'editorial' &&
                                     product.variations.length > 0 &&
                                     !canAdd;
+                                const maximumQuantity =
+                                    maximumSelectableQuantity(
+                                        product,
+                                        selectedValues,
+                                        settings.allow_orders_without_stock,
+                                    );
+                                const quantity = normalizeRequestedQuantity(
+                                    requestedQuantities[product.id] ?? 1,
+                                    maximumQuantity,
+                                );
 
                                 return (
                                     <article
@@ -2487,6 +2719,34 @@ function MinimalLayout({
                                                     }
                                                 />
                                             )}
+                                            {productDisplayOptions.showAction &&
+                                                productDisplayOptions.showQuantitySelector &&
+                                                !openOptionsInsteadOfAdding && (
+                                                    <div className="flex flex-col items-start gap-2 border-y border-black/10 py-2 sm:flex-row sm:items-center sm:justify-between">
+                                                        <span className="text-[0.65rem] font-semibold tracking-[0.12em] uppercase opacity-45">
+                                                            Quantidade
+                                                        </span>
+                                                        <ProductQuantitySelector
+                                                            productName={
+                                                                product.name
+                                                            }
+                                                            quantity={quantity}
+                                                            maximum={
+                                                                maximumQuantity
+                                                            }
+                                                            disabled={!canAdd}
+                                                            compact
+                                                            onChange={(
+                                                                nextQuantity,
+                                                            ) =>
+                                                                onQuantityChange(
+                                                                    product,
+                                                                    nextQuantity,
+                                                                )
+                                                            }
+                                                        />
+                                                    </div>
+                                                )}
                                             {(productDisplayOptions.showStock ||
                                                 productDisplayOptions.showAction ||
                                                 (productDisplayOptions.showBadges &&
@@ -2538,6 +2798,7 @@ function MinimalLayout({
                                                                         : canAdd &&
                                                                           onAddToCart(
                                                                               product,
+                                                                              quantity,
                                                                           )
                                                                 }
                                                                 disabled={
@@ -2578,6 +2839,7 @@ function MinimalLayout({
                                                                     canAdd &&
                                                                     onAddToCart(
                                                                         product,
+                                                                        quantity,
                                                                     )
                                                                 }
                                                                 disabled={
@@ -3274,6 +3536,9 @@ export default function PublicCatalog({
     const [addedProductId, setAddedProductId] = useState<number | null>(null);
     const [selectedVariations, setSelectedVariations] =
         useState<SelectedVariations>({});
+    const [requestedQuantities, setRequestedQuantities] = useState<
+        Record<number, number>
+    >({});
     const [checkoutOpen, setCheckoutOpen] = useState(false);
     const [orderSuccess, setOrderSuccess] = useState<{
         token: string;
@@ -3364,6 +3629,11 @@ export default function PublicCatalog({
             product_category_id: item.product.category_id ?? null,
             quantity: item.quantity,
             unit_price_cents: item.unit_price_cents ?? null,
+            components: item.product.combo_items.map((component) => ({
+                product_id: component.product_id,
+                product_category_id: component.product_category_id,
+                quantity_per_unit: component.quantity,
+            })),
         })),
     );
     const pendingBenefit = orderRuleEvaluation.evaluations
@@ -3423,12 +3693,33 @@ export default function PublicCatalog({
                     [variationName]: value,
                 },
             }));
+            setRequestedQuantities((current) => ({
+                ...current,
+                [productId]: 1,
+            }));
         },
         [],
     );
 
+    const changeRequestedQuantity = useCallback(
+        (product: Product, quantity: number) => {
+            const selectedValues = selectedVariations[product.id] ?? {};
+            const maximum = maximumSelectableQuantity(
+                product,
+                selectedValues,
+                catalog_settings.allow_orders_without_stock,
+            );
+
+            setRequestedQuantities((current) => ({
+                ...current,
+                [product.id]: normalizeRequestedQuantity(quantity, maximum),
+            }));
+        },
+        [catalog_settings.allow_orders_without_stock, selectedVariations],
+    );
+
     const addToCart = useCallback(
-        (product: Product) => {
+        (product: Product, requestedQuantity = 1) => {
             const selectedValues = selectedVariations[product.id] ?? {};
 
             if (!productHasRequiredSelection(product, selectedValues)) {
@@ -3451,7 +3742,21 @@ export default function PublicCatalog({
                 return;
             }
 
+            const maximumQuantity = maximumSelectableQuantity(
+                product,
+                selectedValues,
+                catalog_settings.allow_orders_without_stock,
+            );
+            const quantityToAdd = normalizeRequestedQuantity(
+                requestedQuantity,
+                maximumQuantity,
+            );
+
             setAddedProductId(product.id);
+            setRequestedQuantities((current) => ({
+                ...current,
+                [product.id]: 1,
+            }));
 
             setCart((prev) => {
                 const existing = prev.find((item) => item.key === key);
@@ -3464,9 +3769,12 @@ export default function PublicCatalog({
                                   quantity:
                                       catalog_settings.allow_orders_without_stock ||
                                       product.allow_quote_when_out_of_stock
-                                          ? Math.min(item.quantity + 1, 9999)
+                                          ? Math.min(
+                                                item.quantity + quantityToAdd,
+                                                9999,
+                                            )
                                           : Math.min(
-                                                item.quantity + 1,
+                                                item.quantity + quantityToAdd,
                                                 availableStock,
                                             ),
                               }
@@ -3479,7 +3787,7 @@ export default function PublicCatalog({
                     {
                         key,
                         product,
-                        quantity: 1,
+                        quantity: quantityToAdd,
                         unit_price_cents: priceForSelection(
                             product,
                             selectedValues,
@@ -3693,11 +4001,13 @@ export default function PublicCatalog({
                         onAddToCart={addToCart}
                         onOpenQuickView={setQuickViewProduct}
                         addedProductId={addedProductId}
+                        requestedQuantities={requestedQuantities}
                         selectedVariations={selectedVariations}
                         catalogToken={catalog_token}
                         filters={filters}
                         filterOptions={filter_options}
                         onSelectVariation={selectVariation}
+                        onQuantityChange={changeRequestedQuantity}
                     />
                 )}
                 {preset === 'boutique' && (
@@ -3710,11 +4020,13 @@ export default function PublicCatalog({
                         onAddToCart={addToCart}
                         onOpenQuickView={setQuickViewProduct}
                         addedProductId={addedProductId}
+                        requestedQuantities={requestedQuantities}
                         selectedVariations={selectedVariations}
                         catalogToken={catalog_token}
                         filters={filters}
                         filterOptions={filter_options}
                         onSelectVariation={selectVariation}
+                        onQuantityChange={changeRequestedQuantity}
                     />
                 )}
                 {preset === 'minimal' && (
@@ -3727,11 +4039,13 @@ export default function PublicCatalog({
                         onAddToCart={addToCart}
                         onOpenQuickView={setQuickViewProduct}
                         addedProductId={addedProductId}
+                        requestedQuantities={requestedQuantities}
                         selectedVariations={selectedVariations}
                         catalogToken={catalog_token}
                         filters={filters}
                         filterOptions={filter_options}
                         onSelectVariation={selectVariation}
+                        onQuantityChange={changeRequestedQuantity}
                     />
                 )}
             </div>
@@ -3754,6 +4068,11 @@ export default function PublicCatalog({
                 allowOrdersWithoutStock={
                     catalog_settings.allow_orders_without_stock
                 }
+                quantity={
+                    quickViewProduct
+                        ? (requestedQuantities[quickViewProduct.id] ?? 1)
+                        : 1
+                }
                 onClose={() => setQuickViewProduct(null)}
                 onSelectVariation={(variationName, value) => {
                     if (!quickViewProduct) {
@@ -3761,6 +4080,13 @@ export default function PublicCatalog({
                     }
 
                     selectVariation(quickViewProduct.id, variationName, value);
+                }}
+                onQuantityChange={(quantity) => {
+                    if (!quickViewProduct) {
+                        return;
+                    }
+
+                    changeRequestedQuantity(quickViewProduct, quantity);
                 }}
                 onAddToCart={addToCart}
                 headingFont={headingFont}
@@ -4708,7 +5034,9 @@ export default function PublicCatalog({
 
                         <div className="rounded-md bg-muted p-3">
                             <p className="text-xs text-muted-foreground">
-                                {cart.length} produto(s) - {cartTotal} item(ns)
+                                {cart.length}{' '}
+                                {cart.length === 1 ? 'produto' : 'produtos'} -{' '}
+                                {cartTotal} {cartTotal === 1 ? 'item' : 'itens'}{' '}
                                 no total
                             </p>
                             {hasAnyPriced && (

@@ -92,6 +92,26 @@ it('shows the public product count in the catalog preview', function () {
     expect($response->inertiaProps('product_count'))->toBe(2);
 });
 
+it('uses the official product stock calculation in the catalog preview', function () {
+    $simpleProduct = Product::factory()
+        ->forManufacturer($this->manufacturer)
+        ->withoutCategory()
+        ->create([
+            'name' => 'Body essencial',
+            'base_quantity' => 37,
+        ]);
+
+    $response = $this->actingAs($this->user)
+        ->get(route('manufacturer.catalog-settings.index'));
+
+    $sampleProduct = collect($response->inertiaProps('sample_products'))
+        ->firstWhere('id', $simpleProduct->id);
+
+    expect($sampleProduct)
+        ->not->toBeNull()
+        ->and($sampleProduct['total_stock'])->toBe(37);
+});
+
 it('returns saved settings in page props without data wrapping', function () {
     CatalogSetting::create([
         'manufacturer_id' => $this->manufacturer->id,

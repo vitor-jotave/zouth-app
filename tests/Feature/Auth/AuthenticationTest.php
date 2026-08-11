@@ -10,6 +10,17 @@ test('login screen can be rendered', function () {
     $response->assertOk();
 });
 
+test('login offers separate entry points for manufacturers and representatives', function () {
+    $login = file_get_contents(resource_path('js/pages/auth/login.tsx'));
+
+    expect($login)
+        ->toContain("import { index as onboarding } from '@/routes/onboarding'")
+        ->toContain('href={onboarding()}')
+        ->toContain('Criar minha marca')
+        ->toContain('href={register()}')
+        ->toContain('Sou representante');
+});
+
 test('users can authenticate using the login screen', function () {
     $manufacturer = \App\Models\Manufacturer::factory()->create(['is_active' => true]);
     $user = User::factory()->create([

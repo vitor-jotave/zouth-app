@@ -541,8 +541,8 @@ export default function ProductsIndex({
                     description={
                         <>
                             <p>
-                                Crie, encontre, organize os produtos do catálogo
-                                digital.
+                                Crie, encontre e organize os produtos do
+                                catálogo digital.
                             </p>
                             <p className="mt-3 font-zouth-display text-sm font-semibold tracking-[-0.01em] text-foreground tabular-nums">
                                 {product_counts.total} itens

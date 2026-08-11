@@ -549,6 +549,31 @@ it('returns a visible limit error when the manufacturer has no active subscripti
     expect(Order::count())->toBe(0);
 });
 
+it('accepts an order when the active subscription uses a historical plan price', function () {
+    $legacyPriceId = 'price_legacy_order';
+    $plan = $this->manufacturer->currentPlan;
+    $plan->update([
+        'stripe_price_id' => 'price_current_order',
+        'legacy_stripe_price_ids' => [$legacyPriceId],
+    ]);
+    $this->manufacturer->subscriptions()->create([
+        'type' => 'default',
+        'stripe_id' => 'sub_legacy_order',
+        'stripe_status' => 'active',
+        'stripe_price' => $legacyPriceId,
+    ]);
+
+    $response = $this->post(
+        "/catalog/{$this->catalogSetting->public_token}/orders",
+        ($this->validCustomerData)([
+            'items' => [['product_id' => $this->product1->id, 'quantity' => 1]],
+        ]),
+    );
+
+    $response->assertRedirect();
+    expect(Order::count())->toBe(1);
+});
+
 it('accepts order with email only (no phone)', function () {
     $response = $this->post("/catalog/{$this->catalogSetting->public_token}/orders", ($this->validCustomerData)([
         'customer_name' => 'Teste',
@@ -670,6 +695,37 @@ it('returns 404 for an invalid tracking token', function () {
     $response = $this->get('/o/invalid-token-that-does-not-exist');
 
     $response->assertNotFound();
+});
+
+it('shows the physical piece count of combo orders in public and internal views', function () {
+    $order = Order::factory()->forManufacturer($this->manufacturer)->create();
+    $combo = Product::factory()->forManufacturer($this->manufacturer)->create([
+        'product_type' => 'combo',
+        'base_quantity' => 0,
+    ]);
+    OrderItem::factory()->create([
+        'order_id' => $order->id,
+        'product_id' => $combo->id,
+        'product_name' => $combo->name,
+        'product_sku' => $combo->sku,
+        'unit_price' => '300.00',
+        'quantity' => 2,
+        'combo_components' => [
+            ['product_id' => 10, 'quantity' => 1],
+            ['product_id' => 20, 'quantity' => 2],
+        ],
+    ]);
+
+    $this->get("/o/{$order->public_token}")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('order.total_items', 6));
+
+    $this->actingAs($this->owner)
+        ->get("/manufacturer/orders/{$order->id}")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('order.total_items', 6));
 });
 
 // ──────────────────────────────────────────────

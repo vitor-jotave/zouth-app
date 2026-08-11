@@ -365,7 +365,8 @@ export default function OrderTracking({ order, manufacturer }: Props) {
                     </div>
                     <div className="flex items-end justify-between gap-4 border-t bg-gray-50 p-4">
                         <p className="text-sm font-medium">
-                            Total: {order.total_items} item(ns)
+                            Total: {order.total_items}{' '}
+                            {order.total_items === 1 ? 'peça' : 'peças'}
                         </p>
                         <div className="grid min-w-44 gap-1 text-right text-sm">
                             <p className="flex justify-between gap-5 text-muted-foreground">

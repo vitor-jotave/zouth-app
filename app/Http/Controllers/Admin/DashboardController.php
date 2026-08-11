@@ -34,9 +34,14 @@ class DashboardController extends Controller
             ->get(['manufacturer_id', 'stripe_price'])
             ->unique('manufacturer_id');
 
-        $prices = Plan::query()
-            ->whereIn('stripe_price_id', $entitledSubscriptions->pluck('stripe_price'))
-            ->pluck('monthly_price_cents', 'stripe_price_id');
+        $plans = Plan::query()->get();
+        $prices = $plans->reduce(function ($prices, Plan $plan) {
+            foreach ($plan->stripePriceIds() as $priceId) {
+                $prices->put($priceId, $plan->monthly_price_cents);
+            }
+
+            return $prices;
+        }, collect());
 
         $volumeLast30Days = OrderItem::query()
             ->whereHas('order', fn ($query) => $query
@@ -59,7 +64,7 @@ class DashboardController extends Controller
         return Inertia::render('admin/dashboard', [
             'stats' => $stats,
             'recentManufacturers' => Manufacturer::query()
-                ->with('currentPlan:id,name,stripe_price_id')
+                ->with('currentPlan:id,name,stripe_price_id,legacy_stripe_price_ids')
                 ->withCount(['products', 'orders'])
                 ->latest()
                 ->limit(5)

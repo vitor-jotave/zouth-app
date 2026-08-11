@@ -1,4 +1,4 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, Link } from '@inertiajs/react';
 import InputError from '@/components/input-error';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/spinner';
 import AuthLayout from '@/layouts/auth-layout';
 import { register } from '@/routes';
 import { store } from '@/routes/login';
+import { index as onboarding } from '@/routes/onboarding';
 import { request } from '@/routes/password';
 
 type Props = {
@@ -24,7 +25,7 @@ export default function Login({
 }: Props) {
     return (
         <AuthLayout
-            title="Seja bem vindo a Zouth!"
+            title="Seja bem-vindo à Zouth!"
             description="Insira seu e-mail e senha abaixo para entrar"
         >
             <Head title="Entrar" />
@@ -86,7 +87,7 @@ export default function Login({
                                     tabIndex={3}
                                 />
                                 <Label htmlFor="remember">
-                                    Manter Conectado
+                                    Manter conectado
                                 </Label>
                             </div>
 
@@ -102,14 +103,45 @@ export default function Login({
                             </Button>
                         </div>
 
-                        {canRegister && (
-                            <div className="text-center text-sm text-muted-foreground">
-                                Não tem uma conta?{' '}
-                                <TextLink href={register()} tabIndex={5}>
-                                    Cadastre-se
-                                </TextLink>
+                        <div className="grid gap-3 border-t border-black/10 pt-5">
+                            <p className="text-center text-sm text-muted-foreground">
+                                Ainda não tem acesso? Escolha como quer começar.
+                            </p>
+                            <div
+                                className={
+                                    canRegister
+                                        ? 'grid gap-2 sm:grid-cols-2'
+                                        : 'grid gap-2'
+                                }
+                            >
+                                <Link
+                                    href={onboarding()}
+                                    tabIndex={5}
+                                    className="group flex min-h-20 flex-col justify-between border border-[#ff4d3d] bg-[#ff4d3d] p-4 text-left text-[#17171d] transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff4d3d]"
+                                >
+                                    <span className="font-semibold">
+                                        Criar minha marca
+                                    </span>
+                                    <span className="text-xs opacity-75">
+                                        7 dias grátis · sem cartão
+                                    </span>
+                                </Link>
+                                {canRegister && (
+                                    <Link
+                                        href={register()}
+                                        tabIndex={6}
+                                        className="group flex min-h-20 flex-col justify-between border border-black/15 p-4 text-left transition-colors duration-200 hover:border-black/40 hover:bg-black/3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                                    >
+                                        <span className="font-semibold">
+                                            Sou representante
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">
+                                            Encontrar e representar coleções
+                                        </span>
+                                    </Link>
+                                )}
                             </div>
-                        )}
+                        </div>
                     </>
                 )}
             </Form>

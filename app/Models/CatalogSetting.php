@@ -198,6 +198,7 @@ class CatalogSetting extends Model
                     'show_sku' => true,
                     'show_stock' => true,
                     'show_variations' => true,
+                    'show_quantity_selector' => true,
                     'show_action' => true,
                     'show_badges' => false,
                     'sort' => 'newest',

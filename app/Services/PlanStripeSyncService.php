@@ -38,6 +38,13 @@ class PlanStripeSyncService
         if ($needsNewPrice) {
             // Archive old price if it exists
             if ($plan->stripe_price_id) {
+                $plan->legacy_stripe_price_ids = collect($plan->legacy_stripe_price_ids ?? [])
+                    ->push($plan->stripe_price_id)
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+
                 $stripe->prices->update($plan->stripe_price_id, [
                     'active' => false,
                 ]);

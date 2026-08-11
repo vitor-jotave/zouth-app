@@ -235,6 +235,7 @@ const fallbackSections: CatalogSection[] = [
             show_sku: true,
             show_stock: true,
             show_variations: true,
+            show_quantity_selector: true,
             show_action: true,
         },
     },
@@ -1923,6 +1924,22 @@ export default function CatalogSettings({
                                     updateSectionProp(
                                         'product_grid',
                                         'show_variations',
+                                        checked,
+                                    )
+                                }
+                            />
+                            <OptionSwitch
+                                label="Quantidade no card"
+                                description="Permite escolher quantas peças adicionar sem abrir os detalhes."
+                                checked={sectionProp(
+                                    selectedSection,
+                                    'show_quantity_selector',
+                                    true,
+                                )}
+                                onCheckedChange={(checked) =>
+                                    updateSectionProp(
+                                        'product_grid',
+                                        'show_quantity_selector',
                                         checked,
                                     )
                                 }

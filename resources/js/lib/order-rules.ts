@@ -44,6 +44,11 @@ export type OrderRuleCartItem = {
     product_category_id: number | null;
     quantity: number;
     unit_price_cents: number | null;
+    components?: Array<{
+        product_id: number;
+        product_category_id: number | null;
+        quantity_per_unit: number;
+    }>;
 };
 
 export type OrderRuleEvaluation = {
@@ -79,11 +84,29 @@ function scopedItems(
     );
 }
 
+function physicalItems(items: OrderRuleCartItem[]): OrderRuleCartItem[] {
+    return items.flatMap((item) => {
+        if (!item.components || item.components.length === 0) {
+            return [item];
+        }
+
+        return item.components.map((component) => ({
+            product_id: component.product_id,
+            product_category_id: component.product_category_id,
+            quantity: item.quantity * component.quantity_per_unit,
+            unit_price_cents: null,
+        }));
+    });
+}
+
 export function orderRuleMetricValue(
     condition: OrderRuleCondition,
     items: OrderRuleCartItem[],
 ): number {
-    const relevantItems = scopedItems(condition, items);
+    const relevantItems = scopedItems(
+        condition,
+        condition.metric === 'subtotal_cents' ? items : physicalItems(items),
+    );
 
     if (condition.metric === 'subtotal_cents') {
         return relevantItems.reduce(

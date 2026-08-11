@@ -9,7 +9,7 @@ class OrderRuleEvaluator
 {
     /**
      * @param  Collection<int, OrderRule>|array<int, OrderRule|array<string, mixed>>  $rules
-     * @param  array<int, array{product_id: int, product_category_id: int|null, quantity: int, unit_price_cents: int|null}>  $items
+     * @param  array<int, array{product_id: int, product_category_id: int|null, quantity: int, unit_price_cents: int|null, components?: array<int, array{product_id: int, product_category_id: int|null, quantity_per_unit: int}>}>  $items
      * @return array{subtotal_cents: int, discount_cents: int, total_cents: int, is_blocked: bool, blocking_messages: array<int, string>, applied_order_rules: array<int, array<string, mixed>>, evaluations: array<int, array<string, mixed>>}
      */
     public function evaluate(Collection|array $rules, array $items): array
@@ -95,7 +95,7 @@ class OrderRuleEvaluator
 
     /**
      * @param  array<string, mixed>  $condition
-     * @param  array<int, array{product_id: int, product_category_id: int|null, quantity: int, unit_price_cents: int|null}>  $items
+     * @param  array<int, array{product_id: int, product_category_id: int|null, quantity: int, unit_price_cents: int|null, components?: array<int, array{product_id: int, product_category_id: int|null, quantity_per_unit: int}>}>  $items
      */
     private function conditionMatches(array $condition, array $items): bool
     {
@@ -114,11 +114,14 @@ class OrderRuleEvaluator
 
     /**
      * @param  array<string, mixed>  $condition
-     * @param  array<int, array{product_id: int, product_category_id: int|null, quantity: int, unit_price_cents: int|null}>  $items
+     * @param  array<int, array{product_id: int, product_category_id: int|null, quantity: int, unit_price_cents: int|null, components?: array<int, array{product_id: int, product_category_id: int|null, quantity_per_unit: int}>}>  $items
      */
     private function metricValue(array $condition, array $items): int
     {
-        $scopedItems = $this->scopedItems($condition, $items);
+        $metricItems = ($condition['metric'] ?? null) === 'subtotal_cents'
+            ? $items
+            : $this->physicalItems($items);
+        $scopedItems = $this->scopedItems($condition, $metricItems);
 
         return match ($condition['metric'] ?? null) {
             'subtotal_cents' => (int) collect($scopedItems)->sum(
@@ -128,6 +131,41 @@ class OrderRuleEvaluator
             'distinct_products' => collect($scopedItems)->pluck('product_id')->unique()->count(),
             default => 0,
         };
+    }
+
+    /**
+     * Expand combo lines into their physical products for quantity and variety rules.
+     * The commercial subtotal remains based on the combo line and its own price.
+     *
+     * @param  array<int, array{product_id: int, product_category_id: int|null, quantity: int, unit_price_cents: int|null, components?: array<int, array{product_id: int, product_category_id: int|null, quantity_per_unit: int}>}>  $items
+     * @return array<int, array{product_id: int, product_category_id: int|null, quantity: int, unit_price_cents: int|null}>
+     */
+    private function physicalItems(array $items): array
+    {
+        return collect($items)
+            ->flatMap(function (array $item): array {
+                $components = $item['components'] ?? [];
+
+                if ($components === []) {
+                    return [[
+                        'product_id' => $item['product_id'],
+                        'product_category_id' => $item['product_category_id'],
+                        'quantity' => $item['quantity'],
+                        'unit_price_cents' => $item['unit_price_cents'],
+                    ]];
+                }
+
+                return collect($components)
+                    ->map(fn (array $component): array => [
+                        'product_id' => $component['product_id'],
+                        'product_category_id' => $component['product_category_id'],
+                        'quantity' => $item['quantity'] * $component['quantity_per_unit'],
+                        'unit_price_cents' => null,
+                    ])
+                    ->all();
+            })
+            ->values()
+            ->all();
     }
 
     /**

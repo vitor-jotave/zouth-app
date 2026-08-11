@@ -237,3 +237,77 @@ it('caps fixed discounts and excludes unpriced items from monetary conditions', 
         ->and($result['discount_cents'])->toBe(10000)
         ->and($result['total_cents'])->toBe(0);
 });
+
+it('evaluates combo quantity and variety by its physical composition while preserving its commercial price', function () {
+    $evaluator = new OrderRuleEvaluator;
+    $items = [[
+        'product_id' => 99,
+        'product_category_id' => 900,
+        'quantity' => 2,
+        'unit_price_cents' => 15000,
+        'components' => [
+            [
+                'product_id' => 10,
+                'product_category_id' => 100,
+                'quantity_per_unit' => 1,
+            ],
+            [
+                'product_id' => 20,
+                'product_category_id' => 200,
+                'quantity_per_unit' => 2,
+            ],
+        ],
+    ]];
+    $rules = [
+        evaluatorRule([
+            'id' => 1,
+            'conditions' => [[
+                'metric' => 'subtotal_cents',
+                'operator' => 'eq',
+                'value' => 30000,
+                'max_value' => null,
+                'scope_type' => null,
+                'scope_ids' => [],
+            ]],
+        ]),
+        evaluatorRule([
+            'id' => 2,
+            'conditions' => [[
+                'metric' => 'total_quantity',
+                'operator' => 'eq',
+                'value' => 6,
+                'max_value' => null,
+                'scope_type' => null,
+                'scope_ids' => [],
+            ]],
+        ]),
+        evaluatorRule([
+            'id' => 3,
+            'conditions' => [[
+                'metric' => 'distinct_products',
+                'operator' => 'eq',
+                'value' => 2,
+                'max_value' => null,
+                'scope_type' => null,
+                'scope_ids' => [],
+            ]],
+        ]),
+        evaluatorRule([
+            'id' => 4,
+            'conditions' => [[
+                'metric' => 'total_quantity',
+                'operator' => 'eq',
+                'value' => 4,
+                'max_value' => null,
+                'scope_type' => 'categories',
+                'scope_ids' => [200],
+            ]],
+        ]),
+    ];
+
+    $result = $evaluator->evaluate($rules, $items);
+
+    expect($result['subtotal_cents'])->toBe(30000)
+        ->and(collect($result['evaluations'])->pluck('matched')->all())
+        ->toBe([true, true, true, true]);
+});

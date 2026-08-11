@@ -115,6 +115,7 @@ class CatalogSettingUpdateRequest extends FormRequest
             'sections.*.props.show_sku' => ['sometimes', 'boolean'],
             'sections.*.props.show_stock' => ['sometimes', 'boolean'],
             'sections.*.props.show_variations' => ['sometimes', 'boolean'],
+            'sections.*.props.show_quantity_selector' => ['sometimes', 'boolean'],
             'sections.*.props.show_action' => ['sometimes', 'boolean'],
             'sections.*.props.show_badges' => ['sometimes', 'boolean'],
             'sections.*.props.sort' => ['sometimes', 'in:newest,manual'],
