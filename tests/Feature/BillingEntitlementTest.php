@@ -42,6 +42,24 @@ test('trialing subscriptions grant access', function () {
     expect(app(PlanLimitService::class)->activePlan($manufacturer)?->is($plan))->toBeTrue();
 });
 
+test('an entitled subscription on a historical Stripe price keeps the plan active', function () {
+    $legacyPriceId = 'price_legacy_basic';
+    $plan = Plan::factory()->withStripe()->create([
+        'legacy_stripe_price_ids' => [$legacyPriceId],
+    ]);
+    $manufacturer = Manufacturer::factory()->create(['current_plan_id' => $plan->id]);
+
+    $manufacturer->subscriptions()->create([
+        'type' => 'default',
+        'stripe_id' => 'sub_legacy_price',
+        'stripe_status' => 'active',
+        'stripe_price' => $legacyPriceId,
+    ]);
+
+    expect(app(PlanLimitService::class)->activePlan($manufacturer)?->is($plan))->toBeTrue()
+        ->and(Plan::findByStripePriceId($legacyPriceId)?->is($plan))->toBeTrue();
+});
+
 test('non entitled subscription statuses do not grant access', function (string $status) {
     $plan = Plan::factory()->withStripe()->create();
     $manufacturer = Manufacturer::factory()->create(['current_plan_id' => $plan->id]);

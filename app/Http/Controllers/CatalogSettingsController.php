@@ -40,7 +40,15 @@ class CatalogSettingsController extends Controller
 
         $sampleProducts = Product::where('manufacturer_id', $manufacturer->id)
             ->where('is_active', true)
-            ->with(['category', 'media'])
+            ->with([
+                'category',
+                'media',
+                'productVariations',
+                'variantStocks',
+                'comboItems.componentProduct.productVariations',
+                'comboItems.componentProduct.variantStocks',
+                'comboItems.componentVariantStock',
+            ])
             ->orderBy('sort_order')
             ->orderBy('name')
             ->limit(6)
@@ -59,7 +67,7 @@ class CatalogSettingsController extends Controller
                     'primary_image' => $primaryImage
                         ? Storage::disk('s3')->url($primaryImage->thumbnail_path ?: $primaryImage->path)
                         : null,
-                    'total_stock' => $product->variantStocks->sum('quantity'),
+                    'total_stock' => $product->getTotalStock(),
                     'price_cents' => $product->price_cents,
                 ];
             });

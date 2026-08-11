@@ -105,6 +105,7 @@ class ProductCatalogResource extends JsonResource
             }) ?? [],
             'combo_items' => $this->comboItems?->map(fn ($item) => [
                 'product_id' => $item->component_product_id,
+                'product_category_id' => $item->componentProduct?->product_category_id,
                 'product_name' => $item->componentProduct?->name,
                 'product_sku' => $item->componentProduct?->sku,
                 'variation_key' => $item->variation_key,

@@ -15,6 +15,8 @@ import {
     Banknote,
     Boxes,
     CheckCircle2,
+    ChevronLeft,
+    ChevronRight,
     CircleDot,
     Filter,
     GripVertical,
@@ -477,7 +479,7 @@ function OrderStage({
     return (
         <section
             ref={setNodeRef}
-            aria-label={`${stageDisplayLabel[stage.value] ?? stage.label}: ${stage.count} pedidos`}
+            aria-label={`${stageDisplayLabel[stage.value] ?? stage.label}: ${stage.count} ${stage.count === 1 ? 'pedido' : 'pedidos'}`}
             className={cn(
                 'flex min-h-[440px] min-w-0 flex-col border-x border-b border-border bg-[#f6f4f0] transition-colors',
                 isOver && 'bg-[#ff4d3d]/[0.045]',
@@ -588,6 +590,7 @@ export default function OrdersIndex({
     const [isFiltering, setIsFiltering] = useState(false);
     const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(null);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const boardScrollRef = useRef<HTMLDivElement | null>(null);
     const sensors = useSensors(
         useSensor(PointerSensor, {
             activationConstraint: { distance: 4 },
@@ -638,6 +641,13 @@ export default function OrdersIndex({
         debounceRef.current = setTimeout(() => {
             navigate({ search: value || undefined }, value);
         }, 300);
+    };
+
+    const scrollBoard = (direction: -1 | 1) => {
+        boardScrollRef.current?.scrollBy({
+            left: direction * 360,
+            behavior: 'smooth',
+        });
     };
 
     const updateOrderStatus = (order: Order, transition: AllowedTransition) => {
@@ -946,7 +956,49 @@ export default function OrdersIndex({
                 {filters.view === 'board' ? (
                     boardStages.length > 0 ? (
                         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-                            <div className="-mx-5 mt-7 overflow-x-auto px-5 pb-4 sm:-mx-7 sm:px-7 md:-mx-9 md:px-9 xl:-mx-12 xl:px-12 2xl:-mx-14 2xl:px-14">
+                            <div className="mt-7 flex items-center justify-between gap-4 border-y border-border py-2.5">
+                                <p className="text-xs text-muted-foreground">
+                                    O fluxo continua na horizontal. Use os
+                                    controles para percorrer todas as etapas.
+                                </p>
+                                <div
+                                    className="flex shrink-0"
+                                    aria-label="Navegar pelas etapas"
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => scrollBoard(-1)}
+                                        className="flex size-10 items-center justify-center border border-border bg-background transition-colors hover:bg-[#e7e3dc]/55 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#ff4d3d]"
+                                        aria-label="Ver etapas anteriores"
+                                        aria-controls="order-board"
+                                    >
+                                        <ChevronLeft
+                                            className="size-4"
+                                            aria-hidden="true"
+                                        />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => scrollBoard(1)}
+                                        className="flex size-10 items-center justify-center border border-l-0 border-border bg-background transition-colors hover:bg-[#e7e3dc]/55 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#ff4d3d]"
+                                        aria-label="Ver próximas etapas"
+                                        aria-controls="order-board"
+                                    >
+                                        <ChevronRight
+                                            className="size-4"
+                                            aria-hidden="true"
+                                        />
+                                    </button>
+                                </div>
+                            </div>
+                            <div
+                                ref={boardScrollRef}
+                                id="order-board"
+                                role="region"
+                                aria-label="Fluxo de pedidos por etapa"
+                                tabIndex={0}
+                                className="-mx-5 mt-3 overflow-x-scroll px-5 pb-4 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#ff4d3d] sm:-mx-7 sm:px-7 md:-mx-9 md:px-9 xl:-mx-12 xl:px-12 2xl:-mx-14 2xl:px-14"
+                            >
                                 <div
                                     className={cn(
                                         'grid gap-3',

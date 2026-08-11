@@ -49,4 +49,21 @@ class OrderItem extends Model
     {
         return $this->belongsTo(Product::class);
     }
+
+    public function totalPieces(): int
+    {
+        $components = collect($this->combo_components ?? []);
+
+        if ($components->isEmpty()) {
+            return (int) $this->quantity;
+        }
+
+        $piecesPerComposition = (int) $components->sum(
+            fn (array $component): int => max(0, (int) ($component['quantity'] ?? 0)),
+        );
+
+        return $piecesPerComposition > 0
+            ? $piecesPerComposition * (int) $this->quantity
+            : (int) $this->quantity;
+    }
 }

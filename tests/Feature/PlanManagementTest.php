@@ -55,6 +55,10 @@ test('plans schema keeps the legacy csv column for rollback compatibility', func
     expect(Schema::hasColumn('plans', 'allow_csv_import'))->toBeTrue();
 });
 
+test('plans schema keeps historical Stripe price identifiers', function () {
+    expect(Schema::hasColumn('plans', 'legacy_stripe_price_ids'))->toBeTrue();
+});
+
 test('plans index counts only subscriptions that grant access', function () {
     $this->withoutVite();
 
@@ -86,6 +90,29 @@ test('plans index counts only subscriptions that grant access', function () {
             ->where('plans.0.subscribers_count', 2)
             ->where('plans.1.id', $otherPlan->id)
             ->where('plans.1.subscribers_count', 0)
+        );
+});
+
+test('plans index counts entitled subscriptions on historical prices', function () {
+    $this->withoutVite();
+
+    $legacyPriceId = 'price_legacy_plan_index';
+    $plan = Plan::factory()->withStripe()->create([
+        'legacy_stripe_price_ids' => [$legacyPriceId],
+    ]);
+    $manufacturer = Manufacturer::factory()->create(['current_plan_id' => $plan->id]);
+    $manufacturer->subscriptions()->create([
+        'type' => 'default',
+        'stripe_id' => 'sub_legacy_plan_index',
+        'stripe_status' => 'active',
+        'stripe_price' => $legacyPriceId,
+    ]);
+
+    $this->actingAs(createSuperadmin())
+        ->get(route('admin.plans.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('plans.0.id', $plan->id)
+            ->where('plans.0.subscribers_count', 1)
         );
 });
 

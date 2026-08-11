@@ -207,7 +207,7 @@ class ReportAnalyticsService
             'average_order_value_change_percent' => $this->changePercent($averageOrder, $previousAverageOrder),
             'conversion_rate' => $conversion,
             'conversion_change_points' => round($conversion - $previousConversion, 1),
-            'units_sold' => (int) $orders->flatMap->items->sum('quantity'),
+            'units_sold' => (int) $orders->sum(fn (Order $order): int => $order->totalItems()),
             'discount_cents' => (int) $orders->sum(fn (Order $order): int => $order->discountCents()),
         ];
     }
@@ -242,7 +242,7 @@ class ReportAnalyticsService
                 'sku' => $product?->sku ?? $first->product_sku,
                 'category' => $product?->category?->name ?? 'Sem categoria',
                 'image_url' => $media ? Storage::disk('s3')->url($media->thumbnail_path ?: $media->path) : null,
-                'units' => (int) $entries->sum(fn (array $entry): int => $entry['item']->quantity),
+                'units' => (int) $entries->sum(fn (array $entry): int => $entry['item']->totalPieces()),
                 'revenue_cents' => $revenue,
                 'stock' => $stock,
                 'stock_status' => $stock === null ? 'unknown' : ($stock === 0 ? 'out' : ($stock <= 10 ? 'low' : 'healthy')),
@@ -266,7 +266,7 @@ class ReportAnalyticsService
             return (int) $entries->filter(fn (array $entry): bool => $entry['order']->created_at->copy()
                 ->setTimezone(self::BUSINESS_TIMEZONE)
                 ->between($bucketStart, $bucketEnd))
-                ->sum(fn (array $entry): int => $entry['item']->quantity);
+                ->sum(fn (array $entry): int => $entry['item']->totalPieces());
         })->all();
     }
 
@@ -296,7 +296,7 @@ class ReportAnalyticsService
 
         return [
             'active_products' => $products->where('is_active', true)->count(),
-            'units_sold' => (int) $orders->flatMap->items->sum('quantity'),
+            'units_sold' => (int) $orders->sum(fn (Order $order): int => $order->totalItems()),
             'stock_units' => (int) $stockByProduct->sum(),
             'out_of_stock' => $stockByProduct->filter(fn (int $stock): bool => $stock === 0)->count(),
             'low_stock' => $stockByProduct->filter(fn (int $stock): bool => $stock > 0 && $stock <= 10)->count(),

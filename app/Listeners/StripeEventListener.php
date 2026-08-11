@@ -132,7 +132,7 @@ class StripeEventListener
             return;
         }
 
-        $plan = Plan::where('stripe_price_id', $priceId)->first();
+        $plan = Plan::findByStripePriceId($priceId);
 
         if (! $plan) {
             Log::warning('Stripe webhook: no matching plan for price', [

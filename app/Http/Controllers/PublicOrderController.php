@@ -107,7 +107,7 @@ class PublicOrderController extends Controller
                 'order_type_label' => $order->order_type->label(),
                 'customer_name' => $order->customer_name,
                 'items' => OrderItemResource::collection($order->items)->resolve($request),
-                'total_items' => $order->items->sum('quantity'),
+                'total_items' => $order->totalItems(),
                 'subtotal_amount' => number_format($order->subtotalAmount(), 2, '.', ''),
                 'discount_amount' => number_format($order->discountAmount(), 2, '.', ''),
                 'total_amount' => number_format($order->totalAmount(), 2, '.', ''),

@@ -186,13 +186,17 @@ it('shows a Stripe plan on the manufacturer dashboard only with entitlement', fu
 it('shows platform revenue and recent accounts on the admin dashboard', function () {
     $this->withoutVite();
 
-    $plan = Plan::factory()->withStripe()->create(['monthly_price_cents' => 12990]);
+    $legacyPriceId = 'price_legacy_dashboard';
+    $plan = Plan::factory()->withStripe()->create([
+        'monthly_price_cents' => 12990,
+        'legacy_stripe_price_ids' => [$legacyPriceId],
+    ]);
     $subscriber = Manufacturer::factory()->create(['current_plan_id' => $plan->id]);
     $subscriber->subscriptions()->create([
         'type' => 'default',
         'stripe_id' => 'sub_dashboard_active',
         'stripe_status' => 'active',
-        'stripe_price' => $plan->stripe_price_id,
+        'stripe_price' => $legacyPriceId,
     ]);
     $inactiveManufacturer = Manufacturer::factory()->inactive()->create();
     $manufacturerWithoutEntitlement = Manufacturer::factory()->create([

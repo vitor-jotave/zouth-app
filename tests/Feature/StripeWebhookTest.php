@@ -322,6 +322,28 @@ test('webhook with unknown price is handled gracefully', function () {
     expect($manufacturer->fresh()->current_plan_id)->toBeNull();
 });
 
+test('webhook recognizes a historical Stripe price for the current plan', function () {
+    $legacyPriceId = 'price_legacy_webhook';
+    $plan = Plan::factory()->withStripe()->create([
+        'legacy_stripe_price_ids' => [$legacyPriceId],
+    ]);
+    $manufacturer = Manufacturer::factory()->create([
+        'stripe_id' => 'cus_legacy_price',
+        'current_plan_id' => null,
+    ]);
+
+    $payload = stripePayload('customer.subscription.updated', [
+        'data' => [
+            'object' => subscriptionObject('cus_legacy_price', $legacyPriceId),
+        ],
+    ]);
+
+    $listener = new StripeEventListener;
+    $listener->handle(new WebhookReceived($payload));
+
+    expect($manufacturer->fresh()->current_plan_id)->toBe($plan->id);
+});
+
 test('listener is registered in AppServiceProvider', function () {
     $events = app('events');
 

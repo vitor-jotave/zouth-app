@@ -24,16 +24,14 @@ class PlanController extends Controller
      */
     public function index(): Response
     {
-        $subscriberCounts = Subscription::query()
+        $entitledSubscriptions = Subscription::query()
             ->whereIn('stripe_status', PlanLimitService::ENTITLED_SUBSCRIPTION_STATUSES)
             ->whereNotNull('stripe_price')
             ->where(function ($query) {
                 $query->whereNull('ends_at')
                     ->orWhere('ends_at', '>', now());
             })
-            ->get(['manufacturer_id', 'stripe_price'])
-            ->groupBy('stripe_price')
-            ->map(fn ($subscriptions) => $subscriptions->unique('manufacturer_id')->count());
+            ->get(['manufacturer_id', 'stripe_price']);
 
         $plans = Plan::query()
             ->orderBy('sort_order')
@@ -56,7 +54,10 @@ class PlanController extends Controller
                 'max_files_gb' => $plan->max_files_gb,
                 'stripe_product_id' => $plan->stripe_product_id,
                 'stripe_price_id' => $plan->stripe_price_id,
-                'subscribers_count' => $subscriberCounts->get($plan->stripe_price_id, 0),
+                'subscribers_count' => $entitledSubscriptions
+                    ->filter(fn (Subscription $subscription): bool => $plan->matchesStripePrice($subscription->stripe_price))
+                    ->unique('manufacturer_id')
+                    ->count(),
                 'created_at' => $plan->created_at->toDateTimeString(),
             ]);
 

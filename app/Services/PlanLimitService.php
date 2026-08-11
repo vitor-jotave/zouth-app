@@ -36,7 +36,7 @@ class PlanLimitService
 
         $hasEntitledSubscription = $manufacturer->subscriptions()
             ->where('type', 'default')
-            ->where('stripe_price', $plan->stripe_price_id)
+            ->whereIn('stripe_price', $plan->stripePriceIds())
             ->whereIn('stripe_status', self::ENTITLED_SUBSCRIPTION_STATUSES)
             ->where(function ($query) {
                 $query->whereNull('ends_at')

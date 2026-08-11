@@ -42,6 +42,7 @@ class Plan extends Model
         'max_files_gb',
         'stripe_product_id',
         'stripe_price_id',
+        'legacy_stripe_price_ids',
     ];
 
     /**
@@ -63,6 +64,7 @@ class Plan extends Model
             'max_users' => 'integer',
             'max_data_mb' => 'integer',
             'max_files_gb' => 'integer',
+            'legacy_stripe_price_ids' => 'array',
         ];
     }
 
@@ -88,5 +90,39 @@ class Plan extends Model
     public function isUnlimited(string $limitField): bool
     {
         return $this->getAttribute($limitField) === null;
+    }
+
+    /**
+     * Return the current and historical Stripe Price IDs for this plan.
+     *
+     * @return list<string>
+     */
+    public function stripePriceIds(): array
+    {
+        return collect([
+            $this->stripe_price_id,
+            ...($this->legacy_stripe_price_ids ?? []),
+        ])
+            ->filter(fn (mixed $priceId): bool => is_string($priceId) && $priceId !== '')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    public function matchesStripePrice(?string $priceId): bool
+    {
+        return $priceId !== null && in_array($priceId, $this->stripePriceIds(), true);
+    }
+
+    public static function findByStripePriceId(?string $priceId): ?self
+    {
+        if (! $priceId) {
+            return null;
+        }
+
+        return self::query()
+            ->where('stripe_price_id', $priceId)
+            ->orWhereJsonContains('legacy_stripe_price_ids', $priceId)
+            ->first();
     }
 }

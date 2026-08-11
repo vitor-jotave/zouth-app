@@ -45,7 +45,9 @@ class BillingController extends Controller
             && $subscription?->stripe_price
             && $this->limitService->subscriptionGrantsAccess($subscription)
         ) {
-            $displayPlan = $plans->firstWhere('stripe_price_id', $subscription->stripe_price);
+            $displayPlan = $plans->first(
+                fn (Plan $plan): bool => $plan->matchesStripePrice($subscription->stripe_price),
+            );
         }
 
         return Inertia::render('manufacturer/billing/index', [

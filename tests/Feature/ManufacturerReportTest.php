@@ -99,6 +99,42 @@ it('shows tenant scoped commercial indicators and compares the selected period',
             ->has('report.series', 30));
 });
 
+it('counts the physical pieces inside combos in report totals and product performance', function () {
+    $category = ProductCategory::factory()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'name' => 'Conjuntos',
+    ]);
+    $combo = Product::factory()->forManufacturer($this->manufacturer)->create([
+        'product_category_id' => $category->id,
+        'product_type' => 'combo',
+        'name' => 'Combo Aconchego',
+        'sku' => 'COMBO-001',
+        'base_quantity' => 0,
+    ]);
+    $order = reportOrder($this->manufacturer, null, '2026-07-18 10:00:00', 60_000);
+    OrderItem::factory()->create([
+        'order_id' => $order->id,
+        'product_id' => $combo->id,
+        'product_name' => $combo->name,
+        'product_sku' => $combo->sku,
+        'unit_price' => '300.00',
+        'quantity' => 2,
+        'combo_components' => [
+            ['product_id' => 10, 'quantity' => 1],
+            ['product_id' => 20, 'quantity' => 2],
+        ],
+    ]);
+
+    $this->actingAs($this->owner)
+        ->get(route('manufacturer.reports.index', ['period' => '30_days']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('report.summary.units_sold', 6)
+            ->where('report.collection.units_sold', 6)
+            ->where('report.top_products.0.name', 'Combo Aconchego')
+            ->where('report.top_products.0.units', 6));
+});
+
 it('protects reports with the dedicated staff capability', function () {
     $blockedStaff = reportStaff($this->manufacturer, []);
     $allowedStaff = reportStaff($this->manufacturer, ['reports.view']);

@@ -179,7 +179,10 @@ export default function RepDashboard({ stats, recentOrders }: Props) {
                                             <p className="mt-1 truncate text-sm text-muted-foreground">
                                                 {order.manufacturer_name} ·{' '}
                                                 {order.customer_name} ·{' '}
-                                                {order.total_items} item(ns)
+                                                {order.total_items}{' '}
+                                                {order.total_items === 1
+                                                    ? 'peça'
+                                                    : 'peças'}
                                             </p>
                                         </div>
                                         <div className="shrink-0 sm:text-right">

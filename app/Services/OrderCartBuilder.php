@@ -11,7 +11,7 @@ class OrderCartBuilder
 {
     /**
      * @param  array<int, array{product_id: int, quantity: int, selected_variations?: array<string, string>|null}>  $items
-     * @return array{items: array<int, array{product_id: int, product_category_id: int|null, quantity: int, unit_price_cents: int|null}>, resolved_items: array<int, array{product_variant_stock_id: int|null, selected_variations: array<string, string>|null, unit_price_cents: int|null, requires_quote: bool}>, products: Collection<int, Product>, requires_quote: bool}
+     * @return array{items: array<int, array{product_id: int, product_category_id: int|null, quantity: int, unit_price_cents: int|null, components: array<int, array{product_id: int, product_category_id: int|null, quantity_per_unit: int}>}>, resolved_items: array<int, array{product_variant_stock_id: int|null, selected_variations: array<string, string>|null, unit_price_cents: int|null, requires_quote: bool}>, products: Collection<int, Product>, requires_quote: bool}
      */
     public function build(
         int $manufacturerId,
@@ -76,6 +76,13 @@ class OrderCartBuilder
             'product_category_id' => $item['product_category_id'],
             'quantity' => $item['quantity'],
             'unit_price_cents' => $item['unit_price_cents'],
+            'components' => $products->get($item['product_id'])?->isCombo()
+                ? $products->get($item['product_id'])->comboItems->map(fn ($comboItem): array => [
+                    'product_id' => $comboItem->component_product_id,
+                    'product_category_id' => $comboItem->componentProduct?->product_category_id,
+                    'quantity_per_unit' => (int) $comboItem->quantity,
+                ])->values()->all()
+                : [],
         ])->all();
 
         return [

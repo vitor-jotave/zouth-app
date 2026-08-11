@@ -167,6 +167,72 @@ it('persists trusted subtotal discount total and the applied rule snapshot', fun
         ->and($this->product->fresh()->base_quantity)->toBe(8);
 });
 
+it('uses combo components for quantity and variety rules during checkout', function () {
+    OrderRule::query()
+        ->where('manufacturer_id', $this->manufacturer->id)
+        ->delete();
+
+    $body = Product::factory()->forManufacturer($this->manufacturer)->withoutCategory()->create([
+        'name' => 'Body Essencial',
+        'base_quantity' => 10,
+    ]);
+    $calca = Product::factory()->forManufacturer($this->manufacturer)->withoutCategory()->create([
+        'name' => 'Calça Essencial',
+        'base_quantity' => 10,
+    ]);
+    $combo = Product::factory()->forManufacturer($this->manufacturer)->withoutCategory()->create([
+        'name' => 'Combo Essencial',
+        'product_type' => 'combo',
+        'base_quantity' => 0,
+        'price_cents' => 30000,
+    ]);
+    $combo->comboItems()->create([
+        'component_product_id' => $body->id,
+        'quantity' => 1,
+    ]);
+    $combo->comboItems()->create([
+        'component_product_id' => $calca->id,
+        'quantity' => 2,
+    ]);
+
+    OrderRule::factory()->for($this->manufacturer)->blocking()->create([
+        'name' => 'Mínimo de peças',
+        'conditions' => [[
+            'metric' => 'total_quantity',
+            'operator' => 'lte',
+            'value' => 2,
+            'max_value' => null,
+            'scope_type' => null,
+            'scope_ids' => [],
+        ]],
+    ]);
+    OrderRule::factory()->for($this->manufacturer)->blocking()->create([
+        'name' => 'Mínimo de modelos',
+        'conditions' => [[
+            'metric' => 'distinct_products',
+            'operator' => 'lte',
+            'value' => 1,
+            'max_value' => null,
+            'scope_type' => null,
+            'scope_ids' => [],
+        ]],
+    ]);
+
+    $this->post(
+        route('public.order.store', $this->catalogSetting),
+        checkoutPayload($combo),
+    )->assertRedirect();
+
+    $order = Order::query()->sole();
+
+    expect($order->subtotal_cents)->toBe(30000)
+        ->and($order->discount_cents)->toBe(0)
+        ->and($order->items)->toHaveCount(1)
+        ->and($order->items->first()->combo_components)->toHaveCount(2)
+        ->and($body->fresh()->base_quantity)->toBe(9)
+        ->and($calca->fresh()->base_quantity)->toBe(8);
+});
+
 it('ignores subtotal discount total and rule data sent by the browser', function () {
     $this->post(
         route('public.order.store', $this->catalogSetting),

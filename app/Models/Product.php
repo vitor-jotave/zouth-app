@@ -122,13 +122,21 @@ class Product extends Model
 
     public function hasVariations(): bool
     {
+        if ($this->relationLoaded('productVariations')) {
+            return $this->productVariations->isNotEmpty();
+        }
+
         return $this->productVariations()->exists();
     }
 
     public function getTotalStock(): int
     {
         if ($this->isCombo()) {
-            $this->loadMissing(['comboItems.componentProduct.variantStocks', 'comboItems.componentVariantStock']);
+            $this->loadMissing([
+                'comboItems.componentProduct.productVariations',
+                'comboItems.componentProduct.variantStocks',
+                'comboItems.componentVariantStock',
+            ]);
 
             if ($this->comboItems->isEmpty()) {
                 return 0;
@@ -146,6 +154,10 @@ class Product extends Model
         }
 
         if ($this->hasVariations()) {
+            if ($this->relationLoaded('variantStocks')) {
+                return (int) $this->variantStocks->sum('quantity');
+            }
+
             return (int) $this->variantStocks()->sum('quantity');
         }
 
