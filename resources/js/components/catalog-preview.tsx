@@ -270,10 +270,7 @@ export default function CatalogPreview({
                             (section.props?.headline as
                                 | string
                                 | null
-                                | undefined) ||
-                            settings.tagline ||
-                            settings.brand_name ||
-                            manufacturerName;
+                                | undefined) ?? '';
                         const subtitle =
                             (section.props?.subtitle as
                                 | string

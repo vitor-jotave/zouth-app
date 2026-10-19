@@ -2363,10 +2363,7 @@ function MinimalLayout({
         fontMap[settings.body_font_family ?? settings.font_family] ??
         fontMap['manrope'];
     const heroHeadline =
-        (heroSection?.props?.headline as string | undefined) ||
-        settings.tagline ||
-        settings.brand_name ||
-        manufacturer.name;
+        (heroSection?.props?.headline as string | undefined) ?? '';
     const heroSubtitle =
         (heroSection?.props?.subtitle as string | undefined) ||
         settings.description;
