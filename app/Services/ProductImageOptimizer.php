@@ -152,9 +152,7 @@ class ProductImageOptimizer
                 'thumbnail_height' => imagesy($thumbnail),
             ];
         } finally {
-            imagedestroy($thumbnail);
-            imagedestroy($master);
-            imagedestroy($source);
+            unset($thumbnail, $master, $source);
         }
     }
 

@@ -2,7 +2,11 @@
 NIXPACKS_NODE_VERSION = "22"
 
 [phases.setup]
-nixPkgs = ["...", "python311Packages.supervisor"]
+nixpkgsArchive = "f3a73bcf5d1c5b75a66cf35a48957e30d41d647a"
+nixPkgs = ["(php85.withExtensions (pe: pe.enabled ++ [ pe.all.bcmath pe.all.gd pe.all.intl pe.all.pdo_pgsql pe.all.zip pe.all.exif pe.all.pcntl ]))", "php85Packages.composer", "nodejs_22", "nginx", "libmysqlclient", "python3Packages.supervisor", "ffmpeg"]
+
+[phases.install]
+cmds = ["mkdir -p /var/log/nginx /var/cache/nginx", "php -r 'exit(PHP_MAJOR_VERSION === 8 && PHP_MINOR_VERSION === 5 ? 0 : 1);'", "composer install --no-interaction --prefer-dist --optimize-autoloader", "npm ci"]
 
 [phases.build]
 cmds = [
@@ -20,6 +24,8 @@ cmd = '/assets/start.sh'
 "start.sh" = '''
 #!/bin/bash
 set -euo pipefail
+
+php -r 'exit(PHP_MAJOR_VERSION === 8 && PHP_MINOR_VERSION === 5 ? 0 : 1);'
 
 # Transform the nginx configuration
 node /assets/scripts/prestart.mjs /assets/nginx.template.conf /etc/nginx.conf
@@ -226,7 +232,9 @@ http {
         ) else ()
      
         location ~ \.php$ {
-            fastcgi_buffer_size 8k;
+            fastcgi_buffer_size 32k;
+            fastcgi_buffers 8 16k;
+            fastcgi_busy_buffers_size 64k;
             fastcgi_pass 127.0.0.1:9000;
             fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
             include $!{nginx}/conf/fastcgi_params;

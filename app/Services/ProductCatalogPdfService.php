@@ -97,7 +97,7 @@ class ProductCatalogPdfService
         $path = $directory.'/'.Str::uuid()->toString().'.jpg';
 
         imagejpeg($image, $path, 92);
-        imagedestroy($image);
+        unset($image);
 
         return $path;
     }
@@ -120,7 +120,7 @@ class ProductCatalogPdfService
 
                 if ($productImage) {
                     $this->drawFittedImage($image, $productImage, $x + 28, $y + 32, 250, 250);
-                    imagedestroy($productImage);
+                    unset($productImage);
                 } else {
                     $this->drawImagePlaceholder($image, $x + 28, $y + 32, 250, 250);
                 }
@@ -157,7 +157,7 @@ class ProductCatalogPdfService
 
         if ($logo) {
             $this->drawFittedImage($image, $logo, $x, $y, 140, 70);
-            imagedestroy($logo);
+            unset($logo);
 
             return;
         }
