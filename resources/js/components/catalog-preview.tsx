@@ -341,6 +341,11 @@ export default function CatalogPreview({
                                         settings.cover_image_focal_y
                                     }
                                     alignment={alignment}
+                                    overlayOpacity={sectionValue(
+                                        section,
+                                        'overlay_opacity',
+                                        0,
+                                    )}
                                     eyebrow={sectionValue(
                                         section,
                                         'eyebrow',

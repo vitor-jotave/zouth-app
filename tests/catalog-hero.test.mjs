@@ -102,8 +102,8 @@ test('a campaign tagline remains available without restoring the brand name', ()
     );
 });
 
-test('cover fitting controls reach the shared image in both compositions', () => {
-    for (const alignment of ['left', 'center']) {
+test('cover fitting controls reach the shared image in all compositions', () => {
+    for (const alignment of ['left', 'right', 'center', 'background']) {
         for (const fit of ['cover', 'contain', 'fill', 'manual']) {
             const html = render({
                 alignment,
@@ -129,6 +129,76 @@ test('cover fitting controls reach the shared image in both compositions', () =>
             }
         }
     }
+});
+
+test('background photos have no mandatory overlay and allow adjustable dimming', () => {
+    const base = { alignment: 'background', coverImage: '/campaign.jpg' };
+    assert.doesNotMatch(render(base), /catalog-hero-overlay/);
+    assert.doesNotMatch(
+        render({ ...base, overlayOpacity: 0 }),
+        /catalog-hero-overlay/,
+    );
+    assert.match(
+        render({ ...base, overlayOpacity: 45 }),
+        /catalog-hero-overlay[^>]*style="opacity:0.45"/,
+    );
+    assert.match(
+        render({ ...base, overlayOpacity: 999 }),
+        /style="opacity:0.8"/,
+    );
+    assert.doesNotMatch(
+        render({ ...base, alignment: 'left', overlayOpacity: 45 }),
+        /catalog-hero-overlay/,
+    );
+});
+
+test('split compositions place the photo on either side without changing the brand flow', () => {
+    const imageLeft = render({
+        alignment: 'right',
+        coverImage: '/campaign.jpg',
+    });
+    const imageRight = render({
+        alignment: 'left',
+        coverImage: '/campaign.jpg',
+    });
+    assert.match(
+        imageLeft,
+        /catalog-brand-bar[^>]*@min-\[768px\]\/catalog-hero:col-start-2/,
+    );
+    assert.match(
+        imageLeft,
+        /catalog-hero-media[^>]*@min-\[768px\]\/catalog-hero:col-start-1/,
+    );
+    assert.match(
+        imageRight,
+        /catalog-hero-media[^>]*@min-\[768px\]\/catalog-hero:col-start-2/,
+    );
+    assert.doesNotMatch(imageLeft, /catalog-hero-background/);
+});
+
+test('background composition covers the brand and copy without a separate image pane', () => {
+    const html = render({
+        alignment: 'background',
+        coverImage: '/campaign.jpg',
+    });
+    assert.match(html, /data-testid="catalog-hero-background"/);
+    assert.doesNotMatch(html, /data-testid="catalog-hero-media"/);
+    assert.ok(
+        html.indexOf('catalog-hero-background') <
+            html.indexOf('catalog-brand-bar'),
+    );
+    assert.match(html, /text-white/);
+    assert.doesNotMatch(html, /text-center/);
+    assert.doesNotMatch(html, /grid-cols-\[/);
+});
+
+test('background composition without a campaign image leaves no empty image area', () => {
+    const html = render({ alignment: 'background' });
+    assert.doesNotMatch(
+        html,
+        /catalog-hero-background|catalog-hero-media|text-white/,
+    );
+    assert.match(html, /src="\/logo.png"/);
 });
 
 test('large logos and long brand names stay in the cover flow', () => {

@@ -20,6 +20,7 @@ interface CatalogHeroProps {
     coverImageFocalX: unknown;
     coverImageFocalY: unknown;
     alignment: string;
+    overlayOpacity?: unknown;
     eyebrow: string;
     headline: string;
     subtitle?: string | null;
@@ -45,6 +46,7 @@ export function CatalogHero({
     coverImageFocalX,
     coverImageFocalY,
     alignment,
+    overlayOpacity = 0,
     eyebrow,
     headline,
     subtitle,
@@ -65,7 +67,16 @@ export function CatalogHero({
         }) === 0
             ? ''
             : resolvedHeadline;
-    const centerWithImage = alignment === 'center' && Boolean(coverImage);
+    const imageAsBackground =
+        (alignment === 'center' || alignment === 'background') &&
+        Boolean(coverImage);
+    const splitWithImage =
+        (alignment === 'left' || alignment === 'right') && Boolean(coverImage);
+    const imageOnLeft = splitWithImage && alignment === 'right';
+    const overlayPercent = Number(overlayOpacity);
+    const overlay = Number.isFinite(overlayPercent)
+        ? Math.min(80, Math.max(0, overlayPercent)) / 100
+        : 0;
     const showBrandBar =
         showBrandName || (showLogo && Boolean(logoUrl)) || showProductCount;
     const centerLogoOnly =
@@ -76,8 +87,8 @@ export function CatalogHero({
     const ctaClassName =
         'group mt-7 inline-flex min-h-10 w-full max-w-48 items-center justify-between gap-4 border-b pb-1 text-xs font-semibold transition-opacity hover:opacity-70';
     const ctaStyle = {
-        borderColor: centerWithImage ? 'currentColor' : accentColor,
-        color: centerWithImage ? 'currentColor' : accentColor,
+        borderColor: imageAsBackground ? 'currentColor' : accentColor,
+        color: imageAsBackground ? 'currentColor' : accentColor,
     };
     const ctaContent = (
         <>
@@ -92,16 +103,18 @@ export function CatalogHero({
                 data-testid="catalog-hero-surface"
                 className={cn(
                     'relative isolate grid min-w-0 grid-cols-1 overflow-hidden bg-white/45',
-                    alignment !== 'center' &&
-                        Boolean(coverImage) &&
+                    splitWithImage &&
                         '@min-[768px]/catalog-hero:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] @min-[768px]/catalog-hero:grid-rows-[auto_1fr]',
-                    centerWithImage &&
-                        'min-h-[clamp(32rem,72cqw,48rem)] text-center text-white',
+                    imageOnLeft &&
+                        '@min-[768px]/catalog-hero:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]',
+                    imageAsBackground &&
+                        'min-h-[clamp(32rem,72cqw,48rem)] text-white',
                 )}
             >
-                {centerWithImage && coverImage && (
+                {imageAsBackground && coverImage && (
                     <>
                         <img
+                            data-testid="catalog-hero-background"
                             src={coverImage}
                             alt=""
                             loading="eager"
@@ -114,7 +127,13 @@ export function CatalogHero({
                                 coverImageFocalY,
                             )}
                         />
-                        <div className="absolute inset-0 bg-black/35" />
+                        {overlay > 0 && (
+                            <div
+                                data-testid="catalog-hero-overlay"
+                                className="pointer-events-none absolute inset-0 bg-black"
+                                style={{ opacity: overlay }}
+                            />
+                        )}
                     </>
                 )}
 
@@ -123,7 +142,9 @@ export function CatalogHero({
                         data-testid="catalog-brand-bar"
                         className={cn(
                             'relative z-20 col-start-1 row-start-1 flex min-w-0 flex-col items-start justify-between gap-4 px-8 pt-8 @min-[640px]/catalog-hero:px-10 @min-[640px]/catalog-hero:pt-10',
-                            centerWithImage && 'text-white',
+                            imageAsBackground && 'text-white',
+                            imageOnLeft &&
+                                '@min-[768px]/catalog-hero:col-start-2',
                         )}
                     >
                         <div
@@ -193,12 +214,14 @@ export function CatalogHero({
                         showBrandBar ? 'row-start-2' : 'row-start-1',
                         alignment === 'center' &&
                             'mx-auto w-full max-w-4xl items-center py-16 text-center @min-[640px]/catalog-hero:py-24',
+                        alignment === 'background' && 'w-full max-w-3xl',
+                        imageOnLeft && '@min-[768px]/catalog-hero:col-start-2',
                     )}
                 >
                     <p
                         className="text-xs font-semibold tracking-[0.16em] uppercase"
                         style={{
-                            color: centerWithImage
+                            color: imageAsBackground
                                 ? 'currentColor'
                                 : accentColor,
                         }}
@@ -235,10 +258,14 @@ export function CatalogHero({
                         ))}
                 </div>
 
-                {alignment !== 'center' && coverImage && (
+                {splitWithImage && coverImage && (
                     <div
                         data-testid="catalog-hero-media"
-                        className="relative col-start-1 aspect-[4/3] min-w-0 overflow-hidden @min-[768px]/catalog-hero:col-start-2 @min-[768px]/catalog-hero:row-span-2 @min-[768px]/catalog-hero:row-start-1 @min-[768px]/catalog-hero:aspect-auto @min-[768px]/catalog-hero:min-h-[40rem]"
+                        className={cn(
+                            'relative col-start-1 aspect-[4/3] min-w-0 overflow-hidden @min-[768px]/catalog-hero:col-start-2 @min-[768px]/catalog-hero:row-span-2 @min-[768px]/catalog-hero:row-start-1 @min-[768px]/catalog-hero:aspect-auto @min-[768px]/catalog-hero:min-h-[40rem]',
+                            imageOnLeft &&
+                                '@min-[768px]/catalog-hero:col-start-1',
+                        )}
                     >
                         <img
                             src={coverImage}
