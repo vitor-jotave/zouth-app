@@ -1,11 +1,22 @@
 <?php
 
+it('pins php 85 and the voice processor without an implicit php fallback', function () {
+    $runtime = file_get_contents(dirname(__DIR__, 2).'/nixpacks.toml');
+    expect($runtime)->toContain('php85.withExtensions')
+        ->toContain('php85Packages.composer')
+        ->toContain('PHP_MINOR_VERSION === 5')
+        ->toContain('mkdir -p /var/log/nginx /var/cache/nginx')
+        ->toContain('"ffmpeg"')
+        ->not->toContain('composer install --ignore-platform-reqs')
+        ->not->toContain('nixPkgs = ["..."');
+});
+
 it('streams production process logs to the container output', function () {
     $runtime = file_get_contents(dirname(__DIR__, 2).'/nixpacks.toml');
 
     expect($runtime)
         ->not->toBeFalse()
-        ->not->toContain('/var/log/')
+        ->not->toMatch('~(?:logfile|access_log|error_log)\s*(?:=|\s)\s*/var/log/~')
         ->toContain('logfile=/dev/stdout')
         ->toContain('stdout_logfile=/dev/stdout')
         ->toContain('stdout_logfile_maxbytes=0')
@@ -30,4 +41,14 @@ it('keeps production workers within the vps memory budget', function () {
         ->not->toContain('numprocs=12')
         ->not->toContain('pm.max_children = 50')
         ->not->toContain('pm.start_servers = 18');
+});
+
+it('accepts bounded fastcgi response headers without unbounded buffers', function () {
+    $runtime = file_get_contents(dirname(__DIR__, 2).'/nixpacks.toml');
+
+    expect($runtime)
+        ->toContain('fastcgi_buffer_size 32k;')
+        ->toContain('fastcgi_buffers 8 16k;')
+        ->toContain('fastcgi_busy_buffers_size 64k;')
+        ->not->toContain('fastcgi_buffer_size 8k;');
 });

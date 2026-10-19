@@ -10,7 +10,10 @@ use App\Models\WhatsappMessage;
 use App\Services\EvolutionApiService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -20,14 +23,45 @@ class ProcessWhatsappFunnelStep implements ShouldQueue
 {
     use Queueable;
 
+    public int $tries = 25;
+
+    public int $maxExceptions = 3;
+
+    public int $timeout = 55;
+
+    public bool $failOnTimeout = true;
+
+    /** @return list<int> */
+    public function backoff(): array
+    {
+        return [5, 15, 30];
+    }
+
     public function __construct(public WhatsappFunnelRunStep $stepRun) {}
 
     public function handle(EvolutionApiService $evolution): void
     {
-        $this->stepRun->load('run.conversation.instance');
+        $lock = Cache::lock('whatsapp-funnel-step:'.$this->stepRun->id, 120);
+
+        if (! $lock->get()) {
+            $this->release(5);
+
+            return;
+        }
 
         try {
-            if ($this->stepRun->status === 'sent') {
+            $this->process($evolution);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function process(EvolutionApiService $evolution): void
+    {
+        $this->stepRun->refresh()->load('run.conversation.instance');
+
+        try {
+            if ($this->stepRun->status === 'sent' || in_array($this->stepRun->run->status, ['completed', 'failed'], true)) {
                 return;
             }
 
@@ -48,7 +82,11 @@ class ProcessWhatsappFunnelStep implements ShouldQueue
                 return;
             }
 
-            $this->stepRun->update(['status' => 'sending']);
+            if (! $instance->isConnected()) {
+                throw new \RuntimeException('O WhatsApp foi desconectado. Reconecte o canal antes de enviar novamente.');
+            }
+
+            $this->stepRun->update(['status' => 'sending', 'error_message' => null]);
 
             $message = match ($this->stepRun->type) {
                 'text' => $this->sendTextStep($evolution, $instance->instance_name, $conversation->remote_jid),
@@ -71,29 +109,47 @@ class ProcessWhatsappFunnelStep implements ShouldQueue
 
             $this->dispatchNextStep();
         } catch (Throwable $exception) {
-            $this->stepRun->update([
-                'status' => 'failed',
-                'error_message' => $exception->getMessage(),
-            ]);
+            if ($exception instanceof RequestException && ($exception->response->status() === 429 || $exception->response->serverError())) {
+                $this->stepRun->update(['status' => 'pending', 'error_message' => 'O serviço de WhatsApp está temporariamente indisponível. Tentando novamente.']);
 
-            $this->stepRun->run->update([
-                'status' => 'failed',
-                'completed_at' => now(),
-                'error_message' => $exception->getMessage(),
-            ]);
+                throw $exception;
+            }
 
-            Log::critical('WhatsApp funnel step failed.', [
-                'funnel_run_id' => $this->stepRun->whatsapp_funnel_run_id,
-                'funnel_run_step_id' => $this->stepRun->id,
-                'step_type' => $this->stepRun->type,
-                'exception' => $exception,
-            ]);
+            $this->failed($exception);
         }
+    }
+
+    public function failed(?Throwable $exception): void
+    {
+        $step = $this->stepRun->fresh();
+
+        if (! $step || $step->status === 'sent') {
+            return;
+        }
+
+        $message = $exception instanceof ConnectionException
+            ? 'Não foi possível confirmar o envio. Confira as mensagens na conversa antes de tentar novamente.'
+            : 'Não foi possível concluir o envio. Confira o canal e tente novamente.';
+        $step->update(['status' => 'failed', 'error_message' => $message]);
+        $step->run()->update(['status' => 'failed', 'completed_at' => now(), 'error_message' => $message]);
+
+        Log::critical('WhatsApp funnel step failed.', [
+            'funnel_run_id' => $step->whatsapp_funnel_run_id,
+            'funnel_run_step_id' => $step->id,
+            'step_type' => $step->type,
+            'exception' => $exception,
+        ]);
     }
 
     private function processWaitStep(EvolutionApiService $evolution, string $instanceName, string $remoteJid): void
     {
         $seconds = max((int) ($this->stepRun->payload['seconds'] ?? 1), 1);
+
+        if ($this->stepRun->status === 'waiting' && $this->stepRun->scheduled_at?->isFuture()) {
+            $this->release(max(1, (int) now()->diffInSeconds($this->stepRun->scheduled_at)));
+
+            return;
+        }
 
         if ($this->stepRun->status === 'pending') {
             $presence = $this->presenceForNextStep();
@@ -282,8 +338,10 @@ class ProcessWhatsappFunnelStep implements ShouldQueue
 
     private function ensureSuccessful(Response $response): void
     {
+        $response->throw();
+
         if (! $response->successful()) {
-            throw new \RuntimeException('Erro ao enviar passo do funil.');
+            throw new \RuntimeException('Resposta inesperada do serviço de WhatsApp.');
         }
     }
 

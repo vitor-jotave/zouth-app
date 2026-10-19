@@ -11,9 +11,12 @@ use App\Models\WhatsappFunnelRun;
 use App\Models\WhatsappFunnelStep;
 use App\Models\WhatsappInstance;
 use App\Services\EvolutionApiService;
+use App\Services\WhatsappFunnelRunner;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 
@@ -40,6 +43,31 @@ function createWhatsappFunnelTestContext(): array
     return [$user, $manufacturer, $instance, $conversation];
 }
 
+function funnelAudioUpload(string $extension = 'wav'): UploadedFile
+{
+    $pcm = str_repeat(pack('v', 0), 1600);
+    $wav = 'RIFF'.pack('V', 36 + strlen($pcm)).'WAVEfmt '.pack('VvvVVvv', 16, 1, 1, 8000, 16000, 2, 16).'data'.pack('V', strlen($pcm)).$pcm;
+    $source = UploadedFile::fake()->createWithContent('voz.wav', $wav);
+
+    if ($extension === 'wav') {
+        return $source;
+    }
+
+    $target = tempnam(sys_get_temp_dir(), 'funnel-test-');
+    $format = match ($extension) {
+        'mp3' => ['-c:a', 'libmp3lame', '-f', 'mp3'],
+        'm4a' => ['-c:a', 'aac', '-f', 'mp4'],
+        'aac' => ['-c:a', 'aac', '-f', 'adts'],
+        'ogg' => ['-c:a', 'libopus', '-ar', '48000', '-f', 'ogg'],
+        'webm' => ['-c:a', 'libopus', '-ar', '48000', '-f', 'webm'],
+    };
+    Process::run(['ffmpeg', '-nostdin', '-loglevel', 'error', '-y', '-i', $source->getPathname(), ...$format, $target])->throw();
+    $upload = UploadedFile::fake()->createWithContent('voz.'.$extension, file_get_contents($target));
+    unlink($target);
+
+    return $upload;
+}
+
 it('creates a whatsapp funnel with wait text audio and product steps', function () {
     Storage::fake('s3');
     [$user, $manufacturer] = createWhatsappFunnelTestContext();
@@ -53,7 +81,7 @@ it('creates a whatsapp funnel with wait text audio and product steps', function 
             'steps' => [
                 ['type' => 'wait', 'seconds' => 2],
                 ['type' => 'text', 'body' => 'Oi, tudo bem?'],
-                ['type' => 'audio', 'audio_file' => UploadedFile::fake()->create('audio.mp3', 128, 'audio/mpeg')],
+                ['type' => 'audio', 'audio_file' => funnelAudioUpload()],
                 [
                     'type' => 'product',
                     'product_id' => $product->id,
@@ -72,6 +100,159 @@ it('creates a whatsapp funnel with wait text audio and product steps', function 
     expect($funnel->code)->toBe('SAUDACOES-01');
     expect($funnel->steps()->count())->toBe(4);
     expect($funnel->steps()->where('type', 'audio')->first()->payload['media_path'])->not->toBeEmpty();
+});
+
+it('normalizes real audio formats to opus voice messages', function (string $extension) {
+    Storage::fake('s3');
+    [$user] = createWhatsappFunnelTestContext();
+    $this->actingAs($user)->post('/manufacturer/atendimento/funis', [
+        'name' => 'Áudio real', 'code' => 'AUDIO',
+        'steps' => [['type' => 'audio', 'audio_file' => funnelAudioUpload($extension)]],
+    ])->assertSessionHasNoErrors()->assertRedirect();
+
+    $payload = WhatsappFunnelStep::firstOrFail()->payload;
+    expect($payload['mimetype'])->toBe('audio/ogg')
+        ->and($payload['file_name'])->toBe('voz.ogg');
+    Storage::disk('s3')->assertExists($payload['media_path']);
+    $probe = Process::run(['ffprobe', '-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=codec_name,channels', '-of', 'json', Storage::disk('s3')->path($payload['media_path'])])->throw();
+    $stream = json_decode($probe->output(), true)['streams'][0];
+    expect($stream)->toMatchArray(['codec_name' => 'opus', 'channels' => 1]);
+})->with(['mp3', 'm4a', 'ogg', 'wav', 'aac', 'webm']);
+
+it('rejects corrupt audio without creating a funnel', function () {
+    Storage::fake('s3');
+    [$user] = createWhatsappFunnelTestContext();
+    $this->actingAs($user)->post('/manufacturer/atendimento/funis', [
+        'name' => 'Corrompido', 'code' => 'INVALIDO',
+        'steps' => [['type' => 'audio', 'audio_file' => UploadedFile::fake()->create('fake.mp3', 10, 'audio/mpeg')]],
+    ])->assertSessionHasErrors('steps.0.audio_file');
+    expect(WhatsappFunnel::count())->toBe(0);
+    expect(Storage::disk('s3')->allFiles())->toBeEmpty();
+});
+
+it('updates audio through a multipart post and supports a second save without reupload', function () {
+    Storage::fake('s3');
+    [$user, $manufacturer] = createWhatsappFunnelTestContext();
+    $funnel = WhatsappFunnel::factory()->forManufacturer($manufacturer)->create();
+    $url = "/manufacturer/atendimento/funis/{$funnel->id}";
+    $this->actingAs($user)->post($url, [
+        '_method' => 'put', 'name' => 'Atualizado', 'code' => $funnel->code,
+        'steps' => [['type' => 'audio', 'audio_file' => funnelAudioUpload('m4a')]],
+    ])->assertSessionHasNoErrors()->assertRedirect();
+    $payload = $funnel->steps()->sole()->payload;
+    $this->post($url, [
+        '_method' => 'put', 'name' => 'Salvo novamente', 'code' => $funnel->code,
+        'steps' => [['type' => 'audio', ...$payload]],
+    ])->assertSessionHasNoErrors()->assertRedirect();
+    expect($funnel->fresh()->name)->toBe('Salvo novamente')
+        ->and($funnel->steps()->sole()->payload)->toBe($payload)
+        ->and(Storage::disk('s3')->allFiles())->toHaveCount(1);
+
+    $this->get('/manufacturer/atendimento')
+        ->assertSuccessful()
+        ->assertInertia(fn ($page) => $page
+            ->component('manufacturer/atendimento/index')
+            ->has('funnels', 1)
+            ->where('funnels.0.id', $funnel->id)
+            ->has('funnels.0.steps', 1)
+            ->where('funnels.0.steps.0.type', 'audio')
+            ->where('funnels.0.steps.0.payload.file_name', 'voz.ogg')
+            ->where('funnels.0.steps.0.payload.media_path', $payload['media_path'])
+            ->where('funnels.0.steps.0.payload.mimetype', 'audio/ogg')
+        );
+});
+
+it('does not duplicate an active run on repeated requests', function () {
+    Queue::fake();
+    [$user, $manufacturer, , $conversation] = createWhatsappFunnelTestContext();
+    $funnel = WhatsappFunnel::factory()->forManufacturer($manufacturer)->create();
+    WhatsappFunnelStep::factory()->forFunnel($funnel)->create(['type' => 'text', 'payload' => ['body' => 'Olá']]);
+    $url = "/manufacturer/atendimento/conversations/{$conversation->id}/funnels/{$funnel->id}/runs";
+    $id = $this->actingAs($user)->postJson($url)->assertOk()->json('run.id');
+    $this->postJson($url)->assertOk()->assertJsonPath('run.id', $id);
+    expect(WhatsappFunnelRun::count())->toBe(1);
+    Queue::assertPushed(ProcessWhatsappFunnelStep::class, 1);
+});
+
+it('rejects inactive funnels and disconnected channels', function (string $scenario) {
+    Queue::fake();
+    [$user, $manufacturer, $instance, $conversation] = createWhatsappFunnelTestContext();
+    $funnel = WhatsappFunnel::factory()->forManufacturer($manufacturer)->create(['is_active' => $scenario !== 'inactive']);
+    WhatsappFunnelStep::factory()->forFunnel($funnel)->create();
+    if ($scenario === 'disconnected') {
+        $instance->update(['status' => 'disconnected']);
+    }
+    $this->actingAs($user)->postJson("/manufacturer/atendimento/conversations/{$conversation->id}/funnels/{$funnel->id}/runs")
+        ->assertUnprocessable()->assertJsonValidationErrors('funnel');
+    expect(WhatsappFunnelRun::count())->toBe(0);
+    Queue::assertNothingPushed();
+})->with(['inactive', 'disconnected']);
+
+it('retries temporary failures without marking the run as completed or failed', function (int $status) {
+    Queue::fake();
+    [, $manufacturer, , $conversation] = createWhatsappFunnelTestContext();
+    $funnel = WhatsappFunnel::factory()->forManufacturer($manufacturer)->create();
+    WhatsappFunnelStep::factory()->forFunnel($funnel)->create(['type' => 'text', 'payload' => ['body' => 'Olá']]);
+    $run = app(WhatsappFunnelRunner::class)->start($conversation, $funnel);
+    $step = $run->steps()->sole();
+    $evolution = $this->mock(EvolutionApiService::class);
+    $evolution->shouldReceive('sendText')->once()->andReturn(new \Illuminate\Http\Client\Response(new \GuzzleHttp\Psr7\Response($status)));
+    $evolution->shouldReceive('sendText')->once()->andReturn(new \Illuminate\Http\Client\Response(new \GuzzleHttp\Psr7\Response(200, [], '{"key":{"id":"retry-success"}}')));
+    $job = new ProcessWhatsappFunnelStep($step);
+    expect(fn () => $job->handle($evolution))->toThrow(\Illuminate\Http\Client\RequestException::class);
+    expect($run->fresh()->status)->toBe('running')->and($step->fresh()->status)->toBe('pending');
+    $job->handle($evolution);
+    expect($run->fresh()->status)->toBe('completed')->and($conversation->messages()->count())->toBe(1);
+})->with([429, 503]);
+
+it('refreshes stale jobs and respects the processing lock', function () {
+    Queue::fake();
+    [, $manufacturer, , $conversation] = createWhatsappFunnelTestContext();
+    $funnel = WhatsappFunnel::factory()->forManufacturer($manufacturer)->create();
+    WhatsappFunnelStep::factory()->forFunnel($funnel)->create(['type' => 'text', 'payload' => ['body' => 'Olá']]);
+    $run = app(WhatsappFunnelRunner::class)->start($conversation, $funnel);
+    $step = $run->steps()->sole();
+    $staleJob = new ProcessWhatsappFunnelStep($step->fresh());
+    $job = new ProcessWhatsappFunnelStep($step);
+    $lock = Cache::lock('whatsapp-funnel-step:'.$step->id, 120);
+    $lock->get();
+    $evolution = $this->mock(EvolutionApiService::class);
+    $evolution->shouldReceive('sendText')->once()->andReturn(new \Illuminate\Http\Client\Response(new \GuzzleHttp\Psr7\Response(200, [], '{"key":{"id":"only-once"}}')));
+    $job->handle($evolution);
+    expect($step->fresh()->status)->toBe('pending');
+    $lock->release();
+    $job->handle($evolution);
+    $staleJob->handle($evolution);
+    expect($conversation->messages()->count())->toBe(1);
+});
+
+it('keeps the wait duration when a duplicate job arrives early', function () {
+    Queue::fake();
+    [, $manufacturer, , $conversation] = createWhatsappFunnelTestContext();
+    $funnel = WhatsappFunnel::factory()->forManufacturer($manufacturer)->create();
+    WhatsappFunnelStep::factory()->forFunnel($funnel)->create(['type' => 'wait', 'payload' => ['seconds' => 30]]);
+    $run = app(WhatsappFunnelRunner::class)->start($conversation, $funnel);
+    $step = $run->steps()->sole();
+    $evolution = $this->mock(EvolutionApiService::class);
+    $job = new ProcessWhatsappFunnelStep($step);
+    $job->handle($evolution);
+    $job->handle($evolution);
+    expect($step->fresh()->status)->toBe('waiting');
+    $this->travel(31)->seconds();
+    $job->handle($evolution);
+    expect($run->fresh()->status)->toBe('completed');
+});
+
+it('ends a run when a worker exhausts retries or times out', function () {
+    Queue::fake();
+    Log::spy();
+    [, $manufacturer, , $conversation] = createWhatsappFunnelTestContext();
+    $funnel = WhatsappFunnel::factory()->forManufacturer($manufacturer)->create();
+    WhatsappFunnelStep::factory()->forFunnel($funnel)->create();
+    $run = app(WhatsappFunnelRunner::class)->start($conversation, $funnel);
+    $step = $run->steps()->sole();
+    (new ProcessWhatsappFunnelStep($step))->failed(new RuntimeException('Worker timeout'));
+    expect($step->fresh()->status)->toBe('failed')->and($run->fresh()->status)->toBe('failed');
 });
 
 it('validates required fields for each funnel step type', function () {
@@ -295,6 +476,8 @@ it('starts a funnel run for a conversation and queues the first step', function 
 
     expect($run->conversation_id)->toBe($conversation->id);
     Queue::assertPushed(ProcessWhatsappFunnelStep::class);
+    $this->getJson("/manufacturer/atendimento/funnel-runs/{$run->id}")
+        ->assertOk()->assertHeader('Cache-Control', 'no-store, private');
 });
 
 it('forbids running a funnel or conversation from another manufacturer', function () {

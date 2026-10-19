@@ -37,7 +37,7 @@ class StoreWhatsappFunnelRequest extends FormRequest
             'steps.*.media_path' => ['nullable', 'string', 'max:255'],
             'steps.*.file_name' => ['nullable', 'string', 'max:255'],
             'steps.*.mimetype' => ['nullable', 'string', 'max:100'],
-            'steps.*.audio_file' => ['nullable', 'file', 'mimetypes:audio/mpeg,audio/mp3,audio/ogg,audio/wav,audio/x-wav,audio/mp4,audio/m4a', 'max:20480'],
+            'steps.*.audio_file' => ['nullable', 'file', 'mimetypes:audio/mpeg,audio/mp3,audio/ogg,application/ogg,audio/opus,audio/wav,audio/x-wav,audio/vnd.wave,audio/mp4,audio/m4a,audio/x-m4a,audio/aac,audio/x-aac,audio/x-hx-aac-adts,audio/webm,video/webm', 'max:20480'],
             'steps.*.product_id' => ['nullable', 'integer', 'exists:products,id'],
             'steps.*.include_photo' => ['nullable', 'boolean'],
             'steps.*.include_price' => ['nullable', 'boolean'],
@@ -63,6 +63,16 @@ class StoreWhatsappFunnelRequest extends FormRequest
                 };
             }
         });
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return [
+            'steps.*.audio_file.mimetypes' => 'Envie um áudio MP3, M4A, OGG, WAV, AAC ou WebM.',
+            'steps.*.audio_file.max' => 'Cada áudio deve ter no máximo 20 MB.',
+            'steps.*.audio_file.uploaded' => 'Não foi possível receber o áudio. Tente enviá-lo novamente.',
+        ];
     }
 
     private function requireStepField(Validator $validator, int $index, string $field): void
