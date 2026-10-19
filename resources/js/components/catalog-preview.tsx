@@ -312,6 +312,14 @@ export default function CatalogPreview({
                                         settings.show_logo && settings.logo_url,
                                     )}
                                     logoUrl={settings.logo_url}
+                                    primaryColor={settings.primary_color}
+                                    logoAlignment={sectionValue(
+                                        section,
+                                        'logo_align',
+                                        alignment === 'center'
+                                            ? 'center'
+                                            : 'left',
+                                    )}
                                     logoSize={sectionValue(
                                         section,
                                         'logo_size',

@@ -12,6 +12,7 @@ interface CatalogHeroProps {
     showLogo: boolean;
     logoUrl?: string | null;
     logoSize: unknown;
+    logoAlignment?: unknown;
     showProductCount: boolean;
     productCount: number;
     coverImage?: string | null;
@@ -29,6 +30,7 @@ interface CatalogHeroProps {
     ctaHref?: string;
     headingFont: string;
     accentColor: string;
+    primaryColor?: string;
 }
 
 export function CatalogHero({
@@ -38,6 +40,7 @@ export function CatalogHero({
     showLogo,
     logoUrl,
     logoSize,
+    logoAlignment,
     showProductCount,
     productCount,
     coverImage,
@@ -55,6 +58,7 @@ export function CatalogHero({
     ctaHref,
     headingFont,
     accentColor,
+    primaryColor,
 }: CatalogHeroProps) {
     const resolvedHeadline =
         headline.trim() ||
@@ -79,11 +83,14 @@ export function CatalogHero({
         : 0;
     const showBrandBar =
         showBrandName || (showLogo && Boolean(logoUrl)) || showProductCount;
-    const centerLogoOnly =
-        alignment === 'center' &&
-        showLogo &&
-        !showBrandName &&
-        !showProductCount;
+    const brandAlignment =
+        logoAlignment === 'left' ||
+        logoAlignment === 'center' ||
+        logoAlignment === 'right'
+            ? logoAlignment
+            : alignment === 'center'
+              ? 'center'
+              : 'left';
     const ctaClassName =
         'group mt-7 inline-flex min-h-10 w-full max-w-48 items-center justify-between gap-4 border-b pb-1 text-xs font-semibold transition-opacity hover:opacity-70';
     const ctaStyle = {
@@ -141,7 +148,13 @@ export function CatalogHero({
                     <div
                         data-testid="catalog-brand-bar"
                         className={cn(
-                            'relative z-20 col-start-1 row-start-1 flex min-w-0 flex-col items-start justify-between gap-4 px-8 pt-8 @min-[640px]/catalog-hero:px-10 @min-[640px]/catalog-hero:pt-10',
+                            'relative z-20 col-start-1 row-start-1 flex min-w-0 flex-col gap-4 px-8 pt-8 @min-[640px]/catalog-hero:px-10 @min-[640px]/catalog-hero:pt-10',
+                            brandAlignment === 'left' &&
+                                'items-start text-left',
+                            brandAlignment === 'center' &&
+                                'items-center text-center',
+                            brandAlignment === 'right' &&
+                                'items-end text-right',
                             imageAsBackground && 'text-white',
                             imageOnLeft &&
                                 '@min-[768px]/catalog-hero:col-start-2',
@@ -149,17 +162,22 @@ export function CatalogHero({
                     >
                         <div
                             className={cn(
-                                'flex w-full min-w-0 flex-col items-start gap-4',
-                                centerLogoOnly && 'mx-auto items-center',
+                                'flex w-full min-w-0 flex-col gap-4',
+                                brandAlignment === 'left' && 'items-start',
+                                brandAlignment === 'center' && 'items-center',
+                                brandAlignment === 'right' && 'items-end',
                             )}
                         >
                             {showLogo && logoUrl && (
                                 <div
                                     className={cn(
                                         'inline-flex w-full max-w-full shrink-0 items-center',
-                                        centerLogoOnly
-                                            ? 'justify-center'
-                                            : 'justify-start',
+                                        brandAlignment === 'left' &&
+                                            'justify-start',
+                                        brandAlignment === 'center' &&
+                                            'justify-center',
+                                        brandAlignment === 'right' &&
+                                            'justify-end',
                                     )}
                                 >
                                     <img
@@ -167,9 +185,12 @@ export function CatalogHero({
                                         alt={brandName}
                                         className={cn(
                                             'h-auto object-contain',
-                                            centerLogoOnly
-                                                ? 'object-center'
-                                                : 'object-left',
+                                            brandAlignment === 'left' &&
+                                                'object-left',
+                                            brandAlignment === 'center' &&
+                                                'object-center',
+                                            brandAlignment === 'right' &&
+                                                'object-right',
                                         )}
                                         style={catalogLogoStyle(
                                             logoSize,
@@ -197,8 +218,13 @@ export function CatalogHero({
                         </div>
                         {showProductCount && (
                             <span
-                                className="shrink-0 bg-[var(--brand-primary)] px-2.5 py-1 text-xs font-semibold text-white"
-                                style={{ borderRadius: '9999px' }}
+                                data-testid="catalog-hero-product-count"
+                                className="inline-flex max-w-full shrink-0 items-center px-2.5 py-1 text-xs leading-5 font-semibold whitespace-nowrap text-white"
+                                style={{
+                                    borderRadius: '9999px',
+                                    backgroundColor:
+                                        primaryColor ?? accentColor,
+                                }}
                             >
                                 {productCount}{' '}
                                 {productCount === 1 ? 'produto' : 'produtos'}
