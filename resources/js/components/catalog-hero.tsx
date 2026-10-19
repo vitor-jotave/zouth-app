@@ -55,6 +55,17 @@ export function CatalogHero({
     headingFont,
     accentColor,
 }: CatalogHeroProps) {
+    const resolvedHeadline =
+        headline.trim() ||
+        brandTagline?.trim() ||
+        (showBrandName ? brandName : '');
+    const visibleHeadline =
+        !showBrandName &&
+        resolvedHeadline.localeCompare(brandName.trim(), undefined, {
+            sensitivity: 'accent',
+        }) === 0
+            ? ''
+            : resolvedHeadline;
     const centerWithImage = alignment === 'center' && Boolean(coverImage);
     const showBrandBar =
         showBrandName || (showLogo && Boolean(logoUrl)) || showProductCount;
@@ -204,12 +215,14 @@ export function CatalogHero({
                     >
                         {eyebrow}
                     </p>
-                    <h1
-                        className="mt-4 text-4xl leading-[0.98] font-semibold tracking-[-0.05em] sm:text-5xl lg:text-7xl"
-                        style={{ fontFamily: headingFont }}
-                    >
-                        {headline}
-                    </h1>
+                    {visibleHeadline && (
+                        <h1
+                            className="mt-4 text-4xl leading-[0.98] font-semibold tracking-[-0.05em] sm:text-5xl lg:text-7xl"
+                            style={{ fontFamily: headingFont }}
+                        >
+                            {visibleHeadline}
+                        </h1>
+                    )}
                     {subtitle && (
                         <p className="mt-5 max-w-xl text-sm leading-6 opacity-65">
                             {subtitle}
