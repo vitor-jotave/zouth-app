@@ -66,6 +66,52 @@ function catalogSettingsUpdatePayload(array $overrides = []): array
     ];
 }
 
+it('persists the full background composition for the editor and public catalog', function () {
+    $setting = createCatalogSettingFor($this->manufacturer);
+    $sections = CatalogSetting::defaultSections();
+    $sections[0]['props']['align'] = 'background';
+    $sections[0]['props']['overlay_opacity'] = 25;
+
+    $this->actingAs($this->user)
+        ->put(route('manufacturer.catalog-settings.update'), catalogSettingsUpdatePayload([
+            'sections' => $sections,
+        ]))
+        ->assertSessionHasNoErrors();
+
+    expect($setting->fresh()->sections[0]['props']['align'])->toBe('background')
+        ->and($setting->fresh()->sections[0]['props']['overlay_opacity'])->toBe(25);
+
+    $this->get(route('manufacturer.catalog-settings.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('catalog_settings.sections.0.props.align', 'background')->where('catalog_settings.sections.0.props.overlay_opacity', 25));
+
+    $this->get(route('public.catalog.show', ['token' => $setting->public_token]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('catalog_settings.sections.0.props.align', 'background')->where('catalog_settings.sections.0.props.overlay_opacity', 25));
+});
+
+it('saves either side of the split cover photo', function (string $alignment) {
+    $setting = createCatalogSettingFor($this->manufacturer);
+    $sections = CatalogSetting::defaultSections();
+    $sections[0]['props']['align'] = $alignment;
+    $sections[0]['props']['overlay_opacity'] = 0;
+
+    $this->actingAs($this->user)
+        ->put(route('manufacturer.catalog-settings.update'), catalogSettingsUpdatePayload(['sections' => $sections]))
+        ->assertSessionHasNoErrors();
+
+    expect($setting->fresh()->sections[0]['props']['align'])->toBe($alignment);
+})->with(['left', 'right']);
+
+it('rejects invalid photo dimming intensity', function (mixed $opacity) {
+    $sections = CatalogSetting::defaultSections();
+    $sections[0]['props']['overlay_opacity'] = $opacity;
+
+    $this->actingAs($this->user)
+        ->put(route('manufacturer.catalog-settings.update'), catalogSettingsUpdatePayload(['sections' => $sections]))
+        ->assertSessionHasErrors('sections.0.props.overlay_opacity');
+})->with([-1, 81, 'invalid']);
+
 it('shows the catalog settings page', function () {
     $response = $this->actingAs($this->user)
         ->get(route('manufacturer.catalog-settings.index'));

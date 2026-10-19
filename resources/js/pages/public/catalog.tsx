@@ -2461,6 +2461,7 @@ function MinimalLayout({
                         coverImageFocalX={settings.cover_image_focal_x}
                         coverImageFocalY={settings.cover_image_focal_y}
                         alignment={heroAlign}
+                        overlayOpacity={heroSection?.props?.overlay_opacity}
                         eyebrow={heroEyebrow}
                         headline={heroHeadline}
                         subtitle={heroSubtitle}

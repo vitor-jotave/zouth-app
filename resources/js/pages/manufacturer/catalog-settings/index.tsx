@@ -1522,29 +1522,112 @@ export default function CatalogSettings({
                             </div>
                             <SegmentedControl
                                 label="Composição da capa"
-                                value={sectionProp(
-                                    selectedSection,
-                                    'align',
-                                    'left',
-                                )}
+                                value={
+                                    sectionProp<string>(
+                                        selectedSection,
+                                        'align',
+                                        'left',
+                                    ) === 'right'
+                                        ? 'left'
+                                        : sectionProp(
+                                              selectedSection,
+                                              'align',
+                                              'left',
+                                          )
+                                }
                                 options={[
                                     {
                                         value: 'left',
-                                        label: 'Imagem + texto',
+                                        label: 'Lado a lado',
                                         icon: <AlignLeft className="size-4" />,
                                     },
                                     {
                                         value: 'center',
-                                        label: 'Só texto',
+                                        label: 'Centralizado',
                                         icon: (
                                             <AlignCenter className="size-4" />
                                         ),
+                                    },
+                                    {
+                                        value: 'background',
+                                        label: 'Imagem de fundo',
+                                        icon: <ImageIcon className="size-4" />,
                                     },
                                 ]}
                                 onChange={(value) =>
                                     updateSectionProp('hero', 'align', value)
                                 }
                             />
+                            {['left', 'right'].includes(
+                                sectionProp(selectedSection, 'align', 'left'),
+                            ) && (
+                                <SegmentedControl
+                                    label="Posição da imagem"
+                                    value={sectionProp(
+                                        selectedSection,
+                                        'align',
+                                        'left',
+                                    )}
+                                    options={[
+                                        { value: 'right', label: 'À esquerda' },
+                                        { value: 'left', label: 'À direita' },
+                                    ]}
+                                    onChange={(value) =>
+                                        updateSectionProp(
+                                            'hero',
+                                            'align',
+                                            value,
+                                        )
+                                    }
+                                />
+                            )}
+                            {['center', 'background'].includes(
+                                sectionProp(selectedSection, 'align', 'left'),
+                            ) && (
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <Label
+                                            htmlFor="hero-overlay"
+                                            className="text-xs"
+                                        >
+                                            Escurecimento da foto
+                                        </Label>
+                                        <span className="text-xs text-muted-foreground">
+                                            {sectionProp(
+                                                selectedSection,
+                                                'overlay_opacity',
+                                                0,
+                                            )}
+                                            %
+                                        </span>
+                                    </div>
+                                    <Slider
+                                        id="hero-overlay"
+                                        aria-label="Escurecimento da foto"
+                                        min={0}
+                                        max={80}
+                                        step={5}
+                                        value={[
+                                            sectionProp(
+                                                selectedSection,
+                                                'overlay_opacity',
+                                                0,
+                                            ),
+                                        ]}
+                                        onValueChange={([value]) =>
+                                            updateSectionProp(
+                                                'hero',
+                                                'overlay_opacity',
+                                                value,
+                                            )
+                                        }
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Opcional. Em 0%, a foto aparece sem
+                                        filtro.
+                                    </p>
+                                </div>
+                            )}
                             <SegmentedControl
                                 label="Exibição da marca"
                                 value={brandDisplay}
@@ -3203,7 +3286,7 @@ export default function CatalogSettings({
                 }}
                 aspectRatio={null}
                 title="Ajustar logo"
-                description="Recorte próximo da marca. O catálogo preserva o formato original sem cortar a assinatura."
+                description="Recorte próximo da marca. O fundo transparente é preservado por padrão, inclusive em PNG e SVG. Escolher uma cor é opcional."
                 allowTransparentBackground
             />
         </AppLayout>

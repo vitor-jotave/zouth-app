@@ -75,14 +75,11 @@ export function ImageCropDialog({
     const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
     const [processing, setProcessing] = useState(false);
     const [scale, setScale] = useState(1);
-    const [bgColor, setBgColor] = useState<string | null>('#ffffff');
+    const [bgColor, setBgColor] = useState<string | null>(
+        allowTransparentBackground ? null : '#ffffff',
+    );
     const imgRef = useRef<HTMLImageElement>(null);
-    const canUseTransparency =
-        allowTransparentBackground &&
-        imageFile !== null &&
-        (imageFile.type === 'image/png' ||
-            imageFile.type === 'image/webp' ||
-            /\.(png|webp)$/i.test(imageFile.name));
+    const canUseTransparency = allowTransparentBackground;
 
     // Cria a blob URL uma única vez por arquivo e revoga quando o componente desmonta
     // ou o arquivo muda — evita recriar a URL a cada render e recarregar a imagem.
@@ -305,7 +302,7 @@ export function ImageCropDialog({
                                     aria-pressed={bgColor === null}
                                     onClick={() => setBgColor(null)}
                                     className={cn(
-                                        'relative size-8 overflow-hidden rounded-md border-2 transition-all',
+                                        'relative h-8 overflow-hidden rounded-md border-2 px-2 text-xs font-medium text-black transition-all',
                                         bgColor === null
                                             ? 'scale-110 border-primary shadow-md'
                                             : 'border-transparent hover:border-muted-foreground/50',
@@ -318,7 +315,9 @@ export function ImageCropDialog({
                                             '0 0, 0 6px, 6px -6px, -6px 0',
                                         backgroundSize: '12px 12px',
                                     }}
-                                />
+                                >
+                                    Transparente
+                                </button>
                             )}
 
                             {BG_PRESETS.map((preset) => (
