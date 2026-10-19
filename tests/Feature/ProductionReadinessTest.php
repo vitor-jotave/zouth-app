@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Vite;
 
 it('exposes liveness and readiness endpoints', function () {
     $this->get('/up')->assertSuccessful();
@@ -15,6 +16,38 @@ it('exposes liveness and readiness endpoints', function () {
             'checks' => ['database' => true, 'cache' => true],
         ]);
 });
+
+it('bounds asset preload headers while retaining production security headers', function (int $assetCount) {
+    $originalEnvironment = app()->environment();
+    app()->detectEnvironment(fn (): string => 'production');
+
+    try {
+        $assets = [];
+        for ($index = 0; $index < $assetCount; $index++) {
+            $assets['https://zouth.app/build/assets/chunk-'.$index.'.js'] = [
+                'rel=modulepreload', 'as=script', 'nonce="'.str_repeat('a', 40).'"',
+            ];
+        }
+
+        Vite::partialMock()->shouldReceive('preloadedAssets')->andReturn($assets);
+        Route::middleware('web')->get('/_tests/preload-headers', fn () => response('Página disponível'));
+        $response = $this->get('/_tests/preload-headers')->assertSuccessful()
+            ->assertHeader('X-Content-Type-Options', 'nosniff')
+            ->assertHeader('X-Frame-Options', 'SAMEORIGIN');
+
+        expect($response->headers->get('Content-Security-Policy'))->toContain("script-src 'self' 'nonce-");
+
+        if ($assetCount === 0) {
+            $response->assertHeaderMissing('Link');
+        } else {
+            $link = $response->headers->get('Link');
+            expect(substr_count($link, 'rel=modulepreload'))->toBe(min(6, $assetCount))
+                ->and(strlen($link))->toBeLessThan(1500);
+        }
+    } finally {
+        app()->detectEnvironment(fn (): string => $originalEnvironment);
+    }
+})->with([0, 3, 80]);
 
 it('trusts forwarded https headers from configured production proxies', function () {
     config([
