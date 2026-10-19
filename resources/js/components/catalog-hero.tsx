@@ -2,7 +2,6 @@ import { ArrowRight } from 'lucide-react';
 import {
     catalogCoverImageStyle,
     catalogLogoStyle,
-    normalizeCatalogLogoSize,
 } from '@/lib/catalog-theming';
 import { cn } from '@/lib/utils';
 
@@ -69,12 +68,6 @@ export function CatalogHero({
     const centerWithImage = alignment === 'center' && Boolean(coverImage);
     const showBrandBar =
         showBrandName || (showLogo && Boolean(logoUrl)) || showProductCount;
-    const brandReserve = showBrandBar
-        ? Math.max(
-              128,
-              Math.round(112 * (normalizeCatalogLogoSize(logoSize) / 100) + 64),
-          )
-        : 0;
     const centerLogoOnly =
         alignment === 'center' &&
         showLogo &&
@@ -94,116 +87,113 @@ export function CatalogHero({
     );
 
     return (
-        <div
-            data-testid="catalog-hero-surface"
-            className={cn(
-                'relative flex flex-col overflow-hidden bg-white/45',
-                centerWithImage &&
-                    'min-h-[clamp(32rem,72vw,48rem)] text-center text-white',
-            )}
-        >
-            {centerWithImage && coverImage && (
-                <>
-                    <img
-                        src={coverImage}
-                        alt=""
-                        loading="eager"
-                        fetchPriority="high"
-                        className="absolute inset-0 h-full w-full"
-                        style={catalogCoverImageStyle(
-                            coverImageFit,
-                            coverImageScale,
-                            coverImageFocalX,
-                            coverImageFocalY,
-                        )}
-                    />
-                    <div className="absolute inset-0 bg-black/35" />
-                </>
-            )}
-
-            {showBrandBar && (
-                <div
-                    data-testid="catalog-brand-bar"
-                    className={cn(
-                        'absolute inset-x-0 top-0 z-20 flex flex-col items-start justify-between gap-4 px-8 pt-8 sm:flex-row sm:items-center sm:px-10 sm:pt-10',
-                        centerWithImage && 'text-white',
-                    )}
-                >
-                    <div
-                        className={cn(
-                            'flex max-w-full flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6',
-                            centerLogoOnly && 'mx-auto items-center',
-                        )}
-                    >
-                        {showLogo && logoUrl && (
-                            <div
-                                className={cn(
-                                    'inline-flex max-w-full shrink-0 items-center',
-                                    centerLogoOnly
-                                        ? 'justify-center'
-                                        : 'justify-start',
-                                )}
-                            >
-                                <img
-                                    src={logoUrl}
-                                    alt={brandName}
-                                    className={cn(
-                                        'h-auto object-contain',
-                                        centerLogoOnly
-                                            ? 'object-center'
-                                            : 'object-left',
-                                    )}
-                                    style={catalogLogoStyle(logoSize, 320, 112)}
-                                />
-                            </div>
-                        )}
-                        {showBrandName && (
-                            <div className="min-w-0">
-                                <p
-                                    className="text-2xl font-semibold tracking-[-0.04em]"
-                                    style={{ fontFamily: headingFont }}
-                                >
-                                    {brandName}
-                                </p>
-                                {brandTagline && (
-                                    <p className="mt-1 text-sm opacity-70">
-                                        {brandTagline}
-                                    </p>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                    {showProductCount && (
-                        <span
-                            className="shrink-0 bg-[var(--brand-primary)] px-2.5 py-1 text-xs font-semibold text-white"
-                            style={{ borderRadius: '9999px' }}
-                        >
-                            {productCount}{' '}
-                            {productCount === 1 ? 'produto' : 'produtos'}
-                        </span>
-                    )}
-                </div>
-            )}
-
+        <div className="@container/catalog-hero">
             <div
+                data-testid="catalog-hero-surface"
                 className={cn(
-                    'relative grid flex-1',
-                    alignment === 'center'
-                        ? 'grid-cols-1 place-items-center text-center'
-                        : 'md:grid-cols-[0.8fr_1.2fr]',
+                    'relative isolate grid min-w-0 grid-cols-1 overflow-hidden bg-white/45',
+                    alignment !== 'center' &&
+                        Boolean(coverImage) &&
+                        '@min-[768px]/catalog-hero:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] @min-[768px]/catalog-hero:grid-rows-[auto_1fr]',
+                    centerWithImage &&
+                        'min-h-[clamp(32rem,72cqw,48rem)] text-center text-white',
                 )}
             >
+                {centerWithImage && coverImage && (
+                    <>
+                        <img
+                            src={coverImage}
+                            alt=""
+                            loading="eager"
+                            fetchPriority="high"
+                            className="absolute inset-0 h-full w-full"
+                            style={catalogCoverImageStyle(
+                                coverImageFit,
+                                coverImageScale,
+                                coverImageFocalX,
+                                coverImageFocalY,
+                            )}
+                        />
+                        <div className="absolute inset-0 bg-black/35" />
+                    </>
+                )}
+
+                {showBrandBar && (
+                    <div
+                        data-testid="catalog-brand-bar"
+                        className={cn(
+                            'relative z-20 col-start-1 row-start-1 flex min-w-0 flex-col items-start justify-between gap-4 px-8 pt-8 @min-[640px]/catalog-hero:px-10 @min-[640px]/catalog-hero:pt-10',
+                            centerWithImage && 'text-white',
+                        )}
+                    >
+                        <div
+                            className={cn(
+                                'flex w-full min-w-0 flex-col items-start gap-4',
+                                centerLogoOnly && 'mx-auto items-center',
+                            )}
+                        >
+                            {showLogo && logoUrl && (
+                                <div
+                                    className={cn(
+                                        'inline-flex w-full max-w-full shrink-0 items-center',
+                                        centerLogoOnly
+                                            ? 'justify-center'
+                                            : 'justify-start',
+                                    )}
+                                >
+                                    <img
+                                        src={logoUrl}
+                                        alt={brandName}
+                                        className={cn(
+                                            'h-auto object-contain',
+                                            centerLogoOnly
+                                                ? 'object-center'
+                                                : 'object-left',
+                                        )}
+                                        style={catalogLogoStyle(
+                                            logoSize,
+                                            320,
+                                            112,
+                                        )}
+                                    />
+                                </div>
+                            )}
+                            {showBrandName && (
+                                <div className="min-w-0">
+                                    <p
+                                        className="text-2xl font-semibold tracking-[-0.04em] wrap-anywhere"
+                                        style={{ fontFamily: headingFont }}
+                                    >
+                                        {brandName}
+                                    </p>
+                                    {brandTagline && (
+                                        <p className="mt-1 text-sm opacity-70">
+                                            {brandTagline}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                        {showProductCount && (
+                            <span
+                                className="shrink-0 bg-[var(--brand-primary)] px-2.5 py-1 text-xs font-semibold text-white"
+                                style={{ borderRadius: '9999px' }}
+                            >
+                                {productCount}{' '}
+                                {productCount === 1 ? 'produto' : 'produtos'}
+                            </span>
+                        )}
+                    </div>
+                )}
+
                 <div
+                    data-testid="catalog-hero-copy"
                     className={cn(
-                        'relative z-10 flex min-h-[24rem] flex-col justify-center px-8 py-12 sm:px-10 sm:py-16 md:min-h-72',
+                        'relative z-10 col-start-1 flex min-w-0 flex-col justify-center px-8 py-12 @min-[640px]/catalog-hero:px-10 @min-[640px]/catalog-hero:py-16',
+                        showBrandBar ? 'row-start-2' : 'row-start-1',
                         alignment === 'center' &&
-                            'mx-auto max-w-4xl items-center py-16 sm:py-24',
+                            'mx-auto w-full max-w-4xl items-center py-16 text-center @min-[640px]/catalog-hero:py-24',
                     )}
-                    style={
-                        brandReserve > 0
-                            ? { paddingTop: `${brandReserve}px` }
-                            : undefined
-                    }
                 >
                     <p
                         className="text-xs font-semibold tracking-[0.16em] uppercase"
@@ -217,7 +207,7 @@ export function CatalogHero({
                     </p>
                     {visibleHeadline && (
                         <h1
-                            className="mt-4 text-4xl leading-[0.98] font-semibold tracking-[-0.05em] sm:text-5xl lg:text-7xl"
+                            className="mt-4 max-w-full text-4xl leading-[0.98] font-semibold tracking-[-0.05em] wrap-anywhere @min-[640px]/catalog-hero:text-5xl @min-[1024px]/catalog-hero:text-7xl"
                             style={{ fontFamily: headingFont }}
                         >
                             {visibleHeadline}
@@ -246,13 +236,16 @@ export function CatalogHero({
                 </div>
 
                 {alignment !== 'center' && coverImage && (
-                    <div className="min-h-80 overflow-hidden md:min-h-[40rem]">
+                    <div
+                        data-testid="catalog-hero-media"
+                        className="relative col-start-1 aspect-[4/3] min-w-0 overflow-hidden @min-[768px]/catalog-hero:col-start-2 @min-[768px]/catalog-hero:row-span-2 @min-[768px]/catalog-hero:row-start-1 @min-[768px]/catalog-hero:aspect-auto @min-[768px]/catalog-hero:min-h-[40rem]"
+                    >
                         <img
                             src={coverImage}
                             alt={headline}
                             loading="eager"
                             fetchPriority="high"
-                            className="h-full min-h-80 w-full md:min-h-[40rem]"
+                            className="absolute inset-0 h-full w-full"
                             style={catalogCoverImageStyle(
                                 coverImageFit,
                                 coverImageScale,

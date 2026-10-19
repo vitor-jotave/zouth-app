@@ -101,3 +101,46 @@ test('a campaign tagline remains available without restoring the brand name', ()
         /<h1[^>]*>Feita para descobrir<\/h1>/,
     );
 });
+
+test('cover fitting controls reach the shared image in both compositions', () => {
+    for (const alignment of ['left', 'center']) {
+        for (const fit of ['cover', 'contain', 'fill', 'manual']) {
+            const html = render({
+                alignment,
+                coverImage: '/campaign.jpg',
+                coverImageFit: fit,
+                coverImageScale: 150,
+                coverImageFocalX: 25,
+                coverImageFocalY: 75,
+            });
+            assert.match(html, /src="\/campaign.jpg"/);
+            assert.ok(
+                html.includes(
+                    `object-fit:${fit === 'manual' ? 'contain' : fit}`,
+                ),
+            );
+            assert.ok(html.includes('object-position:25% 75%'));
+            assert.equal(
+                html.includes('transform:scale(1.5)'),
+                fit === 'manual',
+            );
+            if (fit === 'manual') {
+                assert.ok(html.includes('transform-origin:25% 75%'));
+            }
+        }
+    }
+});
+
+test('large logos and long brand names stay in the cover flow', () => {
+    const html = render({
+        showBrandName: true,
+        logoSize: 200,
+        brandName: 'Uma marca com um nome muito longo para uma capa mobile',
+        coverImage: '/campaign.jpg',
+        alignment: 'left',
+    });
+    assert.match(html, /data-testid="catalog-brand-bar" class="relative/);
+    assert.match(html, /data-testid="catalog-hero-copy"/);
+    assert.match(html, /data-testid="catalog-hero-media"/);
+    assert.doesNotMatch(html, /padding-top:\d+px/);
+});
