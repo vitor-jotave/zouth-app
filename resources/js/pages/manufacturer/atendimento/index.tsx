@@ -33,6 +33,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import AppLayout from '@/layouts/app-layout';
 import atendimento from '@/routes/manufacturer/atendimento';
+import { show as showFunnelRun } from '@/routes/manufacturer/atendimento/funnel-runs';
 import { reaction as messageReactionRoute } from '@/routes/manufacturer/atendimento/messages';
 import type { BreadcrumbItem } from '@/types';
 import { AtendimentoWorkspace } from './components/atendimento-workspace';
@@ -272,7 +273,9 @@ export default function AtendimentoIndex({
         useState<FunnelActionFeedback | null>(null);
     const [funnelDialogOpen, setFunnelDialogOpen] = useState(false);
     const [startingFunnel, setStartingFunnel] = useState(false);
+    const [funnelError, setFunnelError] = useState<string | null>(null);
     const [activeRun, setActiveRun] = useState<WhatsappFunnelRun | null>(null);
+    const activeRunId = activeRun?.id;
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const funnelFeedbackTimeoutRef = useRef<number | null>(null);
@@ -424,19 +427,23 @@ export default function AtendimentoIndex({
     }, [productDialogOpen, productSearch]);
 
     useEffect(() => {
-        if (!activeRun || !funnelRunning) return;
+        if (!activeRunId || !funnelRunning) return;
+
+        let inFlight = false;
+        const controller = new AbortController();
 
         const interval = window.setInterval(async () => {
+            if (inFlight) return;
+            inFlight = true;
             try {
-                const res = await fetch(
-                    `/manufacturer/atendimento/funnel-runs/${activeRun.id}`,
-                    {
-                        headers: {
-                            Accept: 'application/json',
-                            'X-Requested-With': 'XMLHttpRequest',
-                        },
+                const res = await fetch(showFunnelRun(activeRunId).url, {
+                    cache: 'no-store',
+                    signal: controller.signal,
+                    headers: {
+                        Accept: 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
                     },
-                );
+                });
 
                 if (res.ok) {
                     const data = await res.json();
@@ -446,11 +453,13 @@ export default function AtendimentoIndex({
                 // Ignore
             }
 
-            if (active_conversation) {
+            if (active_conversation && !controller.signal.aborted) {
                 try {
                     const res = await fetch(
                         `/manufacturer/atendimento/conversations/${active_conversation.id}/messages`,
                         {
+                            cache: 'no-store',
+                            signal: controller.signal,
                             headers: {
                                 Accept: 'application/json',
                                 'X-Requested-With': 'XMLHttpRequest',
@@ -466,10 +475,19 @@ export default function AtendimentoIndex({
                     // Ignore
                 }
             }
+            inFlight = false;
         }, 2000);
 
-        return () => window.clearInterval(interval);
-    }, [activeRun, funnelRunning, active_conversation, replacePolledMessages]);
+        return () => {
+            controller.abort();
+            window.clearInterval(interval);
+        };
+    }, [
+        activeRunId,
+        funnelRunning,
+        active_conversation,
+        replacePolledMessages,
+    ]);
 
     useEffect(() => {
         if (
@@ -483,6 +501,11 @@ export default function AtendimentoIndex({
 
         if (activeRun.status === 'failed') {
             setFunnelActionFeedback(null);
+            setFunnelError(
+                activeRun.steps.find((step) => step.error_message)
+                    ?.error_message ??
+                    'Não foi possível concluir o funil. Confira a conexão do canal.',
+            );
 
             return;
         }
@@ -835,6 +858,7 @@ export default function AtendimentoIndex({
         }
 
         setFunnelActionFeedback(feedback);
+        setFunnelError(null);
         setStartingFunnel(true);
 
         try {
@@ -852,17 +876,27 @@ export default function AtendimentoIndex({
 
             if (!res.ok) {
                 setFunnelActionFeedback(null);
+                setFunnelError(
+                    'Não foi possível iniciar o funil. Confira se ele está ativo e se o WhatsApp está conectado.',
+                );
 
                 return;
             }
 
             const data = await res.json();
             setActiveRun(data.run);
+            setFunnelActionFeedback({
+                ...feedback,
+                funnelId: data.run.funnel.id,
+            });
             setFunnelDialogOpen(false);
             setSelectedFunnel(null);
             setSelectedFunnelTrigger(null);
         } catch {
             setFunnelActionFeedback(null);
+            setFunnelError(
+                'Não foi possível confirmar o envio. Confira a conexão antes de tentar novamente.',
+            );
         } finally {
             setStartingFunnel(false);
         }
@@ -923,6 +957,26 @@ export default function AtendimentoIndex({
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Chat" />
+            <Dialog
+                open={Boolean(funnelError)}
+                onOpenChange={(open) => {
+                    if (!open) setFunnelError(null);
+                }}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>
+                            Não foi possível concluir o funil
+                        </DialogTitle>
+                        <DialogDescription>{funnelError}</DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button onClick={() => setFunnelError(null)}>
+                            Entendi
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
             <AtendimentoWorkspace
                 conversations={conversations}
                 activeConversation={active_conversation}

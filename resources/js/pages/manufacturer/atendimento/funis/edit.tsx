@@ -161,7 +161,7 @@ function stepPayload(step: StepForm): FunnelStepPayload {
                 : step.seconds,
         body: step.body,
         media_path: step.media_path,
-        file_name: step.file_name,
+        file_name: step.audio_file?.name ?? step.file_name,
         mimetype: step.mimetype,
         product_id:
             typeof step.product_id === 'string'
@@ -476,6 +476,7 @@ export default function AtendimentoFunisEdit({
 
         form.transform((data) => ({
             ...data,
+            _method: 'put',
             steps: data.steps.map((step) => ({
                 type: step.type,
                 seconds: step.seconds,
@@ -491,9 +492,26 @@ export default function AtendimentoFunisEdit({
                 include_sku: step.include_sku,
             })),
         }));
-        form.put(update(funnel.id).url, {
+        form.post(update(funnel.id).url, {
             forceFormData: true,
             preserveScroll: true,
+            onSuccess: (page) => {
+                const saved = page.props.funnel as unknown as WhatsappFunnel;
+                const steps = saved.steps.map(stepFromPayload);
+                const data = {
+                    name: saved.name,
+                    code: saved.code,
+                    is_active: saved.is_active,
+                    steps,
+                };
+                form.setData(data);
+                form.setDefaults(data);
+                setSelectedStepId(
+                    steps[selectedIndex]?.clientId ??
+                        steps[0]?.clientId ??
+                        null,
+                );
+            },
         });
     };
 
@@ -915,7 +933,7 @@ export default function AtendimentoFunisEdit({
                                         <Input
                                             id={`step-${selectedIndex}-audio`}
                                             type="file"
-                                            accept="audio/*"
+                                            accept=".mp3,.ogg,.opus,.wav,.m4a,.mp4,.aac,.webm,audio/*"
                                             className="sr-only"
                                             onChange={(event) =>
                                                 updateStep(selectedIndex, {

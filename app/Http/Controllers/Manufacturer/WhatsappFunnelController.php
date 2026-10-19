@@ -5,13 +5,14 @@ namespace App\Http\Controllers\Manufacturer;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreWhatsappFunnelRequest;
 use App\Http\Requests\UpdateWhatsappFunnelRequest;
-use App\Jobs\ProcessWhatsappFunnelStep;
 use App\Models\Product;
 use App\Models\WhatsappConversation;
 use App\Models\WhatsappFunnel;
 use App\Models\WhatsappFunnelRun;
 use App\Models\WhatsappFunnelStep;
 use App\Services\TenantManager;
+use App\Services\WhatsappFunnelAudioProcessor;
+use App\Services\WhatsappFunnelRunner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -167,35 +168,7 @@ class WhatsappFunnelController extends Controller
         $this->authorize('sendMessage', $conversation);
         $this->ensureOwnFunnel($request, $funnel, notFound: true);
 
-        $funnel->load('steps');
-
-        $run = DB::transaction(function () use ($conversation, $funnel) {
-            $run = WhatsappFunnelRun::create([
-                'whatsapp_funnel_id' => $funnel->id,
-                'whatsapp_conversation_id' => $conversation->id,
-                'status' => 'pending',
-            ]);
-
-            foreach ($funnel->steps as $step) {
-                $run->steps()->create([
-                    'whatsapp_funnel_step_id' => $step->id,
-                    'type' => $step->type,
-                    'sort_order' => $step->sort_order,
-                    'payload' => $step->payload,
-                    'status' => 'pending',
-                ]);
-            }
-
-            return $run;
-        });
-
-        $firstStep = $run->steps()->orderBy('sort_order')->first();
-
-        if ($firstStep) {
-            ProcessWhatsappFunnelStep::dispatch($firstStep);
-        } else {
-            $run->update(['status' => 'completed', 'completed_at' => now()]);
-        }
+        $run = app(WhatsappFunnelRunner::class)->start($conversation, $funnel);
 
         return response()->json(['run' => $this->runPayload($run->refresh())]);
     }
@@ -205,7 +178,8 @@ class WhatsappFunnelController extends Controller
         $run->load('conversation.instance', 'steps.message', 'funnel');
         $this->authorize('sendMessage', $run->conversation);
 
-        return response()->json(['run' => $this->runPayload($run)]);
+        return response()->json(['run' => $this->runPayload($run)])
+            ->header('Cache-Control', 'private, no-store');
     }
 
     private function ensureOwnFunnel(Request $request, WhatsappFunnel $funnel, bool $notFound = false): void
@@ -263,11 +237,7 @@ class WhatsappFunnelController extends Controller
         $file = $request->file("steps.{$index}.audio_file");
 
         if ($file) {
-            return [
-                'media_path' => $file->store('whatsapp-funnels/audio', 's3'),
-                'file_name' => $file->getClientOriginalName(),
-                'mimetype' => $file->getMimeType() ?: 'audio/mpeg',
-            ];
+            return app(WhatsappFunnelAudioProcessor::class)->store($file, "steps.{$index}.audio_file");
         }
 
         return [

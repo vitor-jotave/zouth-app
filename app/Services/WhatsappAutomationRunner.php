@@ -2,14 +2,11 @@
 
 namespace App\Services;
 
-use App\Jobs\ProcessWhatsappFunnelStep;
 use App\Models\WhatsappAutomation;
 use App\Models\WhatsappConversation;
 use App\Models\WhatsappFunnel;
-use App\Models\WhatsappFunnelRun;
 use App\Models\WhatsappMessage;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class WhatsappAutomationRunner
@@ -137,34 +134,10 @@ class WhatsappAutomationRunner
             return;
         }
 
-        $run = DB::transaction(function () use ($conversation, $funnel) {
-            $run = WhatsappFunnelRun::create([
-                'whatsapp_funnel_id' => $funnel->id,
-                'whatsapp_conversation_id' => $conversation->id,
-                'status' => 'pending',
-            ]);
-
-            foreach ($funnel->steps as $step) {
-                $run->steps()->create([
-                    'whatsapp_funnel_step_id' => $step->id,
-                    'type' => $step->type,
-                    'sort_order' => $step->sort_order,
-                    'payload' => $step->payload,
-                    'status' => 'pending',
-                ]);
-            }
-
-            return $run;
-        });
-
-        $firstStep = $run->steps()->orderBy('sort_order')->first();
-
-        if ($firstStep) {
-            ProcessWhatsappFunnelStep::dispatch($firstStep);
-
+        if (! $conversation->instance->isConnected()) {
             return;
         }
 
-        $run->update(['status' => 'completed', 'completed_at' => now()]);
+        app(WhatsappFunnelRunner::class)->start($conversation, $funnel);
     }
 }
