@@ -2452,6 +2452,8 @@ function MinimalLayout({
                         showBrandName={showBrandName}
                         showLogo={showLogo}
                         logoUrl={settings.logo_url}
+                        primaryColor={settings.primary_color}
+                        logoAlignment={heroSection?.props?.logo_align}
                         logoSize={logoSize}
                         showProductCount={showProductCount}
                         productCount={productCount}

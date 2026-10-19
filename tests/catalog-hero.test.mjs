@@ -214,3 +214,49 @@ test('large logos and long brand names stay in the cover flow', () => {
     assert.match(html, /data-testid="catalog-hero-media"/);
     assert.doesNotMatch(html, /padding-top:\d+px/);
 });
+
+test('logo and product count share the requested alignment in every cover composition', () => {
+    for (const alignment of ['left', 'right', 'center', 'background']) {
+        for (const [logoAlignment, items, justify] of [
+            ['left', 'items-start', 'justify-start'],
+            ['center', 'items-center', 'justify-center'],
+            ['right', 'items-end', 'justify-end'],
+        ]) {
+            const html = render({
+                alignment,
+                logoAlignment,
+                coverImage: '/campaign.jpg',
+                showProductCount: true,
+            });
+            assert.match(html, new RegExp(`catalog-brand-bar[^>]*${items}`));
+            assert.ok(html.includes(justify));
+            assert.match(
+                html,
+                /catalog-hero-product-count[^>]*>20 produtos<\/span>/,
+            );
+            const brandBar = html.slice(
+                html.indexOf('catalog-brand-bar'),
+                html.indexOf('catalog-hero-copy'),
+            );
+            assert.ok(brandBar.includes('catalog-hero-product-count'));
+            assert.doesNotMatch(brandBar, /justify-between/);
+        }
+    }
+});
+
+test('showing product count does not change centered logo alignment', () => {
+    for (const showProductCount of [false, true]) {
+        const html = render({ alignment: 'center', showProductCount });
+        assert.match(html, /catalog-brand-bar[^>]*items-center/);
+        assert.ok(html.includes('justify-center'));
+    }
+});
+
+test('product count badge uses the catalog color without depending on a missing CSS variable', () => {
+    const html = render({ showProductCount: true, primaryColor: '#123456' });
+    assert.match(
+        html,
+        /catalog-hero-product-count[^>]*background-color:#123456/,
+    );
+    assert.doesNotMatch(html, /var\(--brand-primary\)/);
+});

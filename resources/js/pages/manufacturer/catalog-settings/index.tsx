@@ -1156,6 +1156,41 @@ export default function CatalogSettings({
                                             <span>Protagonista</span>
                                         </div>
                                     </div>
+                                    <SegmentedControl
+                                        label="Alinhamento da logo"
+                                        value={sectionProp(
+                                            selectedSection,
+                                            'logo_align',
+                                            sectionProp<string>(
+                                                selectedSection,
+                                                'align',
+                                                'left',
+                                            ) === 'center'
+                                                ? 'center'
+                                                : 'left',
+                                        )}
+                                        options={[
+                                            {
+                                                value: 'left',
+                                                label: 'Esquerda',
+                                            },
+                                            {
+                                                value: 'center',
+                                                label: 'Centro',
+                                            },
+                                            {
+                                                value: 'right',
+                                                label: 'Direita',
+                                            },
+                                        ]}
+                                        onChange={(value) =>
+                                            updateSectionProp(
+                                                'hero',
+                                                'logo_align',
+                                                value,
+                                            )
+                                        }
+                                    />
                                     <button
                                         type="button"
                                         onClick={handleRemoveLogo}
@@ -1323,6 +1358,137 @@ export default function CatalogSettings({
                                         })}
                                     </div>
                                 </div>
+
+                                <SegmentedControl
+                                    label="Composição da capa"
+                                    value={
+                                        sectionProp<string>(
+                                            selectedSection,
+                                            'align',
+                                            'left',
+                                        ) === 'right'
+                                            ? 'left'
+                                            : sectionProp(
+                                                  selectedSection,
+                                                  'align',
+                                                  'left',
+                                              )
+                                    }
+                                    options={[
+                                        {
+                                            value: 'left',
+                                            label: 'Lado a lado',
+                                            icon: (
+                                                <AlignLeft className="size-4" />
+                                            ),
+                                        },
+                                        {
+                                            value: 'center',
+                                            label: 'Centralizado',
+                                            icon: (
+                                                <AlignCenter className="size-4" />
+                                            ),
+                                        },
+                                        {
+                                            value: 'background',
+                                            label: 'Imagem de fundo',
+                                            icon: (
+                                                <ImageIcon className="size-4" />
+                                            ),
+                                        },
+                                    ]}
+                                    onChange={(value) =>
+                                        updateSectionProp(
+                                            'hero',
+                                            'align',
+                                            value,
+                                        )
+                                    }
+                                />
+                                {['left', 'right'].includes(
+                                    sectionProp(
+                                        selectedSection,
+                                        'align',
+                                        'left',
+                                    ),
+                                ) && (
+                                    <SegmentedControl
+                                        label="Posição da imagem"
+                                        value={sectionProp(
+                                            selectedSection,
+                                            'align',
+                                            'left',
+                                        )}
+                                        options={[
+                                            {
+                                                value: 'right',
+                                                label: 'À esquerda',
+                                            },
+                                            {
+                                                value: 'left',
+                                                label: 'À direita',
+                                            },
+                                        ]}
+                                        onChange={(value) =>
+                                            updateSectionProp(
+                                                'hero',
+                                                'align',
+                                                value,
+                                            )
+                                        }
+                                    />
+                                )}
+                                {['center', 'background'].includes(
+                                    sectionProp(
+                                        selectedSection,
+                                        'align',
+                                        'left',
+                                    ),
+                                ) && (
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <Label
+                                                htmlFor="hero-overlay"
+                                                className="text-xs"
+                                            >
+                                                Escurecimento da foto
+                                            </Label>
+                                            <span className="text-xs text-muted-foreground">
+                                                {sectionProp(
+                                                    selectedSection,
+                                                    'overlay_opacity',
+                                                    0,
+                                                )}
+                                                %
+                                            </span>
+                                        </div>
+                                        <Slider
+                                            id="hero-overlay"
+                                            aria-label="Escurecimento da foto"
+                                            min={0}
+                                            max={80}
+                                            step={5}
+                                            value={[
+                                                sectionProp(
+                                                    selectedSection,
+                                                    'overlay_opacity',
+                                                    0,
+                                                ),
+                                            ]}
+                                            onValueChange={([value]) =>
+                                                updateSectionProp(
+                                                    'hero',
+                                                    'overlay_opacity',
+                                                    value,
+                                                )
+                                            }
+                                        />
+                                        <p className="text-xs text-muted-foreground">
+                                            Opcional. Em 0%, a foto aparece sem
+                                            filtro.
+                                        </p>
+                                    </div>
+                                )}
 
                                 {coverFit === 'manual' && (
                                     <div
@@ -1520,114 +1686,6 @@ export default function CatalogSettings({
                                     className="min-h-28 w-full resize-y border border-border bg-transparent px-3 py-3 text-sm leading-5 outline-none focus:border-[#18181f]"
                                 />
                             </div>
-                            <SegmentedControl
-                                label="Composição da capa"
-                                value={
-                                    sectionProp<string>(
-                                        selectedSection,
-                                        'align',
-                                        'left',
-                                    ) === 'right'
-                                        ? 'left'
-                                        : sectionProp(
-                                              selectedSection,
-                                              'align',
-                                              'left',
-                                          )
-                                }
-                                options={[
-                                    {
-                                        value: 'left',
-                                        label: 'Lado a lado',
-                                        icon: <AlignLeft className="size-4" />,
-                                    },
-                                    {
-                                        value: 'center',
-                                        label: 'Centralizado',
-                                        icon: (
-                                            <AlignCenter className="size-4" />
-                                        ),
-                                    },
-                                    {
-                                        value: 'background',
-                                        label: 'Imagem de fundo',
-                                        icon: <ImageIcon className="size-4" />,
-                                    },
-                                ]}
-                                onChange={(value) =>
-                                    updateSectionProp('hero', 'align', value)
-                                }
-                            />
-                            {['left', 'right'].includes(
-                                sectionProp(selectedSection, 'align', 'left'),
-                            ) && (
-                                <SegmentedControl
-                                    label="Posição da imagem"
-                                    value={sectionProp(
-                                        selectedSection,
-                                        'align',
-                                        'left',
-                                    )}
-                                    options={[
-                                        { value: 'right', label: 'À esquerda' },
-                                        { value: 'left', label: 'À direita' },
-                                    ]}
-                                    onChange={(value) =>
-                                        updateSectionProp(
-                                            'hero',
-                                            'align',
-                                            value,
-                                        )
-                                    }
-                                />
-                            )}
-                            {['center', 'background'].includes(
-                                sectionProp(selectedSection, 'align', 'left'),
-                            ) && (
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                        <Label
-                                            htmlFor="hero-overlay"
-                                            className="text-xs"
-                                        >
-                                            Escurecimento da foto
-                                        </Label>
-                                        <span className="text-xs text-muted-foreground">
-                                            {sectionProp(
-                                                selectedSection,
-                                                'overlay_opacity',
-                                                0,
-                                            )}
-                                            %
-                                        </span>
-                                    </div>
-                                    <Slider
-                                        id="hero-overlay"
-                                        aria-label="Escurecimento da foto"
-                                        min={0}
-                                        max={80}
-                                        step={5}
-                                        value={[
-                                            sectionProp(
-                                                selectedSection,
-                                                'overlay_opacity',
-                                                0,
-                                            ),
-                                        ]}
-                                        onValueChange={([value]) =>
-                                            updateSectionProp(
-                                                'hero',
-                                                'overlay_opacity',
-                                                value,
-                                            )
-                                        }
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                        Opcional. Em 0%, a foto aparece sem
-                                        filtro.
-                                    </p>
-                                </div>
-                            )}
                             <SegmentedControl
                                 label="Exibição da marca"
                                 value={brandDisplay}

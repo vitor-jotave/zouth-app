@@ -112,6 +112,34 @@ it('rejects invalid photo dimming intensity', function (mixed $opacity) {
         ->assertSessionHasErrors('sections.0.props.overlay_opacity');
 })->with([-1, 81, 'invalid']);
 
+it('persists logo alignment and product count for both editor and public catalog', function (string $alignment) {
+    $setting = createCatalogSettingFor($this->manufacturer);
+    $sections = CatalogSetting::defaultSections();
+    $sections[0]['props']['logo_align'] = $alignment;
+    $sections[0]['props']['show_product_count'] = true;
+
+    $this->actingAs($this->user)
+        ->put(route('manufacturer.catalog-settings.update'), catalogSettingsUpdatePayload(['sections' => $sections]))
+        ->assertSessionHasNoErrors();
+
+    expect($setting->fresh()->sections[0]['props']['logo_align'])->toBe($alignment);
+
+    foreach ([route('manufacturer.catalog-settings.index'), route('public.catalog.show', ['token' => $setting->public_token])] as $url) {
+        $this->get($url)->assertOk()->assertInertia(fn ($page) => $page
+            ->where('catalog_settings.sections.0.props.logo_align', $alignment)
+            ->where('catalog_settings.sections.0.props.show_product_count', true));
+    }
+})->with(['left', 'center', 'right']);
+
+it('rejects an unsupported logo alignment', function () {
+    $sections = CatalogSetting::defaultSections();
+    $sections[0]['props']['logo_align'] = 'diagonal';
+
+    $this->actingAs($this->user)
+        ->put(route('manufacturer.catalog-settings.update'), catalogSettingsUpdatePayload(['sections' => $sections]))
+        ->assertSessionHasErrors('sections.0.props.logo_align');
+});
+
 it('shows the catalog settings page', function () {
     $response = $this->actingAs($this->user)
         ->get(route('manufacturer.catalog-settings.index'));
