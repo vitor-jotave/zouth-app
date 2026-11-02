@@ -30,6 +30,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { useDraftState } from '@/hooks/use-draft-history';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
@@ -444,10 +445,12 @@ export default function CustomersIndex({
     filters,
 }: Props) {
     const [search, setSearch] = useState(filters.search ?? '');
-    const [createOpen, setCreateOpen] = useState(false);
-    const [editingCustomer, setEditingCustomer] = useState<Customer | null>(
-        null,
+    const [createOpen, setCreateOpen] = useDraftState(
+        'customer-create-open',
+        false,
     );
+    const [editingCustomer, setEditingCustomer] =
+        useDraftState<Customer | null>('customer-editing', null);
     const [isFiltering, setIsFiltering] = useState(false);
     const searchTimer = useRef<number | null>(null);
 
@@ -778,10 +781,12 @@ export default function CustomersIndex({
             </div>
 
             <CustomerFormDialog
+                draftKey="customer-create"
                 open={createOpen}
                 onOpenChange={setCreateOpen}
             />
             <CustomerFormDialog
+                draftKey="customer-edit"
                 open={Boolean(editingCustomer)}
                 onOpenChange={(open) => {
                     if (!open) {

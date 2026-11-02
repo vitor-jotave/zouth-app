@@ -313,6 +313,37 @@ export function AutomationCanvas({
                     <button
                         key={node.id}
                         type="button"
+                        onClick={() => onSelectNode(node.id)}
+                        aria-pressed={selected}
+                        onKeyDown={(event) => {
+                            const offsets: Record<string, [number, number]> = {
+                                ArrowLeft: [-1, 0],
+                                ArrowRight: [1, 0],
+                                ArrowUp: [0, -1],
+                                ArrowDown: [0, 1],
+                            };
+                            const offset = offsets[event.key];
+                            if (!offset) return;
+                            event.preventDefault();
+                            const step = event.shiftKey ? 10 : 1;
+                            onMoveNode(
+                                node.id,
+                                Math.max(
+                                    0,
+                                    Math.min(
+                                        5000,
+                                        node.position.x + offset[0] * step,
+                                    ),
+                                ),
+                                Math.max(
+                                    0,
+                                    Math.min(
+                                        5000,
+                                        node.position.y + offset[1] * step,
+                                    ),
+                                ),
+                            );
+                        }}
                         onPointerDown={(event) =>
                             handlePointerDown(event, node)
                         }

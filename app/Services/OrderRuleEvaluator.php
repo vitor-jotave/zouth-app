@@ -204,6 +204,10 @@ class OrderRuleEvaluator
 
     private function value(OrderRule|array $rule, string $key, mixed $default = null): mixed
     {
+        if ($key === 'public_message') {
+            return OrderRule::messageFor($this->value($rule, 'action', []), $rule instanceof OrderRule ? $rule->public_message : ($rule['public_message'] ?? null), $rule instanceof OrderRule ? $rule->message_mode : ($rule['message_mode'] ?? null));
+        }
+
         return $rule instanceof OrderRule
             ? ($rule->{$key} ?? $default)
             : ($rule[$key] ?? $default);

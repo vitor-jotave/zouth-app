@@ -99,5 +99,34 @@ it('allows configured s3 media hosts in the production content security policy',
     expect($response->headers->get('Content-Security-Policy'))
         ->toContain("img-src 'self' data: blob: https://cdn.zouth.app;")
         ->toContain("media-src 'self' https: blob:;")
-        ->toContain('frame-src https://js.stripe.com https://hooks.stripe.com https://www.youtube-nocookie.com https://player.vimeo.com https://www.dailymotion.com https://www.loom.com;');
+        ->toContain("frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://www.youtube-nocookie.com https://player.vimeo.com https://www.dailymotion.com https://www.loom.com;");
+});
+
+it('permits the same-origin catalog preview and its exact font provider without broadening scripts or frames', function () {
+    $this->app->detectEnvironment(fn () => 'production');
+
+    $response = app(AddSecurityHeaders::class)->handle(
+        Request::create('/manufacturer/catalog-settings'),
+        fn () => response('ok'),
+    );
+
+    $policy = $response->headers->get('Content-Security-Policy');
+    $directives = collect(explode(';', $policy))
+        ->map(fn (string $directive): string => trim($directive))
+        ->filter()
+        ->mapWithKeys(function (string $directive): array {
+            [$name, $sources] = explode(' ', $directive, 2);
+
+            return [$name => $sources];
+        });
+
+    expect($directives->get('frame-src'))
+        ->toBe("'self' https://js.stripe.com https://hooks.stripe.com https://www.youtube-nocookie.com https://player.vimeo.com https://www.dailymotion.com https://www.loom.com")
+        ->and($directives->get('style-src'))->toBe("'self' 'unsafe-inline' https://fonts.bunny.net")
+        ->and($directives->get('font-src'))->toBe("'self' data: https://fonts.bunny.net")
+        ->and($directives->get('script-src'))->toMatch("/^'self' 'nonce-[^']+' https:\/\/js\.stripe\.com$/")
+        ->and($directives->get('default-src'))->toBe("'self'")
+        ->and($directives->get('object-src'))->toBe("'none'")
+        ->and($directives->get('base-uri'))->toBe("'self'")
+        ->and($response->headers->get('X-Frame-Options'))->toBe('SAMEORIGIN');
 });

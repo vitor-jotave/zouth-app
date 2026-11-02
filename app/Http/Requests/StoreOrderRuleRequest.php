@@ -51,7 +51,8 @@ class StoreOrderRuleRequest extends FormRequest
                 Rule::in(['block_checkout', 'percentage_discount', 'fixed_discount']),
             ],
             'action.value' => ['nullable', 'integer', 'min:1'],
-            'public_message' => ['nullable', 'string', 'max:240'],
+            'message_mode' => ['sometimes', 'nullable', Rule::in(['auto', 'custom'])],
+            'public_message' => [Rule::requiredIf($this->input('message_mode', $this->route('orderRule') instanceof OrderRule ? $this->route('orderRule')->message_mode : null) === 'custom'), 'nullable', 'string', 'max:240'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
         ];
     }
@@ -191,6 +192,7 @@ class StoreOrderRuleRequest extends FormRequest
             'conditions.*.value.min' => 'O valor da condição precisa ser maior que zero.',
             'action.type.in' => 'Escolha uma consequência válida.',
             'public_message.max' => 'A mensagem para o lojista pode ter até 240 caracteres.',
+            'public_message.required' => 'Escreva a mensagem personalizada ou use a mensagem automática.',
         ];
     }
 }

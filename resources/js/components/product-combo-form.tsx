@@ -1,4 +1,3 @@
-import { useForm } from '@inertiajs/react';
 import {
     Check,
     CircleAlert,
@@ -37,6 +36,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { useDraftForm } from '@/hooks/use-draft-history';
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import manufacturer from '@/routes/manufacturer';
 
@@ -205,7 +205,7 @@ export function ProductComboForm({
         setDefaults,
         isDirty,
         recentlySuccessful,
-    } = useForm<ComboEditorData>({
+    } = useDraftForm<ComboEditorData>(`combo:${product?.id ?? 'new'}`, {
         name: product?.name ?? '',
         sku: product?.sku ?? '',
         description: product?.description ?? '',

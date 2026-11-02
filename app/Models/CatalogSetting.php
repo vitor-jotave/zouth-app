@@ -6,10 +6,18 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 
 class CatalogSetting extends Model
 {
+    private const SECTION_BOOLEAN_PROPERTIES = [
+        'show_logo', 'headline_fallback', 'subtitle_fallback', 'eyebrow_fallback', 'cta_text_fallback', 'show_cta',
+        'show_product_count', 'show_counts', 'show_price', 'show_sku',
+        'show_stock', 'show_variations', 'show_quantity_selector',
+        'show_action', 'show_badges',
+    ];
+
     /** @use HasFactory<\Database\Factories\CatalogSettingFactory> */
     use HasFactory;
 
@@ -148,6 +156,49 @@ class CatalogSetting extends Model
             'pattern_opacity' => 12,
             'sections' => static::defaultSections(),
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function appearanceDefaults(?string $brandName = null): array
+    {
+        return Arr::except(static::defaults($brandName), [
+            'hide_prices',
+            'allow_orders_without_stock',
+            'public_link_active',
+        ]);
+    }
+
+    /**
+     * Normalize valid multipart booleans without hiding invalid input from validation.
+     *
+     * @param  array<array-key, mixed>  $sections
+     * @return array<array-key, mixed>
+     */
+    public static function normalizeSectionBooleans(array $sections): array
+    {
+        foreach ($sections as &$section) {
+            if (! is_array($section)) {
+                continue;
+            }
+
+            if (array_key_exists('enabled', $section) && in_array($section['enabled'], [0, 1, '0', '1'], true)) {
+                $section['enabled'] = (bool) (int) $section['enabled'];
+            }
+
+            if (! isset($section['props']) || ! is_array($section['props'])) {
+                continue;
+            }
+
+            foreach (self::SECTION_BOOLEAN_PROPERTIES as $property) {
+                if (array_key_exists($property, $section['props']) && in_array($section['props'][$property], [0, 1, '0', '1'], true)) {
+                    $section['props'][$property] = (bool) (int) $section['props'][$property];
+                }
+            }
+        }
+
+        return $sections;
     }
 
     /**

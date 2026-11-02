@@ -24,6 +24,7 @@ interface CatalogHeroProps {
     overlayOpacity?: unknown;
     eyebrow: string;
     headline: string;
+    headlineFallback?: boolean;
     subtitle?: string | null;
     showCta: boolean;
     ctaText: string;
@@ -31,6 +32,14 @@ interface CatalogHeroProps {
     headingFont: string;
     accentColor: string;
     primaryColor?: string;
+}
+
+export function catalogHeroSubtitle(
+    subtitle: string | null | undefined,
+    legacyDescription: string | null | undefined,
+    fallback = true,
+): string {
+    return fallback ? subtitle || legacyDescription || '' : (subtitle ?? '');
 }
 
 export function CatalogHero({
@@ -52,6 +61,7 @@ export function CatalogHero({
     overlayOpacity = 0,
     eyebrow,
     headline,
+    headlineFallback = true,
     subtitle,
     showCta,
     ctaText,
@@ -62,8 +72,9 @@ export function CatalogHero({
 }: CatalogHeroProps) {
     const resolvedHeadline =
         headline.trim() ||
-        brandTagline?.trim() ||
-        (showBrandName ? brandName : '');
+        (headlineFallback
+            ? brandTagline?.trim() || (showBrandName ? brandName : '')
+            : '');
     const visibleHeadline =
         !showBrandName &&
         resolvedHeadline.localeCompare(brandName.trim(), undefined, {
@@ -244,19 +255,24 @@ export function CatalogHero({
                         imageOnLeft && '@min-[768px]/catalog-hero:col-start-2',
                     )}
                 >
-                    <p
-                        className="text-xs font-semibold tracking-[0.16em] uppercase"
-                        style={{
-                            color: imageAsBackground
-                                ? 'currentColor'
-                                : accentColor,
-                        }}
-                    >
-                        {eyebrow}
-                    </p>
+                    {eyebrow.trim() !== '' && (
+                        <p
+                            className="text-xs font-semibold tracking-[0.16em] uppercase"
+                            style={{
+                                color: imageAsBackground
+                                    ? 'currentColor'
+                                    : accentColor,
+                            }}
+                        >
+                            {eyebrow}
+                        </p>
+                    )}
                     {visibleHeadline && (
                         <h1
-                            className="mt-4 max-w-full text-4xl leading-[0.98] font-semibold tracking-[-0.05em] wrap-anywhere @min-[640px]/catalog-hero:text-5xl @min-[1024px]/catalog-hero:text-7xl"
+                            className={cn(
+                                'max-w-full text-4xl leading-[0.98] font-semibold tracking-[-0.05em] wrap-anywhere @min-[640px]/catalog-hero:text-5xl @min-[1024px]/catalog-hero:text-7xl',
+                                eyebrow.trim() !== '' && 'mt-4',
+                            )}
                             style={{ fontFamily: headingFont }}
                         >
                             {visibleHeadline}

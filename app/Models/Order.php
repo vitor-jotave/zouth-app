@@ -89,7 +89,7 @@ class Order extends Model
 
     public function statusHistory(): HasMany
     {
-        return $this->hasMany(OrderStatusHistory::class)->orderBy('created_at');
+        return $this->hasMany(OrderStatusHistory::class)->orderBy('created_at')->orderBy('id');
     }
 
     public function totalItems(): int

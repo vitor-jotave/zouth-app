@@ -34,6 +34,7 @@ export type OrderRuleContract = {
     conditions: OrderRuleCondition[];
     action: OrderRuleAction;
     public_message?: string | null;
+    message_mode?: 'auto' | 'custom' | null;
     sort_order?: number;
     created_at?: string;
     updated_at?: string;

@@ -9,8 +9,13 @@ function Slider({
   value,
   min = 0,
   max = 100,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
+  "aria-describedby": ariaDescribedBy,
+  "aria-valuetext": ariaValueText,
   ...props
 }: React.ComponentProps<typeof SliderPrimitive.Root>) {
+  const labelId = React.useId()
   const _values = React.useMemo(
     () =>
       Array.isArray(value)
@@ -48,11 +53,31 @@ function Slider({
         />
       </SliderPrimitive.Track>
       {Array.from({ length: _values.length }, (_, index) => (
-        <SliderPrimitive.Thumb
-          data-slot="slider-thumb"
-          key={index}
-          className="border-primary ring-ring/50 block size-4 shrink-0 rounded-full border bg-white shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
-        />
+        <React.Fragment key={index}>
+          {_values.length > 1 && ariaLabelledBy && (
+            <span id={`${labelId}-${index}`} className="sr-only">
+              Valor {index + 1} de {_values.length}
+            </span>
+          )}
+          <SliderPrimitive.Thumb
+            data-slot="slider-thumb"
+            aria-label={
+              ariaLabel
+                ? `${ariaLabel}${_values.length > 1 ? ` — valor ${index + 1} de ${_values.length}` : ""}`
+                : !ariaLabelledBy && _values.length > 1
+                  ? `Valor ${index + 1} de ${_values.length}`
+                  : undefined
+            }
+            aria-labelledby={
+              ariaLabelledBy
+                ? `${ariaLabelledBy}${_values.length > 1 ? ` ${labelId}-${index}` : ""}`
+                : undefined
+            }
+            aria-describedby={ariaDescribedBy}
+            aria-valuetext={ariaValueText}
+            className="border-primary ring-ring/50 relative block size-4 shrink-0 rounded-full border bg-white shadow-sm transition-[color,box-shadow] after:absolute after:top-1/2 after:left-1/2 after:size-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
+          />
+        </React.Fragment>
       ))}
     </SliderPrimitive.Root>
   )

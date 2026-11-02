@@ -9,6 +9,8 @@ import ts from 'typescript';
 
 const require = createRequire(import.meta.url);
 const passthrough = ({ children }) => children;
+let cropProps;
+let sliderProps;
 const source = readFileSync(
     new URL(
         '../resources/js/components/image-crop-dialog.tsx',
@@ -31,12 +33,81 @@ runInNewContext(outputText, {
         if (name === '@/lib/utils')
             return { cn: (...classes) => classes.filter(Boolean).join(' ') };
         if (name === '@/lib/image-utils') return {};
+        if (name === '@/components/ui/slider')
+            return {
+                Slider: (props) => {
+                    sliderProps = props;
+                    return null;
+                },
+            };
+        if (name === '@/components/ui/label')
+            return { Label: (props) => createElement('label', props) };
+        if (name === '@/components/ui/button')
+            return { Button: (props) => createElement('button', props) };
         if (name.startsWith('@/components/') || name === 'lucide-react') {
             return new Proxy({}, { get: () => passthrough });
         }
-        if (name === 'react-image-crop') return { default: passthrough };
+        if (name === 'react-image-crop')
+            return {
+                default: (props) => {
+                    cropProps = props;
+                    return props.children;
+                },
+            };
         return require(name);
     },
+});
+
+test('crop instructions and zoom control are accessible in Portuguese', () => {
+    const html = renderToStaticMarkup(
+        createElement(exports.ImageCropDialog, {
+            open: true,
+            imageFile: { name: 'logo.png', type: 'image/png' },
+            onOpenChange() {},
+            onCropped() {},
+        }),
+    );
+    assert.equal(Object.keys(cropProps.ariaLabels).length, 9);
+    for (const label of Object.values(cropProps.ariaLabels)) {
+        assert.match(label, /setas/);
+        assert.match(label, /recorte/);
+        assert.doesNotMatch(label, /arrow|crop|handle/);
+    }
+    assert.match(html, /alt="Imagem para recortar"/);
+    assert.match(html, /Pelo teclado, use Tab/);
+    assert.ok(html.includes(`id="${sliderProps['aria-labelledby']}"`));
+    assert.ok(html.includes(`id="${sliderProps['aria-describedby']}"`));
+    assert.equal(sliderProps['aria-valuetext'], '100%');
+    assert.match(sliderProps.className, /min-h-11/);
+    assert.match(html, /min-h-11[^>]*>Cancelar<\/button>/);
+    assert.match(html, />Usar imagem ajustada<\/button>/);
+});
+
+test('skip action describes skipping the image and background controls have touch-sized targets', () => {
+    const html = renderToStaticMarkup(
+        createElement(exports.ImageCropDialog, {
+            open: true,
+            imageFile: { name: 'logo.png', type: 'image/png' },
+            allowTransparentBackground: true,
+            onOpenChange() {},
+            onCropped() {},
+            onSkip() {},
+        }),
+    );
+    assert.match(html, />Pular imagem<\/button>/);
+    assert.doesNotMatch(html, /Usar imagem original/);
+    assert.match(
+        html,
+        /aria-label="Preservar transparência"[^>]*class="[^"]*min-h-11/,
+    );
+    assert.match(
+        html,
+        /aria-label="Usar fundo branco"[^>]*class="[^"]*size-11/,
+    );
+    assert.match(
+        html,
+        /aria-label="Escolher cor de fundo personalizada"[^>]*class="[^"]*size-11/,
+    );
 });
 
 for (const type of [

@@ -1,10 +1,9 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import {
     AlignCenter,
     AlignLeft,
     Check,
     ChevronDown,
-    ChevronUp,
     Copy,
     Eye,
     EyeOff,
@@ -15,12 +14,16 @@ import {
     Link2,
     Loader2,
     MessageCircle,
+    Maximize2,
+    Minimize2,
     Minus,
     Monitor,
     Palette,
     Plus,
     RefreshCcw,
     RotateCcw,
+    Redo2,
+    Undo2,
     Save,
     Smartphone,
     Upload,
@@ -56,7 +59,14 @@ import {
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
+import { useDraftForm } from '@/hooks/use-draft-history';
+import { useEditorHistory } from '@/hooks/use-editor-history';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import AppLayout from '@/layouts/app-layout';
+import {
+    catalogLegibilityWarnings,
+    materializeCatalogHeroCopy,
+} from '@/lib/catalog-editor-guidance';
 import {
     CATALOG_COVER_SCALE,
     CATALOG_LOGO_SIZE,
@@ -123,6 +133,7 @@ interface Product {
 
 interface Props {
     catalog_settings: CatalogSettings;
+    appearance_defaults: Partial<CatalogSettings>;
     public_link: string;
     stats: {
         total: number;
@@ -140,7 +151,7 @@ interface Props {
     };
 }
 
-type CatalogPanel = CatalogSectionType | 'appearance' | 'publish';
+type CatalogPanel = CatalogSectionType | 'brand' | 'appearance' | 'publish';
 type ViewportMode = 'desktop' | 'mobile';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -148,21 +159,15 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Catálogo', href: '/manufacturer/catalog-settings' },
 ];
 
-const sectionMeta: Record<
-    CatalogSectionType,
-    { label: string; description: string }
-> = {
+const sectionMeta: Record<CatalogSectionType, { label: string }> = {
     hero: {
         label: 'Capa',
-        description: 'Abertura e apresentação',
     },
     collections: {
         label: 'Coleções',
-        description: 'Caminhos para explorar',
     },
     product_grid: {
         label: 'Produtos',
-        description: 'Vitrine da coleção',
     },
 };
 
@@ -242,6 +247,7 @@ const fallbackSections: CatalogSection[] = [
 ];
 
 const panelLabels: Record<CatalogPanel, string> = {
+    brand: 'Marca',
     hero: 'Capa',
     collections: 'Coleções',
     product_grid: 'Produtos',
@@ -256,16 +262,28 @@ function panelForError(
     const sectionMatch = errorKey.match(/^sections\.(\d+)\./);
 
     if (sectionMatch) {
+        if (/\.(logo_size|logo_align)$/.test(errorKey)) return 'brand';
         return sections[Number(sectionMatch[1])]?.type ?? 'hero';
     }
 
     if (
         [
             'brand_name',
+            'logo',
+            'remove_logo',
             'show_brand_name',
             'show_logo',
+        ].includes(errorKey)
+    ) {
+        return 'brand';
+    }
+
+    if (
+        [
+            'remove_cover_image',
             'tagline',
             'description',
+            'cover_image',
             'cover_image_focal_x',
             'cover_image_focal_y',
         ].includes(errorKey)
@@ -290,7 +308,13 @@ function panelForError(
     return 'appearance';
 }
 
-function normalizeSections(sections: CatalogSection[]): CatalogSection[] {
+function normalizeSections(
+    sections: CatalogSection[],
+    brand?: Pick<
+        CatalogSettings,
+        'brand_name' | 'tagline' | 'description' | 'show_brand_name'
+    >,
+): CatalogSection[] {
     const current = sections.length ? sections : fallbackSections;
     const missing = fallbackSections.filter(
         (fallback) =>
@@ -309,6 +333,9 @@ function normalizeSections(sections: CatalogSection[]): CatalogSection[] {
             ...section,
             props: {
                 ...section.props,
+                ...(brand
+                    ? materializeCatalogHeroCopy(section.props ?? {}, brand)
+                    : {}),
                 logo_size: normalizeCatalogLogoSize(section.props?.logo_size),
                 image_fit: normalizeCatalogCoverFit(section.props?.image_fit),
                 image_scale: normalizeCatalogCoverScale(
@@ -330,11 +357,9 @@ function sectionProp<T extends string | number | boolean | null>(
 function InspectorHeader({
     eyebrow,
     title,
-    description,
 }: {
     eyebrow: string;
     title: string;
-    description: string;
 }) {
     return (
         <header className="border-b border-border px-5 pt-6 pb-5">
@@ -344,9 +369,6 @@ function InspectorHeader({
             <h2 className="mt-2 font-zouth-display text-xl font-semibold tracking-[-0.035em]">
                 {title}
             </h2>
-            <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                {description}
-            </p>
         </header>
     );
 }
@@ -515,34 +537,94 @@ function PanelErrorBadge({ count }: { count?: number }) {
     );
 }
 
+function useMediaPreview(file: File | null): string | null {
+    const [url, setUrl] = useState<string | null>(null);
+    useEffect(() => {
+        if (!file) {
+            setUrl(null);
+            return;
+        }
+        const objectUrl = URL.createObjectURL(file);
+        setUrl(objectUrl);
+        return () => URL.revokeObjectURL(objectUrl);
+    }, [file]);
+    return url;
+}
+
+function MediaDraftNotice({
+    pending,
+    removed,
+    onRevert,
+}: {
+    pending: boolean;
+    removed: boolean;
+    onRevert: () => void;
+}) {
+    if (!pending && !removed) return null;
+    return (
+        <div className="space-y-2 border-l-2 border-[#ff4d3d] pl-3 text-xs leading-5">
+            <p role="status">
+                {removed
+                    ? 'A imagem será removida quando você salvar.'
+                    : 'Imagem pronta na prévia. Salve para publicar junto com os outros ajustes.'}
+            </p>
+            <button
+                type="button"
+                onClick={onRevert}
+                className="min-h-11 font-semibold underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-[#ff4d3d]"
+            >
+                {removed ? 'Cancelar remoção' : 'Descartar nova imagem'}
+            </button>
+        </div>
+    );
+}
+
 export default function CatalogSettings({
     catalog_settings: settings,
+    appearance_defaults,
     public_link,
     stats,
-    sample_products,
-    product_count,
-    manufacturer_name,
     whatsapp_channel,
 }: Props) {
     const [activePanel, setActivePanel] = useState<CatalogPanel>('hero');
+    const [mobileView, setMobileView] = useState<
+        'structure' | 'edit' | 'preview'
+    >('edit');
+    const selectPanel = (panel: CatalogPanel) => {
+        setExpandedPreview(false);
+        setActivePanel(panel);
+        setMobileView('edit');
+        window.requestAnimationFrame(() => {
+            inspectorRef.current?.scrollTo({ top: 0 });
+            if (window.innerWidth < 1280) {
+                inspectorRef.current?.focus({ preventScroll: true });
+            }
+        });
+    };
     const [viewport, setViewport] = useState<ViewportMode>('desktop');
-    const [zoom, setZoom] = useState(100);
+    useEffect(() => {
+        if (window.matchMedia('(max-width: 767px)').matches)
+            setViewport('mobile');
+    }, []);
+    const [previewMode, setPreviewMode] = useState<'edit' | 'test'>('edit');
+    const [zoom, setZoom] = useState<number | null>(null);
+    const [expandedPreview, setExpandedPreview] = useState(false);
     const [copied, setCopied] = useState(false);
     const [rotateDialogOpen, setRotateDialogOpen] = useState(false);
     const [resetDialogOpen, setResetDialogOpen] = useState(false);
     const [logoCropDialogOpen, setLogoCropDialogOpen] = useState(false);
     const [logoCropFile, setLogoCropFile] = useState<File | null>(null);
-    const [logoUploading, setLogoUploading] = useState(false);
     const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
-    const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
     const [draggedSection, setDraggedSection] =
         useState<CatalogSectionType | null>(null);
     const [pendingErrorKey, setPendingErrorKey] = useState<string | null>(null);
     const inspectorRef = useRef<HTMLElement>(null);
     const previewStageRef = useRef<HTMLDivElement>(null);
+    const previewScrollRef = useRef<HTMLDivElement>(null);
     const [previewStageWidth, setPreviewStageWidth] = useState(0);
+    const [previewStageHeight, setPreviewStageHeight] = useState(0);
 
-    const settingsForm = useForm({
+    const settingsForm = useDraftForm(`catalog:${settings.id}`, {
         brand_name: settings.brand_name ?? '',
         show_brand_name: settings.show_brand_name ?? true,
         show_logo: settings.show_logo ?? true,
@@ -594,33 +676,81 @@ export default function CatalogSettings({
         ].includes(settings.gradient_id ?? '')
             ? (settings.gradient_id ?? 'soft-sky')
             : 'soft-sky',
-        sections: normalizeSections(settings.sections ?? []),
+        sections: normalizeSections(settings.sections ?? [], settings),
     });
 
-    const backgroundForm = useForm<{ background_image: File | null }>({
-        background_image: null,
-    });
-    const coverForm = useForm<{
+    const mediaForm = useDraftForm<{
+        logo: File | null;
         cover_image: File | null;
-        cover_image_focal_x: number;
-        cover_image_focal_y: number;
-    }>({
+        background_image: File | null;
+        remove_logo: boolean;
+        remove_cover_image: boolean;
+        remove_background_image: boolean;
+    }>(`catalog-media:${settings.id}`, {
+        logo: null,
         cover_image: null,
-        cover_image_focal_x: settings.cover_image_focal_x ?? 50,
-        cover_image_focal_y: settings.cover_image_focal_y ?? 50,
+        background_image: null,
+        remove_logo: false,
+        remove_cover_image: false,
+        remove_background_image: false,
     });
+
+    const hasUnpublishedChanges = settingsForm.isDirty || mediaForm.isDirty;
+    const [historyReady, setHistoryReady] = useState(false);
+    useEffect(() => {
+        const timer = window.setTimeout(() => setHistoryReady(true), 0);
+        return () => window.clearTimeout(timer);
+    }, []);
+    const history = useEditorHistory({
+        value: { settings: settingsForm.data, media: mediaForm.data },
+        onChange: (snapshot) => {
+            settingsForm.setData(snapshot.settings);
+            mediaForm.setData(snapshot.media);
+        },
+        enabled: historyReady,
+    });
+    useEffect(() => {
+        const onKey = (event: KeyboardEvent) => {
+            if (settingsForm.processing) return;
+            if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+            const target = event.target as HTMLElement | null;
+            if (
+                target?.closest(
+                    'input, textarea, [contenteditable="true"], [role="dialog"]',
+                )
+            )
+                return;
+            if (event.key.toLowerCase() === 'z') {
+                event.preventDefault();
+                if (event.shiftKey) history.redo();
+                else history.undo();
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [history, settingsForm.processing]);
+    useUnsavedChangesGuard(hasUnpublishedChanges);
+    const logoPreviewUrl = useMediaPreview(mediaForm.data.logo);
+    const coverPreviewUrl = useMediaPreview(mediaForm.data.cover_image);
+    const backgroundPreviewUrl = useMediaPreview(
+        mediaForm.data.background_image,
+    );
 
     const draftSettings = useMemo(
         () => ({
             ...settingsForm.data,
-            logo_url: settings.logo_url,
-            background_image_url: settings.background_image_url,
-            cover_image_url:
-                coverPreviewUrl ??
-                settings.cover_thumbnail_url ??
-                settings.cover_image_url,
-            cover_thumbnail_url:
-                coverPreviewUrl ?? settings.cover_thumbnail_url,
+            logo_url: mediaForm.data.remove_logo
+                ? null
+                : (logoPreviewUrl ?? settings.logo_url),
+            background_image_url: mediaForm.data.remove_background_image
+                ? null
+                : (backgroundPreviewUrl ?? settings.background_image_url),
+            cover_image_url: mediaForm.data.remove_cover_image
+                ? null
+                : (coverPreviewUrl ?? settings.cover_image_url),
+            cover_thumbnail_url: mediaForm.data.remove_cover_image
+                ? null
+                : (coverPreviewUrl ?? settings.cover_thumbnail_url),
         }),
         [
             settingsForm.data,
@@ -629,21 +759,35 @@ export default function CatalogSettings({
             settings.cover_image_url,
             settings.cover_thumbnail_url,
             coverPreviewUrl,
+            logoPreviewUrl,
+            backgroundPreviewUrl,
+            mediaForm.data.remove_logo,
+            mediaForm.data.remove_cover_image,
+            mediaForm.data.remove_background_image,
         ],
     );
 
     const selectedSection = settingsForm.data.sections.find(
-        (section) => section.type === activePanel,
+        (section) =>
+            section.type === (activePanel === 'brand' ? 'hero' : activePanel),
     );
-    const previewCanvasWidth = viewport === 'mobile' ? 390 : 1280;
+    const previewCanvasWidth = viewport === 'mobile' ? 390 : 1440;
     const previewFitScale = Math.min(
         1,
         (previewStageWidth || previewCanvasWidth) / previewCanvasWidth,
     );
-    const previewScale = previewFitScale * (zoom / 100);
+    const previewScale =
+        previewMode === 'test' || zoom === null ? previewFitScale : zoom / 100;
+    const previewCanvasHeight =
+        previewMode === 'test' && previewStageHeight > 0
+            ? Math.max(1, Math.floor(previewStageHeight / previewScale))
+            : viewport === 'mobile'
+              ? 844
+              : 1024;
     const formErrorEntries = Object.entries(settingsForm.errors) as Array<
         [string, string]
     >;
+    const publicationErrors = settingsForm.errors as Record<string, string>;
     const hasFormErrors = formErrorEntries.length > 0;
     const firstErrorPanel = formErrorEntries[0]
         ? panelForError(formErrorEntries[0][0], settingsForm.data.sections)
@@ -672,19 +816,22 @@ export default function CatalogSettings({
               : 'name';
 
     useEffect(() => {
-        const stage = previewStageRef.current;
+        const viewportElement = previewScrollRef.current;
 
-        if (!stage || typeof ResizeObserver === 'undefined') {
+        if (!viewportElement || typeof ResizeObserver === 'undefined') {
             return;
         }
 
-        const updateStageWidth = () => {
-            setPreviewStageWidth(stage.clientWidth);
-        };
-        const observer = new ResizeObserver(updateStageWidth);
+        const observer = new ResizeObserver((entries) => {
+            const viewportEntry = entries.find(
+                (entry) => entry.target === viewportElement,
+            );
+            if (!viewportEntry) return;
+            setPreviewStageWidth(Math.floor(viewportEntry.contentRect.width));
+            setPreviewStageHeight(Math.floor(viewportEntry.contentRect.height));
+        });
 
-        updateStageWidth();
-        observer.observe(stage);
+        observer.observe(viewportElement);
 
         return () => observer.disconnect();
     }, []);
@@ -695,13 +842,18 @@ export default function CatalogSettings({
         }
 
         const timeout = window.setTimeout(() => {
+            const behavior = window.matchMedia(
+                '(prefers-reduced-motion: reduce)',
+            ).matches
+                ? 'auto'
+                : 'smooth';
             const target = inspectorRef.current?.querySelector<HTMLElement>(
                 `[data-catalog-error="${pendingErrorKey}"]`,
             );
 
             if (target) {
                 target.scrollIntoView({
-                    behavior: 'smooth',
+                    behavior,
                     block: 'center',
                 });
                 target
@@ -710,7 +862,7 @@ export default function CatalogSettings({
                     )
                     ?.focus({ preventScroll: true });
             } else {
-                inspectorRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                inspectorRef.current?.scrollTo({ top: 0, behavior });
             }
 
             setPendingErrorKey(null);
@@ -741,6 +893,10 @@ export default function CatalogSettings({
             props: {
                 ...section.props,
                 [key]: value,
+                ...(type === 'hero' &&
+                ['headline', 'subtitle', 'eyebrow', 'cta_text'].includes(key)
+                    ? { [`${key}_fallback`]: false }
+                    : {}),
             },
         }));
     };
@@ -750,32 +906,6 @@ export default function CatalogSettings({
             ...section,
             enabled: !section.enabled,
         }));
-    };
-
-    const moveSection = (
-        type: CatalogSectionType,
-        direction: 'up' | 'down',
-    ) => {
-        const sections = [...settingsForm.data.sections];
-        const currentIndex = sections.findIndex(
-            (section) => section.type === type,
-        );
-        const targetIndex =
-            direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-
-        if (
-            currentIndex < 0 ||
-            targetIndex < 0 ||
-            targetIndex >= sections.length
-        ) {
-            return;
-        }
-
-        [sections[currentIndex], sections[targetIndex]] = [
-            sections[targetIndex],
-            sections[currentIndex],
-        ];
-        settingsForm.setData('sections', sections);
     };
 
     const handleSectionDrop = (targetType: CatalogSectionType) => {
@@ -809,18 +939,45 @@ export default function CatalogSettings({
         if (!firstErrorKey) {
             return;
         }
+        if (firstErrorKey === 'catalog_publication') {
+            window.requestAnimationFrame(() =>
+                document.getElementById('catalog-save-errors')?.focus(),
+            );
+            return;
+        }
 
-        setActivePanel(
-            panelForError(firstErrorKey, settingsForm.data.sections),
-        );
+        selectPanel(panelForError(firstErrorKey, settingsForm.data.sections));
         setPendingErrorKey(firstErrorKey);
     };
 
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
-        settingsForm.put(manufacturer.catalogSettings.update().url, {
+        settingsForm.transform((data) => ({
+            ...data,
+            _method: 'put',
+            ...mediaForm.data,
+        }));
+        settingsForm.post(manufacturer.catalogSettings.update().url, {
+            forceFormData: true,
             preserveScroll: true,
+            onSuccess: () => {
+                settingsForm.setDefaults();
+                mediaForm.reset();
+                setLogoUploadError(null);
+                history.reset({
+                    settings: settingsForm.data,
+                    media: {
+                        logo: null,
+                        cover_image: null,
+                        background_image: null,
+                        remove_logo: false,
+                        remove_cover_image: false,
+                        remove_background_image: false,
+                    },
+                });
+            },
             onError: (errors) => guideToFirstError(errors),
+            onFinish: () => settingsForm.transform((data) => data),
         });
     };
 
@@ -856,51 +1013,39 @@ export default function CatalogSettings({
     };
 
     const handleLogoCropped = (croppedFile: File) => {
+        history.flush();
         setLogoCropFile(null);
         setLogoCropDialogOpen(false);
         setLogoUploadError(null);
-        setLogoUploading(true);
-
-        router.post(
-            manufacturer.catalogSettings.logo().url,
-            { logo: croppedFile },
-            {
-                forceFormData: true,
-                preserveScroll: true,
-                onError: (errors) => {
-                    setLogoUploadError(
-                        errors.logo ??
-                            'Não foi possível enviar a logo. Tente novamente.',
-                    );
-                },
-                onFinish: () => setLogoUploading(false),
-            },
-        );
+        mediaForm.setData((data) => ({
+            ...data,
+            logo: croppedFile,
+            remove_logo: false,
+        }));
     };
 
     const handleRemoveLogo = () => {
+        history.flush();
         setLogoUploadError(null);
-        setLogoUploading(true);
-
-        router.delete(manufacturer.catalogSettings.logo.destroy().url, {
-            preserveScroll: true,
-            onError: () => {
-                setLogoUploadError(
-                    'Não foi possível remover a logo. Tente novamente.',
-                );
-            },
-            onFinish: () => setLogoUploading(false),
-        });
+        mediaForm.setData((data) => ({
+            ...data,
+            logo: null,
+            remove_logo: true,
+        }));
     };
 
-    const handleBackgroundUpload = () => {
-        backgroundForm.post(manufacturer.catalogSettings.background().url, {
-            preserveScroll: true,
-            onSuccess: () => {
-                backgroundForm.reset();
-                settingsForm.setData('background_mode', 'image');
-            },
-        });
+    const handleBackgroundSelected = (
+        event: React.ChangeEvent<HTMLInputElement>,
+    ) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        history.flush();
+        mediaForm.setData((data) => ({
+            ...data,
+            background_image: file,
+            remove_background_image: false,
+        }));
     };
 
     const handleCoverSelected = (
@@ -913,63 +1058,45 @@ export default function CatalogSettings({
             return;
         }
 
-        if (coverPreviewUrl) {
-            URL.revokeObjectURL(coverPreviewUrl);
-        }
-
-        coverForm.setData('cover_image', file);
-        setCoverPreviewUrl(URL.createObjectURL(file));
-    };
-
-    const handleCoverUpload = () => {
-        coverForm.post(manufacturer.catalogSettings.cover().url, {
-            preserveScroll: true,
-            onSuccess: () => {
-                coverForm.reset('cover_image');
-
-                if (coverPreviewUrl) {
-                    URL.revokeObjectURL(coverPreviewUrl);
-                    setCoverPreviewUrl(null);
-                }
-            },
-        });
+        history.flush();
+        mediaForm.setData((data) => ({
+            ...data,
+            cover_image: file,
+            remove_cover_image: false,
+        }));
     };
 
     const handleRemoveCover = () => {
-        coverForm.delete(manufacturer.catalogSettings.cover.destroy().url, {
-            preserveScroll: true,
-            onSuccess: () => {
-                coverForm.reset('cover_image');
-                settingsForm.setData((data) => ({
-                    ...data,
-                    cover_image_focal_x: 50,
-                    cover_image_focal_y: 50,
-                }));
-
-                if (coverPreviewUrl) {
-                    URL.revokeObjectURL(coverPreviewUrl);
-                    setCoverPreviewUrl(null);
-                }
-            },
-        });
+        history.flush();
+        mediaForm.setData((data) => ({
+            ...data,
+            cover_image: null,
+            remove_cover_image: true,
+        }));
     };
 
     const updateCoverFocalPoint = (axis: 'x' | 'y', value: number) => {
         const key = `cover_image_focal_${axis}` as const;
 
-        coverForm.setData(key, value);
         settingsForm.setData(key, value);
     };
 
     const handleRemoveBackground = () => {
-        backgroundForm.delete(
-            manufacturer.catalogSettings.background.destroy().url,
-            {
-                preserveScroll: true,
-                onSuccess: () =>
-                    settingsForm.setData('background_mode', 'solid'),
-            },
-        );
+        history.flush();
+        mediaForm.setData((data) => ({
+            ...data,
+            background_image: null,
+            remove_background_image: true,
+        }));
+    };
+
+    const revertMedia = (key: 'logo' | 'cover_image' | 'background_image') => {
+        history.flush();
+        mediaForm.setData((data) => ({
+            ...data,
+            [key]: null,
+            [`remove_${key}`]: false,
+        }));
     };
 
     const handleRotateLink = () => {
@@ -980,16 +1107,32 @@ export default function CatalogSettings({
     };
 
     const handleResetDefaults = () => {
-        settingsForm.post(manufacturer.catalogSettings.resetDefaults().url, {
-            onSuccess: () => {
-                setResetDialogOpen(false);
-                window.location.reload();
-            },
-        });
+        history.flush();
+        settingsForm.setData(
+            (data) =>
+                ({
+                    ...data,
+                    ...appearance_defaults,
+                    tagline: appearance_defaults.tagline ?? '',
+                    description: appearance_defaults.description ?? '',
+                    heading_font_family:
+                        appearance_defaults.heading_font_family ??
+                        appearance_defaults.font_family ??
+                        'fraunces',
+                    body_font_family:
+                        appearance_defaults.body_font_family ??
+                        appearance_defaults.font_family ??
+                        'manrope',
+                    sections: normalizeSections(
+                        appearance_defaults.sections ?? [],
+                    ),
+                }) as typeof data,
+        );
+        setResetDialogOpen(false);
     };
 
     const renderInspector = () => {
-        if (activePanel === 'hero') {
+        if (activePanel === 'brand') {
             const logoSize = normalizeCatalogLogoSize(
                 sectionProp(
                     selectedSection,
@@ -997,36 +1140,57 @@ export default function CatalogSettings({
                     CATALOG_LOGO_SIZE.default,
                 ),
             );
-            const coverFit = normalizeCatalogCoverFit(
-                sectionProp(selectedSection, 'image_fit', 'cover'),
-            );
-            const coverScale = normalizeCatalogCoverScale(
-                sectionProp(
-                    selectedSection,
-                    'image_scale',
-                    CATALOG_COVER_SCALE.default,
-                ),
-            );
-            const heroSectionIndex = Math.max(
-                0,
-                settingsForm.data.sections.findIndex(
-                    (section) => section.type === 'hero',
-                ),
-            );
 
             return (
                 <>
-                    <InspectorHeader
-                        eyebrow="Seção selecionada"
-                        title="Capa do catálogo"
-                        description="Apresente a coleção antes de mostrar as peças."
-                    />
-                    <InspectorSection title="Marca">
+                    <InspectorHeader eyebrow="Configurações" title="Marca" />
+                    <InspectorSection title="Identidade">
                         <div className="space-y-4">
-                            <div className="flex min-h-24 items-center justify-center border border-border bg-background p-4">
-                                {settings.logo_url ? (
+                            <div
+                                className="space-y-2"
+                                data-catalog-error="brand_name"
+                            >
+                                <Label htmlFor="brand-name" className="text-xs">
+                                    Nome da marca
+                                </Label>
+                                <Input
+                                    id="brand-name"
+                                    value={settingsForm.data.brand_name}
+                                    onChange={(event) =>
+                                        settingsForm.setData(
+                                            'brand_name',
+                                            event.target.value,
+                                        )
+                                    }
+                                    aria-invalid={Boolean(
+                                        settingsForm.errors.brand_name,
+                                    )}
+                                    className="h-11 rounded-[2px] border-border bg-transparent shadow-none focus-visible:border-[#18181f] focus-visible:ring-0"
+                                />
+                                <InputError
+                                    message={settingsForm.errors.brand_name}
+                                />
+                            </div>
+                            <SegmentedControl
+                                label="Exibição da marca"
+                                value={brandDisplay}
+                                options={[
+                                    { value: 'logo', label: 'Logo' },
+                                    { value: 'both', label: 'Ambos' },
+                                    { value: 'name', label: 'Nome' },
+                                ]}
+                                onChange={handleBrandDisplayChange}
+                            />
+                            <div
+                                className="flex min-h-24 items-center justify-center border border-border p-4"
+                                style={{
+                                    background:
+                                        'repeating-conic-gradient(#8e8e8e 0% 25%, #b6b6b6 0% 50%) 0 / 16px 16px',
+                                }}
+                            >
+                                {draftSettings.logo_url ? (
                                     <img
-                                        src={settings.logo_url}
+                                        src={draftSettings.logo_url}
                                         alt={settingsForm.data.brand_name}
                                         className="h-auto object-contain"
                                         style={catalogLogoStyle(
@@ -1041,24 +1205,28 @@ export default function CatalogSettings({
                                     </span>
                                 )}
                             </div>
+                            <p className="text-xs leading-5 text-[#66635d]">
+                                O quadriculado ajuda a ver a transparência. Ele
+                                não aparece no catálogo.
+                            </p>
                             <input
                                 type="file"
                                 accept="image/*"
                                 onChange={handleLogoSelected}
-                                disabled={logoUploading}
-                                className="sr-only"
+                                disabled={settingsForm.processing}
+                                className="peer sr-only"
                                 id="catalog-logo-file"
                             />
                             <Label
                                 htmlFor="catalog-logo-file"
-                                aria-disabled={logoUploading}
+                                aria-disabled={settingsForm.processing}
                                 className={cn(
-                                    'inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 border border-border px-3 text-xs font-semibold hover:bg-[#e7e3dc]/45',
-                                    logoUploading &&
+                                    'inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 border border-border px-3 text-xs font-semibold peer-focus-visible:outline-2 peer-focus-visible:outline-[#ff4d3d] hover:bg-[#e7e3dc]/45',
+                                    settingsForm.processing &&
                                         'pointer-events-none cursor-wait opacity-60',
                                 )}
                             >
-                                {logoUploading ? (
+                                {settingsForm.processing ? (
                                     <Loader2
                                         className="size-4 animate-spin"
                                         aria-hidden="true"
@@ -1069,13 +1237,18 @@ export default function CatalogSettings({
                                         aria-hidden="true"
                                     />
                                 )}
-                                {logoUploading
-                                    ? 'Enviando logo…'
-                                    : settings.logo_url
+                                {settingsForm.processing
+                                    ? 'Salvando…'
+                                    : draftSettings.logo_url
                                       ? 'Trocar logo'
                                       : 'Escolher logo'}
                             </Label>
-                            {settings.logo_url && (
+                            <MediaDraftNotice
+                                pending={Boolean(mediaForm.data.logo)}
+                                removed={mediaForm.data.remove_logo}
+                                onRevert={() => revertMedia('logo')}
+                            />
+                            {draftSettings.logo_url && (
                                 <>
                                     <div className="space-y-3 border-t border-border pt-4">
                                         <div className="flex items-center justify-between gap-4">
@@ -1104,7 +1277,7 @@ export default function CatalogSettings({
                                                         ),
                                                     )
                                                 }
-                                                className="inline-flex size-9 shrink-0 items-center justify-center border border-border transition-colors hover:bg-[#e7e3dc]/55 disabled:cursor-not-allowed disabled:opacity-35"
+                                                className="inline-flex size-11 shrink-0 items-center justify-center border border-border transition-colors hover:bg-[#e7e3dc]/55 disabled:cursor-not-allowed disabled:opacity-35"
                                             >
                                                 <Minus
                                                     className="size-3.5"
@@ -1143,7 +1316,7 @@ export default function CatalogSettings({
                                                         ),
                                                     )
                                                 }
-                                                className="inline-flex size-9 shrink-0 items-center justify-center border border-border transition-colors hover:bg-[#e7e3dc]/55 disabled:cursor-not-allowed disabled:opacity-35"
+                                                className="inline-flex size-11 shrink-0 items-center justify-center border border-border transition-colors hover:bg-[#e7e3dc]/55 disabled:cursor-not-allowed disabled:opacity-35"
                                             >
                                                 <Plus
                                                     className="size-3.5"
@@ -1194,7 +1367,7 @@ export default function CatalogSettings({
                                     <button
                                         type="button"
                                         onClick={handleRemoveLogo}
-                                        disabled={logoUploading}
+                                        disabled={settingsForm.processing}
                                         className="text-xs font-semibold text-muted-foreground underline underline-offset-4 hover:text-foreground"
                                     >
                                         Remover logo atual
@@ -1202,21 +1375,46 @@ export default function CatalogSettings({
                                 </>
                             )}
                             <InputError
-                                message={logoUploadError ?? undefined}
+                                message={
+                                    logoUploadError ?? publicationErrors.logo
+                                }
                             />
                         </div>
                     </InspectorSection>
+                </>
+            );
+        }
+        if (activePanel === 'hero') {
+            const coverFit = normalizeCatalogCoverFit(
+                sectionProp(selectedSection, 'image_fit', 'cover'),
+            );
+            const coverScale = normalizeCatalogCoverScale(
+                sectionProp(
+                    selectedSection,
+                    'image_scale',
+                    CATALOG_COVER_SCALE.default,
+                ),
+            );
+            const heroSectionIndex = Math.max(
+                0,
+                settingsForm.data.sections.findIndex(
+                    (section) => section.type === 'hero',
+                ),
+            );
+
+            return (
+                <>
+                    <InspectorHeader
+                        eyebrow="Seção selecionada"
+                        title="Capa do catálogo"
+                    />
                     <InspectorSection title="Imagem de campanha">
                         <div className="space-y-4">
                             <div className="relative aspect-[3/2] overflow-hidden border border-border bg-[#e7e3dc]/45">
-                                {coverPreviewUrl ||
-                                settings.cover_thumbnail_url ||
-                                settings.cover_image_url ? (
+                                {draftSettings.cover_image_url ? (
                                     <img
                                         src={
-                                            coverPreviewUrl ??
-                                            settings.cover_thumbnail_url ??
-                                            settings.cover_image_url ??
+                                            draftSettings.cover_image_url ??
                                             undefined
                                         }
                                         alt="Prévia da imagem de campanha"
@@ -1248,10 +1446,13 @@ export default function CatalogSettings({
                                 type="file"
                                 accept="image/jpeg,image/png,image/webp"
                                 onChange={handleCoverSelected}
-                                className="sr-only"
+                                className="peer sr-only"
                                 id="catalog-cover-file"
                             />
-                            <div className="grid grid-cols-2 gap-2">
+                            <div
+                                className="grid gap-2"
+                                data-catalog-error="cover_image"
+                            >
                                 <Label
                                     htmlFor="catalog-cover-file"
                                     className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 border border-border px-3 text-xs font-semibold hover:bg-[#e7e3dc]/45"
@@ -1262,35 +1463,26 @@ export default function CatalogSettings({
                                     />
                                     Escolher foto
                                 </Label>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={handleCoverUpload}
-                                    disabled={
-                                        coverForm.processing ||
-                                        !coverForm.data.cover_image
-                                    }
-                                    className="min-h-11 rounded-[2px] shadow-none"
-                                >
-                                    {coverForm.processing
-                                        ? 'Enviando...'
-                                        : 'Usar na capa'}
-                                </Button>
                             </div>
-                            {coverForm.progress && (
+                            <MediaDraftNotice
+                                pending={Boolean(mediaForm.data.cover_image)}
+                                removed={mediaForm.data.remove_cover_image}
+                                onRevert={() => revertMedia('cover_image')}
+                            />
+                            {settingsForm.progress && (
                                 <div
                                     className="h-1 overflow-hidden bg-[#d7d2c9]"
-                                    aria-label={`Envio da capa em ${coverForm.progress.percentage}%`}
+                                    aria-label={`Envio do catálogo em ${settingsForm.progress.percentage}%`}
                                 >
                                     <div
                                         className="h-full bg-[#ff4d3d] transition-[width]"
                                         style={{
-                                            width: `${coverForm.progress.percentage}%`,
+                                            width: `${settingsForm.progress.percentage}%`,
                                         }}
                                     />
                                 </div>
                             )}
-                            {(settings.cover_image_url || coverPreviewUrl) && (
+                            {draftSettings.cover_image_url && (
                                 <button
                                     type="button"
                                     onClick={handleRemoveCover}
@@ -1300,7 +1492,15 @@ export default function CatalogSettings({
                                 </button>
                             )}
                             <InputError
-                                message={coverForm.errors.cover_image}
+                                message={
+                                    (
+                                        settingsForm.errors as Record<
+                                            string,
+                                            string
+                                        >
+                                    ).cover_image ??
+                                    mediaForm.errors.cover_image
+                                }
                             />
 
                             <div className="space-y-4 border-t border-border pt-4">
@@ -1309,7 +1509,7 @@ export default function CatalogSettings({
                                     data-catalog-error={`sections.${heroSectionIndex}.props.image_fit`}
                                 >
                                     <Label className="text-xs">
-                                        Como a foto ocupa a capa
+                                        Tamanho da Imagem de Capa
                                     </Label>
                                     <div
                                         className="grid grid-cols-2 border-t border-l border-border"
@@ -1360,7 +1560,7 @@ export default function CatalogSettings({
                                 </div>
 
                                 <SegmentedControl
-                                    label="Composição da capa"
+                                    label="Alinhamento da capa"
                                     value={
                                         sectionProp<string>(
                                             selectedSection,
@@ -1487,6 +1687,13 @@ export default function CatalogSettings({
                                             Opcional. Em 0%, a foto aparece sem
                                             filtro.
                                         </p>
+                                        <p className="border-l-2 border-[#cac4ba] pl-3 text-xs leading-5 text-muted-foreground">
+                                            Confira se a logo e os textos ficam
+                                            legíveis sobre a foto, também no
+                                            celular. Você pode ajustar o
+                                            enquadramento ou o escurecimento,
+                                            sem obrigação de usar filtro.
+                                        </p>
                                     </div>
                                 )}
 
@@ -1524,90 +1731,79 @@ export default function CatalogSettings({
                                     </div>
                                 )}
 
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between gap-3">
-                                        <Label className="text-xs">
-                                            Enquadramento horizontal
-                                        </Label>
-                                        <span className="text-[0.68rem] font-semibold text-muted-foreground tabular-nums">
-                                            {
-                                                settingsForm.data
-                                                    .cover_image_focal_x
-                                            }
-                                            %
-                                        </span>
+                                <details className="group border-t border-border pt-2">
+                                    <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-[#ff4d3d]">
+                                        Ajustar enquadramento
+                                        <ChevronDown className="size-4 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+                                    </summary>
+                                    <div className="space-y-4 pt-3">
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <Label className="text-xs">
+                                                    Enquadramento horizontal
+                                                </Label>
+                                                <span className="text-[0.68rem] font-semibold text-muted-foreground tabular-nums">
+                                                    {
+                                                        settingsForm.data
+                                                            .cover_image_focal_x
+                                                    }
+                                                    %
+                                                </span>
+                                            </div>
+                                            <Slider
+                                                aria-label="Enquadramento horizontal"
+                                                min={0}
+                                                max={100}
+                                                step={1}
+                                                value={[
+                                                    settingsForm.data
+                                                        .cover_image_focal_x,
+                                                ]}
+                                                onValueChange={([value]) =>
+                                                    updateCoverFocalPoint(
+                                                        'x',
+                                                        value,
+                                                    )
+                                                }
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <Label className="text-xs">
+                                                    Enquadramento vertical
+                                                </Label>
+                                                <span className="text-[0.68rem] font-semibold text-muted-foreground tabular-nums">
+                                                    {
+                                                        settingsForm.data
+                                                            .cover_image_focal_y
+                                                    }
+                                                    %
+                                                </span>
+                                            </div>
+                                            <Slider
+                                                aria-label="Enquadramento vertical"
+                                                min={0}
+                                                max={100}
+                                                step={1}
+                                                value={[
+                                                    settingsForm.data
+                                                        .cover_image_focal_y,
+                                                ]}
+                                                onValueChange={([value]) =>
+                                                    updateCoverFocalPoint(
+                                                        'y',
+                                                        value,
+                                                    )
+                                                }
+                                            />
+                                        </div>
                                     </div>
-                                    <Slider
-                                        aria-label="Enquadramento horizontal"
-                                        min={0}
-                                        max={100}
-                                        step={1}
-                                        value={[
-                                            settingsForm.data
-                                                .cover_image_focal_x,
-                                        ]}
-                                        onValueChange={([value]) =>
-                                            updateCoverFocalPoint('x', value)
-                                        }
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between gap-3">
-                                        <Label className="text-xs">
-                                            Enquadramento vertical
-                                        </Label>
-                                        <span className="text-[0.68rem] font-semibold text-muted-foreground tabular-nums">
-                                            {
-                                                settingsForm.data
-                                                    .cover_image_focal_y
-                                            }
-                                            %
-                                        </span>
-                                    </div>
-                                    <Slider
-                                        aria-label="Enquadramento vertical"
-                                        min={0}
-                                        max={100}
-                                        step={1}
-                                        value={[
-                                            settingsForm.data
-                                                .cover_image_focal_y,
-                                        ]}
-                                        onValueChange={([value]) =>
-                                            updateCoverFocalPoint('y', value)
-                                        }
-                                    />
-                                </div>
+                                </details>
                             </div>
                         </div>
                     </InspectorSection>
-                    <InspectorSection title="Apresentação">
+                    <InspectorSection title="Textos da Capa">
                         <div className="space-y-4">
-                            <div
-                                className="space-y-2"
-                                data-catalog-error="brand_name"
-                            >
-                                <Label htmlFor="brand-name" className="text-xs">
-                                    Nome da marca
-                                </Label>
-                                <Input
-                                    id="brand-name"
-                                    value={settingsForm.data.brand_name}
-                                    onChange={(event) =>
-                                        settingsForm.setData(
-                                            'brand_name',
-                                            event.target.value,
-                                        )
-                                    }
-                                    aria-invalid={Boolean(
-                                        settingsForm.errors.brand_name,
-                                    )}
-                                    className="h-11 rounded-[2px] border-border bg-transparent shadow-none focus-visible:border-[#18181f] focus-visible:ring-0"
-                                />
-                                <InputError
-                                    message={settingsForm.errors.brand_name}
-                                />
-                            </div>
                             <div className="space-y-2">
                                 <Label
                                     htmlFor="hero-eyebrow"
@@ -1686,16 +1882,6 @@ export default function CatalogSettings({
                                     className="min-h-28 w-full resize-y border border-border bg-transparent px-3 py-3 text-sm leading-5 outline-none focus:border-[#18181f]"
                                 />
                             </div>
-                            <SegmentedControl
-                                label="Exibição da marca"
-                                value={brandDisplay}
-                                options={[
-                                    { value: 'logo', label: 'Logo' },
-                                    { value: 'both', label: 'Ambos' },
-                                    { value: 'name', label: 'Nome' },
-                                ]}
-                                onChange={handleBrandDisplayChange}
-                            />
                             <div className="space-y-2">
                                 <Label htmlFor="hero-cta" className="text-xs">
                                     Convite para explorar
@@ -1720,7 +1906,7 @@ export default function CatalogSettings({
                             </div>
                             <div className="space-y-3 border-t border-border pt-4">
                                 <OptionSwitch
-                                    label="Mostrar convite"
+                                    label="Mostrar Âncora"
                                     description="Leva o lojista diretamente para as peças."
                                     checked={sectionProp(
                                         selectedSection,
@@ -1764,7 +1950,6 @@ export default function CatalogSettings({
                     <InspectorHeader
                         eyebrow="Seção selecionada"
                         title="Coleções"
-                        description="Crie caminhos rápidos para o lojista explorar sua linha."
                     />
                     <InspectorSection>
                         <div className="flex items-center justify-between gap-4">
@@ -1788,30 +1973,6 @@ export default function CatalogSettings({
                     </InspectorSection>
                     <InspectorSection title="Conteúdo">
                         <div className="space-y-4">
-                            <div className="space-y-2">
-                                <Label
-                                    htmlFor="collections-title"
-                                    className="text-xs"
-                                >
-                                    Título da seção
-                                </Label>
-                                <Input
-                                    id="collections-title"
-                                    value={sectionProp(
-                                        selectedSection,
-                                        'title',
-                                        'Coleções',
-                                    )}
-                                    onChange={(event) =>
-                                        updateSectionProp(
-                                            'collections',
-                                            'title',
-                                            event.target.value,
-                                        )
-                                    }
-                                    className="h-11 rounded-[2px] border-border bg-transparent shadow-none focus-visible:border-[#18181f] focus-visible:ring-0"
-                                />
-                            </div>
                             <SegmentedControl
                                 label="Como as coleções aparecem"
                                 value={sectionProp(
@@ -1843,7 +2004,6 @@ export default function CatalogSettings({
                     <InspectorHeader
                         eyebrow="Seção selecionada"
                         title="Produtos"
-                        description="Defina o ritmo da vitrine sem esconder as peças."
                     />
                     <InspectorSection>
                         <div className="flex items-center justify-between gap-4">
@@ -1867,30 +2027,6 @@ export default function CatalogSettings({
                     </InspectorSection>
                     <InspectorSection title="Composição">
                         <div className="space-y-4">
-                            <div className="space-y-2">
-                                <Label
-                                    htmlFor="products-title"
-                                    className="text-xs"
-                                >
-                                    Título da vitrine
-                                </Label>
-                                <Input
-                                    id="products-title"
-                                    value={sectionProp(
-                                        selectedSection,
-                                        'title',
-                                        'Em destaque',
-                                    )}
-                                    onChange={(event) =>
-                                        updateSectionProp(
-                                            'product_grid',
-                                            'title',
-                                            event.target.value,
-                                        )
-                                    }
-                                    className="h-11 rounded-[2px] border-border bg-transparent shadow-none focus-visible:border-[#18181f] focus-visible:ring-0"
-                                />
-                            </div>
                             <SegmentedControl
                                 label="Linguagem da vitrine"
                                 value={sectionProp(
@@ -2129,7 +2265,6 @@ export default function CatalogSettings({
                     <InspectorHeader
                         eyebrow="Identidade da vitrine"
                         title="Aparência"
-                        description="A coleção continua sendo protagonista; a identidade dá o tom."
                     />
                     <InspectorSection title="Cores">
                         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
@@ -2180,6 +2315,20 @@ export default function CatalogSettings({
                                 errorKey="background_color"
                             />
                         </div>
+                        {catalogLegibilityWarnings({
+                            textColor: settingsForm.data.secondary_color,
+                            accentColor: settingsForm.data.accent_color,
+                            backgroundColor: settingsForm.data.background_color,
+                            backgroundIsVariable:
+                                settingsForm.data.background_mode !== 'solid',
+                        }).map((warning) => (
+                            <p
+                                key={warning.id}
+                                className="mt-4 border-l-2 border-[#b43f32] pl-3 text-xs leading-5 text-[#66635d]"
+                            >
+                                {warning.message}
+                            </p>
+                        ))}
                     </InspectorSection>
                     <InspectorSection title="Tipografia">
                         <div className="space-y-4">
@@ -2301,39 +2450,45 @@ export default function CatalogSettings({
 
                             {settingsForm.data.background_mode === 'image' && (
                                 <div className="space-y-4">
-                                    {settings.background_image_url && (
+                                    {draftSettings.background_image_url && (
                                         <img
-                                            src={settings.background_image_url}
+                                            src={
+                                                draftSettings.background_image_url
+                                            }
                                             alt="Fundo atual do catálogo"
                                             className="aspect-[16/7] w-full border border-border object-cover"
                                         />
                                     )}
-                                    <Input
+                                    <input
+                                        id="catalog-background-file"
                                         type="file"
-                                        accept="image/*"
-                                        onChange={(event) =>
-                                            backgroundForm.setData(
-                                                'background_image',
-                                                event.target.files?.[0] ?? null,
-                                            )
+                                        accept="image/jpeg,image/png,image/webp"
+                                        onChange={handleBackgroundSelected}
+                                        className="sr-only"
+                                    />
+                                    <Label
+                                        htmlFor="catalog-background-file"
+                                        className="flex min-h-11 cursor-pointer items-center justify-center gap-2 border border-border px-3 text-xs font-semibold"
+                                    >
+                                        <Upload className="size-4" />
+                                        {draftSettings.background_image_url
+                                            ? 'Trocar foto de fundo'
+                                            : 'Escolher foto de fundo'}
+                                    </Label>
+                                    <MediaDraftNotice
+                                        pending={Boolean(
+                                            mediaForm.data.background_image,
+                                        )}
+                                        removed={
+                                            mediaForm.data
+                                                .remove_background_image
                                         }
-                                        className="h-11 rounded-[2px] border-border bg-transparent text-xs shadow-none file:mr-3 file:border-0 file:bg-transparent file:text-xs file:font-semibold"
+                                        onRevert={() =>
+                                            revertMedia('background_image')
+                                        }
                                     />
                                     <div className="grid grid-cols-2 gap-2">
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            onClick={handleBackgroundUpload}
-                                            disabled={
-                                                backgroundForm.processing ||
-                                                !backgroundForm.data
-                                                    .background_image
-                                            }
-                                            className="min-h-11 rounded-[2px] shadow-none"
-                                        >
-                                            Enviar foto
-                                        </Button>
-                                        {settings.background_image_url && (
+                                        {draftSettings.background_image_url && (
                                             <Button
                                                 type="button"
                                                 variant="ghost"
@@ -2346,8 +2501,7 @@ export default function CatalogSettings({
                                     </div>
                                     <InputError
                                         message={
-                                            backgroundForm.errors
-                                                .background_image
+                                            publicationErrors.background_image
                                         }
                                     />
                                     <div className="space-y-2">
@@ -2362,6 +2516,7 @@ export default function CatalogSettings({
                                             </span>
                                         </div>
                                         <Slider
+                                            aria-label="Presença da foto de fundo"
                                             value={[
                                                 settingsForm.data
                                                     .background_image_opacity,
@@ -2459,6 +2614,7 @@ export default function CatalogSettings({
                                             </span>
                                         </div>
                                         <Slider
+                                            aria-label="Intensidade do padrão de fundo"
                                             value={[
                                                 settingsForm.data
                                                     .pattern_opacity,
@@ -2547,12 +2703,14 @@ export default function CatalogSettings({
                             <DialogContent className="rounded-[2px] border-border bg-[#f6f4f0] shadow-none">
                                 <DialogHeader>
                                     <DialogTitle className="font-zouth-display text-2xl tracking-[-0.04em]">
-                                        Restaurar o catálogo?
+                                        Restaurar a aparência?
                                     </DialogTitle>
                                     <DialogDescription className="leading-6">
-                                        Cores, textos, fundo e estrutura voltam
-                                        para o início. Essa ação não pode ser
-                                        desfeita.
+                                        Cores, textos e composição voltam ao
+                                        início apenas na prévia. Suas imagens,
+                                        forma de negociação, regras de estoque e
+                                        disponibilidade do link serão mantidas.
+                                        O catálogo publicado só muda ao salvar.
                                     </DialogDescription>
                                 </DialogHeader>
                                 <DialogFooter>
@@ -2584,9 +2742,8 @@ export default function CatalogSettings({
         return (
             <>
                 <InspectorHeader
-                    eyebrow="Catálogo em circulação"
+                    eyebrow="Publicação"
                     title="Publicar e compartilhar"
-                    description="Leve a coleção ao lojista e acompanhe sua chegada."
                 />
                 <InspectorSection title="Forma de negociação">
                     <div className="space-y-4" data-catalog-error="hide_prices">
@@ -2912,253 +3069,216 @@ export default function CatalogSettings({
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Catálogo" />
 
-            <div className="flex min-h-0 flex-1 flex-col bg-[#f6f4f0]">
-                <header className="grid gap-6 border-b border-border px-5 py-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:px-8">
-                    <div className="min-w-0">
-                        <p className="text-[0.64rem] font-bold tracking-[0.22em] text-[#ff4d3d] uppercase">
-                            Catálogo digital
-                        </p>
-                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
-                            <h1 className="font-zouth-display text-[clamp(2rem,3.5vw,3.35rem)] leading-[0.95] font-semibold tracking-[-0.055em]">
-                                Seu Catálogo
-                                <span className="text-[#ff4d3d]">.</span>
-                            </h1>
-                            <StatusLabel
-                                tone={
-                                    settingsForm.data.public_link_active
-                                        ? 'mineral'
-                                        : 'muted'
-                                }
-                                className="gap-1.5"
-                            >
-                                <span
-                                    className={cn(
-                                        'size-1.5 rounded-full',
-                                        settingsForm.data.public_link_active
-                                            ? 'bg-[#2e705a]'
-                                            : 'bg-[#98968d]',
-                                    )}
-                                />
-                                {settingsForm.data.public_link_active
-                                    ? 'Publicado'
-                                    : 'Fora do ar'}
-                            </StatusLabel>
-                            {settingsForm.recentlySuccessful && (
-                                <span className="text-xs font-semibold text-[#2e705a]">
-                                    Alterações salvas
-                                </span>
-                            )}
-                        </div>
-                        <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-                            Vitrine compartilhável com a identidade da sua
-                            marca.
-                        </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2 lg:justify-end">
-                        <Button
-                            asChild
-                            variant="outline"
-                            className="min-h-12 rounded-[2px] border-border bg-transparent px-5 shadow-none"
-                        >
-                            <a
-                                href={public_link}
-                                target="_blank"
-                                rel="noreferrer"
-                            >
-                                Ver catálogo
-                                <ExternalLink className="size-4" />
-                            </a>
-                        </Button>
-                        <Button
-                            type="submit"
-                            form="catalog-studio-form"
-                            disabled={settingsForm.processing}
-                            className="min-h-12 rounded-[2px] bg-[#ff4d3d] px-7 text-[#18181f] shadow-none hover:translate-y-[-1px] hover:bg-[#ff4d3d]"
-                        >
-                            <Save className="size-4" />
-                            {settingsForm.processing ? 'Salvando...' : 'Salvar'}
-                        </Button>
-                    </div>
-                </header>
+            <div
+                data-testid="catalog-studio-workspace"
+                className="relative flex h-[calc(100svh-4rem)] min-h-0 flex-col overflow-clip bg-[#f6f4f0] [--muted-foreground:#66635d]"
+            >
+                <h1 className="sr-only">Personalizar catálogo</h1>
 
                 {hasFormErrors && (
                     <div
                         role="alert"
+                        id="catalog-save-errors"
+                        tabIndex={-1}
                         className="flex flex-col gap-3 border-b border-[#ff4d3d] bg-[#ff4d3d]/8 px-5 py-3 text-[#8c241d] sm:flex-row sm:items-center sm:justify-between lg:px-8"
                     >
                         <div>
                             <p className="text-sm font-semibold">
-                                Encontramos {formErrorEntries.length}{' '}
-                                {formErrorEntries.length === 1
-                                    ? 'ajuste antes de salvar.'
-                                    : 'ajustes antes de salvar.'}
+                                {publicationErrors.catalog_publication ? (
+                                    'A publicação não foi concluída.'
+                                ) : (
+                                    <>
+                                        Encontramos {formErrorEntries.length}{' '}
+                                        {formErrorEntries.length === 1
+                                            ? 'ajuste antes de salvar.'
+                                            : 'ajustes antes de salvar.'}
+                                    </>
+                                )}
                             </p>
                             <p className="mt-0.5 text-xs leading-5">
-                                {firstErrorPanel && (
-                                    <>Revise {panelLabels[firstErrorPanel]}: </>
-                                )}
+                                {firstErrorPanel &&
+                                    !publicationErrors.catalog_publication && (
+                                        <>
+                                            Revise{' '}
+                                            {panelLabels[firstErrorPanel]}:{' '}
+                                        </>
+                                    )}
                                 {formErrorEntries[0]?.[1]}
                             </p>
                         </div>
-                        <button
-                            type="button"
-                            onClick={() =>
-                                guideToFirstError(
-                                    settingsForm.errors as Record<
-                                        string,
-                                        string
-                                    >,
-                                )
-                            }
-                            className="min-h-10 shrink-0 border border-[#ff4d3d] px-4 text-xs font-semibold transition-colors hover:bg-[#ff4d3d] hover:text-[#18181f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff4d3d]"
-                        >
-                            Ir para o primeiro campo
-                        </button>
+                        {!publicationErrors.catalog_publication && (
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    guideToFirstError(
+                                        settingsForm.errors as Record<
+                                            string,
+                                            string
+                                        >,
+                                    )
+                                }
+                                className="min-h-10 shrink-0 border border-[#ff4d3d] px-4 text-xs font-semibold transition-colors hover:bg-[#ff4d3d] hover:text-[#18181f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff4d3d]"
+                            >
+                                Ir para o primeiro campo
+                            </button>
+                        )}
                     </div>
                 )}
 
+                <nav
+                    aria-label="Áreas do editor de catálogo"
+                    className="z-30 flex shrink-0 border-b border-border bg-[#f6f4f0] xl:hidden"
+                >
+                    {(
+                        [
+                            ['structure', 'Estrutura'],
+                            ['edit', 'Editar'],
+                            ['preview', 'Prévia'],
+                        ] as const
+                    ).map(([view, label]) => (
+                        <button
+                            key={view}
+                            type="button"
+                            aria-pressed={mobileView === view}
+                            onClick={() => setMobileView(view)}
+                            className={`min-h-12 flex-1 px-3 text-sm ${mobileView === view ? 'border-b-2 border-[#ff4d3d] font-semibold' : 'text-muted-foreground'}`}
+                        >
+                            {label}
+                        </button>
+                    ))}
+                </nav>
                 <form
                     id="catalog-studio-form"
                     onSubmit={handleSubmit}
-                    className="grid min-h-[780px] flex-1 grid-cols-1 border-b border-border xl:grid-cols-[12.5rem_minmax(0,1fr)_19rem] xl:items-start 2xl:grid-cols-[14rem_minmax(0,1fr)_21rem]"
+                    inert={settingsForm.processing}
+                    aria-busy={settingsForm.processing}
+                    className={cn(
+                        'relative grid min-h-0 flex-1 grid-cols-1 overflow-clip border-b border-border',
+                        !expandedPreview &&
+                            'xl:grid-cols-[12rem_minmax(0,1fr)_20rem] 2xl:grid-cols-[14rem_minmax(0,1fr)_21rem]',
+                    )}
                 >
                     <aside
                         data-testid="catalog-studio-structure"
-                        className="border-b border-border bg-[#f6f4f0] xl:sticky xl:top-0 xl:z-20 xl:max-h-svh xl:self-start xl:overflow-y-auto xl:overscroll-contain xl:border-r xl:border-b-0"
+                        className={cn(
+                            'min-h-0 overflow-y-auto overscroll-contain border-b border-border bg-[#f6f4f0] xl:border-r xl:border-b-0',
+                            mobileView === 'structure' ? 'block' : 'hidden',
+                            !expandedPreview && 'xl:block',
+                            expandedPreview && 'hidden',
+                        )}
                     >
                         <div className="border-b border-border px-4 py-5">
                             <p className="text-[0.64rem] font-bold tracking-[0.18em] uppercase">
                                 Estrutura
                             </p>
-                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                Arraste para mudar a ordem.
-                            </p>
                         </div>
                         <div className="divide-y divide-border">
-                            {settingsForm.data.sections.map(
-                                (section, index) => {
-                                    const meta = sectionMeta[section.type];
-                                    const isActive =
-                                        activePanel === section.type;
+                            {settingsForm.data.sections.map((section) => {
+                                const meta = sectionMeta[section.type];
+                                const isActive = activePanel === section.type;
 
-                                    return (
-                                        <div
-                                            key={section.type}
-                                            draggable
-                                            onDragStart={() =>
-                                                setDraggedSection(section.type)
+                                return (
+                                    <div
+                                        key={section.type}
+                                        draggable
+                                        onDragStart={() =>
+                                            setDraggedSection(section.type)
+                                        }
+                                        onDragEnd={() =>
+                                            setDraggedSection(null)
+                                        }
+                                        onDragOver={(event: DragEvent) =>
+                                            event.preventDefault()
+                                        }
+                                        onDrop={() =>
+                                            handleSectionDrop(section.type)
+                                        }
+                                        className={cn(
+                                            'group relative flex h-16 items-center transition-colors',
+                                            isActive
+                                                ? 'bg-white/55'
+                                                : 'hover:bg-white/35',
+                                            draggedSection === section.type &&
+                                                'opacity-45',
+                                        )}
+                                    >
+                                        {isActive && (
+                                            <span className="absolute inset-y-0 left-0 w-[3px] bg-[#ff4d3d]" />
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                selectPanel(section.type)
                                             }
-                                            onDragEnd={() =>
-                                                setDraggedSection(null)
-                                            }
-                                            onDragOver={(event: DragEvent) =>
-                                                event.preventDefault()
-                                            }
-                                            onDrop={() =>
-                                                handleSectionDrop(section.type)
-                                            }
-                                            className={cn(
-                                                'group relative flex min-h-[4.75rem] items-center transition-colors',
-                                                isActive
-                                                    ? 'bg-white/55'
-                                                    : 'hover:bg-white/35',
-                                                draggedSection ===
-                                                    section.type &&
-                                                    'opacity-45',
-                                            )}
+                                            className="flex h-full min-w-0 flex-1 items-center gap-3 pl-4 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#ff4d3d]"
                                         >
-                                            {isActive && (
-                                                <span className="absolute inset-y-0 left-0 w-[3px] bg-[#ff4d3d]" />
-                                            )}
+                                            <GripVertical
+                                                className="size-4 shrink-0 cursor-grab text-muted-foreground"
+                                                aria-hidden="true"
+                                            />
+                                            <span className="min-w-0">
+                                                <span className="block text-sm font-semibold">
+                                                    {meta.label}
+                                                </span>
+                                                <PanelErrorBadge
+                                                    count={
+                                                        panelErrorCounts[
+                                                            section.type
+                                                        ]
+                                                    }
+                                                />
+                                            </span>
+                                        </button>
+                                        <div className="flex shrink-0 items-center pr-2">
                                             <button
                                                 type="button"
                                                 onClick={() =>
-                                                    setActivePanel(section.type)
+                                                    toggleSection(section.type)
                                                 }
-                                                className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-3 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#ff4d3d]"
+                                                aria-label={`${section.enabled ? 'Ocultar' : 'Mostrar'} ${meta.label}`}
+                                                className="flex size-11 items-center justify-center text-muted-foreground hover:text-foreground"
                                             >
-                                                <GripVertical
-                                                    className="size-4 shrink-0 cursor-grab text-muted-foreground"
-                                                    aria-hidden="true"
-                                                />
-                                                <span className="min-w-0">
-                                                    <span className="block truncate text-sm font-semibold">
-                                                        {meta.label}
-                                                    </span>
-                                                    <span className="mt-0.5 block truncate text-[0.67rem] text-muted-foreground">
-                                                        {meta.description}
-                                                    </span>
-                                                    <PanelErrorBadge
-                                                        count={
-                                                            panelErrorCounts[
-                                                                section.type
-                                                            ]
-                                                        }
-                                                    />
-                                                </span>
+                                                {section.enabled ? (
+                                                    <Eye className="size-4" />
+                                                ) : (
+                                                    <EyeOff className="size-4" />
+                                                )}
                                             </button>
-                                            <div className="mr-2 flex items-center">
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        moveSection(
-                                                            section.type,
-                                                            'up',
-                                                        )
-                                                    }
-                                                    disabled={index === 0}
-                                                    aria-label={`Mover ${meta.label} para cima`}
-                                                    className="hidden size-8 items-center justify-center text-muted-foreground group-hover:flex hover:text-foreground focus-visible:flex disabled:opacity-25"
-                                                >
-                                                    <ChevronUp className="size-3.5" />
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        moveSection(
-                                                            section.type,
-                                                            'down',
-                                                        )
-                                                    }
-                                                    disabled={
-                                                        index ===
-                                                        settingsForm.data
-                                                            .sections.length -
-                                                            1
-                                                    }
-                                                    aria-label={`Mover ${meta.label} para baixo`}
-                                                    className="hidden size-8 items-center justify-center text-muted-foreground group-hover:flex hover:text-foreground focus-visible:flex disabled:opacity-25"
-                                                >
-                                                    <ChevronDown className="size-3.5" />
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        toggleSection(
-                                                            section.type,
-                                                        )
-                                                    }
-                                                    aria-label={`${section.enabled ? 'Ocultar' : 'Mostrar'} ${meta.label}`}
-                                                    className="flex size-9 items-center justify-center text-muted-foreground hover:text-foreground"
-                                                >
-                                                    {section.enabled ? (
-                                                        <Eye className="size-4" />
-                                                    ) : (
-                                                        <EyeOff className="size-4" />
-                                                    )}
-                                                </button>
-                                            </div>
                                         </div>
-                                    );
-                                },
-                            )}
+                                    </div>
+                                );
+                            })}
                         </div>
                         <div className="border-t border-border">
+                            <div className="border-b border-border px-4 py-5">
+                                <p className="text-[0.64rem] font-bold tracking-[0.18em] uppercase">
+                                    Configurações
+                                </p>
+                            </div>
                             <button
                                 type="button"
-                                onClick={() => setActivePanel('appearance')}
+                                onClick={() => selectPanel('brand')}
                                 className={cn(
-                                    'relative flex min-h-[4.75rem] w-full items-center gap-3 px-4 text-left transition-colors hover:bg-white/35',
+                                    'relative flex h-16 w-full items-center gap-3 border-b border-border px-4 text-left transition-colors hover:bg-white/35',
+                                    activePanel === 'brand' && 'bg-white/55',
+                                )}
+                            >
+                                {activePanel === 'brand' && (
+                                    <span className="absolute inset-y-0 left-0 w-[3px] bg-[#ff4d3d]" />
+                                )}
+                                <ImageIcon className="size-4 shrink-0" />
+                                <span className="block text-sm font-semibold">
+                                    Marca
+                                    <PanelErrorBadge
+                                        count={panelErrorCounts.brand}
+                                    />
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => selectPanel('appearance')}
+                                className={cn(
+                                    'relative flex h-16 w-full items-center gap-3 px-4 text-left transition-colors hover:bg-white/35',
                                     activePanel === 'appearance' &&
                                         'bg-white/55',
                                 )}
@@ -3171,9 +3291,6 @@ export default function CatalogSettings({
                                     <span className="block text-sm font-semibold">
                                         Aparência
                                     </span>
-                                    <span className="mt-0.5 block text-[0.67rem] text-muted-foreground">
-                                        Cores, fonte e fundo
-                                    </span>
                                     <PanelErrorBadge
                                         count={panelErrorCounts.appearance}
                                     />
@@ -3181,9 +3298,9 @@ export default function CatalogSettings({
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setActivePanel('publish')}
+                                onClick={() => selectPanel('publish')}
                                 className={cn(
-                                    'relative flex min-h-[4.75rem] w-full items-center gap-3 border-t border-border px-4 text-left transition-colors hover:bg-white/35',
+                                    'relative flex h-16 w-full items-center gap-3 border-t border-border px-4 text-left transition-colors hover:bg-white/35',
                                     activePanel === 'publish' && 'bg-white/55',
                                 )}
                             >
@@ -3195,9 +3312,6 @@ export default function CatalogSettings({
                                     <span className="block text-sm font-semibold">
                                         Publicar
                                     </span>
-                                    <span className="mt-0.5 block text-[0.67rem] text-muted-foreground">
-                                        Link e interesse
-                                    </span>
                                     <PanelErrorBadge
                                         count={panelErrorCounts.publish}
                                     />
@@ -3206,25 +3320,45 @@ export default function CatalogSettings({
                         </div>
                     </aside>
 
-                    <main className="flex min-w-0 flex-col bg-[#e7e3dc]/55">
+                    <main
+                        className={`min-h-0 min-w-0 flex-col bg-[#e7e3dc]/55 ${mobileView === 'preview' ? 'flex' : 'hidden'} xl:flex`}
+                    >
                         <div
                             data-testid="catalog-studio-preview-toolbar"
-                            className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-border bg-[#f6f4f0] px-4 py-2.5 xl:sticky xl:top-0 xl:z-30"
+                            className="z-20 flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-[#f6f4f0] px-3 py-2"
                         >
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                                 <LayoutGrid className="size-4" />
                                 <span className="text-xs font-semibold">
                                     Prévia ao vivo
                                 </span>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setPreviewMode((mode) =>
+                                            mode === 'edit' ? 'test' : 'edit',
+                                        )
+                                    }
+                                    aria-pressed={previewMode === 'test'}
+                                    className="min-h-11 border border-border px-3 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-[#ff4d3d]"
+                                >
+                                    {previewMode === 'test'
+                                        ? 'Voltar à edição'
+                                        : 'Testar como lojista'}
+                                </button>
                             </div>
                             <div className="flex items-center gap-2">
                                 <div className="flex border border-border bg-[#f6f4f0]">
                                     <button
                                         type="button"
-                                        onClick={() => setViewport('desktop')}
+                                        onClick={() => {
+                                            setViewport('desktop');
+                                            setZoom(null);
+                                        }}
+                                        aria-label="Prévia no computador"
                                         aria-pressed={viewport === 'desktop'}
                                         className={cn(
-                                            'flex min-h-9 items-center gap-2 px-3 text-xs font-semibold',
+                                            'flex min-h-11 items-center gap-2 px-3 text-xs font-semibold',
                                             viewport === 'desktop'
                                                 ? 'bg-[#18181f] text-[#f6f4f0]'
                                                 : 'hover:bg-white/55',
@@ -3237,10 +3371,14 @@ export default function CatalogSettings({
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => setViewport('mobile')}
+                                        onClick={() => {
+                                            setViewport('mobile');
+                                            setZoom(null);
+                                        }}
+                                        aria-label="Prévia no celular"
                                         aria-pressed={viewport === 'mobile'}
                                         className={cn(
-                                            'flex min-h-9 items-center gap-2 border-l border-border px-3 text-xs font-semibold',
+                                            'flex min-h-11 items-center gap-2 border-l border-border px-3 text-xs font-semibold',
                                             viewport === 'mobile'
                                                 ? 'bg-[#18181f] text-[#f6f4f0]'
                                                 : 'hover:bg-white/55',
@@ -3252,69 +3390,152 @@ export default function CatalogSettings({
                                         </span>
                                     </button>
                                 </div>
-                                <div className="flex items-center border border-border bg-[#f6f4f0]">
+                                <div
+                                    className={cn(
+                                        'items-center border border-border bg-[#f6f4f0]',
+                                        previewMode === 'test'
+                                            ? 'hidden'
+                                            : 'flex',
+                                    )}
+                                >
                                     <button
                                         type="button"
                                         onClick={() =>
-                                            setZoom((current) =>
-                                                Math.max(75, current - 10),
+                                            setZoom(
+                                                Math.max(
+                                                    25,
+                                                    Math.round(
+                                                        previewScale * 100,
+                                                    ) - 10,
+                                                ),
                                             )
                                         }
-                                        disabled={zoom === 75}
+                                        disabled={previewScale <= 0.25}
                                         aria-label="Diminuir prévia"
-                                        className="flex size-9 items-center justify-center disabled:opacity-30"
+                                        className="flex size-11 items-center justify-center disabled:opacity-30"
                                     >
                                         <Minus className="size-3.5" />
                                     </button>
-                                    <span className="min-w-12 text-center text-[0.67rem] font-semibold tabular-nums">
-                                        {zoom}%
-                                    </span>
                                     <button
                                         type="button"
                                         onClick={() =>
-                                            setZoom((current) =>
-                                                Math.min(115, current + 10),
+                                            setZoom(zoom === null ? 100 : null)
+                                        }
+                                        title={
+                                            zoom === null
+                                                ? 'Ver em tamanho real'
+                                                : 'Encaixar na área disponível'
+                                        }
+                                        aria-label={
+                                            zoom === null
+                                                ? 'Ver prévia em tamanho real'
+                                                : 'Encaixar prévia na área disponível'
+                                        }
+                                        className="min-h-11 min-w-14 px-1 text-center text-xs font-semibold tabular-nums"
+                                    >
+                                        {Math.round(previewScale * 100)}%
+                                        <span className="block text-[0.6rem] font-normal">
+                                            {zoom === null
+                                                ? 'Encaixada'
+                                                : 'Encaixar'}
+                                        </span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setZoom(
+                                                Math.min(
+                                                    150,
+                                                    Math.round(
+                                                        previewScale * 100,
+                                                    ) + 10,
+                                                ),
                                             )
                                         }
-                                        disabled={zoom === 115}
+                                        disabled={previewScale >= 1.5}
                                         aria-label="Aumentar prévia"
-                                        className="flex size-9 items-center justify-center disabled:opacity-30"
+                                        className="flex size-11 items-center justify-center disabled:opacity-30"
                                     >
                                         <Plus className="size-3.5" />
                                     </button>
                                 </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setExpandedPreview(!expandedPreview);
+                                        setMobileView('preview');
+                                        setZoom(null);
+                                    }}
+                                    aria-label={
+                                        expandedPreview
+                                            ? 'Voltar aos controles'
+                                            : 'Ampliar prévia'
+                                    }
+                                    title={
+                                        expandedPreview
+                                            ? 'Voltar aos controles'
+                                            : 'Ampliar prévia'
+                                    }
+                                    className="hidden size-11 items-center justify-center border border-border xl:flex"
+                                >
+                                    {expandedPreview ? (
+                                        <Minimize2 className="size-4" />
+                                    ) : (
+                                        <Maximize2 className="size-4" />
+                                    )}
+                                </button>
                             </div>
                         </div>
-                        <div className="flex min-h-[680px] flex-1 items-start justify-center overflow-auto p-4 sm:p-6">
+                        <div
+                            ref={previewScrollRef}
+                            data-testid="catalog-preview-viewport"
+                            className={cn(
+                                'flex min-h-0 flex-1 items-start p-4 [scrollbar-gutter:stable] sm:p-6',
+                                previewMode === 'test'
+                                    ? 'overflow-hidden'
+                                    : 'overflow-auto',
+                            )}
+                        >
                             <div
                                 ref={previewStageRef}
                                 data-testid="catalog-preview-stage"
-                                className="flex w-full items-start justify-center"
+                                className="flex w-full min-w-0 items-start"
                             >
                                 <div
                                     data-testid="catalog-live-preview"
-                                    className="origin-top transition-[zoom] duration-300 ease-out"
+                                    className="relative mx-auto shrink-0 overflow-clip"
                                     style={{
-                                        width: `${previewCanvasWidth}px`,
-                                        zoom: previewScale,
+                                        width:
+                                            previewCanvasWidth * previewScale,
+                                        height:
+                                            previewCanvasHeight * previewScale,
                                     }}
                                 >
-                                    <div className="min-h-[680px] overflow-hidden border border-[#cac4ba] bg-white shadow-[0_18px_50px_rgba(24,24,31,0.08)]">
+                                    <div
+                                        className="absolute top-0 left-0 origin-top-left bg-white shadow-[0_18px_50px_rgba(24,24,31,0.08)] outline outline-[#cac4ba]"
+                                        style={{
+                                            width: `${previewCanvasWidth}px`,
+                                            transform: `scale(${previewScale})`,
+                                        }}
+                                    >
                                         <CatalogPreview
                                             settings={draftSettings}
-                                            products={sample_products}
-                                            productCount={product_count}
-                                            manufacturerName={manufacturer_name}
                                             viewport={viewport}
+                                            height={previewCanvasHeight}
+                                            mode={previewMode}
                                             selectedSection={
-                                                activePanel === 'hero' ||
-                                                activePanel === 'collections' ||
-                                                activePanel === 'product_grid'
-                                                    ? activePanel
-                                                    : null
+                                                activePanel === 'brand'
+                                                    ? 'hero'
+                                                    : activePanel === 'hero' ||
+                                                        activePanel ===
+                                                            'collections' ||
+                                                        activePanel ===
+                                                            'product_grid'
+                                                      ? activePanel
+                                                      : null
                                             }
                                             onSelectSection={(section) =>
-                                                setActivePanel(section)
+                                                selectPanel(section)
                                             }
                                         />
                                     </div>
@@ -3326,11 +3547,113 @@ export default function CatalogSettings({
                     <aside
                         ref={inspectorRef}
                         data-testid="catalog-studio-inspector"
-                        className="min-w-0 border-t border-border bg-[#f6f4f0] xl:sticky xl:top-0 xl:z-20 xl:max-h-svh xl:self-start xl:overflow-y-auto xl:overscroll-contain xl:border-t-0 xl:border-l"
+                        aria-label="Configurar seção do catálogo"
+                        tabIndex={-1}
+                        className={cn(
+                            'relative min-h-0 min-w-0 overflow-y-auto overscroll-contain border-t border-border bg-[#f6f4f0] xl:border-t-0 xl:border-l',
+                            mobileView === 'edit' ? 'block' : 'hidden',
+                            !expandedPreview && 'xl:block',
+                            expandedPreview && 'hidden',
+                        )}
                     >
                         {renderInspector()}
                     </aside>
                 </form>
+                <footer
+                    data-testid="catalog-studio-actions"
+                    aria-label="Ações de publicação do catálogo"
+                    className="z-30 flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border bg-[#f6f4f0] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6"
+                >
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1">
+                        <StatusLabel
+                            tone={
+                                settings.public_link_active
+                                    ? 'mineral'
+                                    : 'muted'
+                            }
+                            className="gap-1.5"
+                        >
+                            <span
+                                className={cn(
+                                    'size-1.5 rounded-full',
+                                    settings.public_link_active
+                                        ? 'bg-[#2e705a]'
+                                        : 'bg-[#98968d]',
+                                )}
+                            />
+                            {settings.public_link_active
+                                ? 'Publicado'
+                                : 'Fora do ar'}
+                        </StatusLabel>
+                        {hasUnpublishedChanges && (
+                            <span
+                                role="status"
+                                className="text-xs font-semibold text-[#b43f32]"
+                            >
+                                Alterações ainda não publicadas
+                            </span>
+                        )}
+                        {settingsForm.recentlySuccessful && (
+                            <span className="text-xs font-semibold text-[#2e705a]">
+                                Alterações salvas
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex w-full items-center gap-2 sm:w-auto sm:justify-end">
+                        <div className="flex border border-border">
+                            <button
+                                type="button"
+                                onClick={history.undo}
+                                disabled={
+                                    !history.canUndo || settingsForm.processing
+                                }
+                                aria-label="Desfazer alteração"
+                                title="Desfazer (Ctrl ou ⌘ Z)"
+                                className="flex size-11 items-center justify-center focus-visible:outline-2 focus-visible:outline-[#ff4d3d] disabled:opacity-30"
+                            >
+                                <Undo2 className="size-4" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={history.redo}
+                                disabled={
+                                    !history.canRedo || settingsForm.processing
+                                }
+                                aria-label="Refazer alteração"
+                                title="Refazer (Ctrl ou ⌘ Shift Z)"
+                                className="flex size-11 items-center justify-center border-l border-border focus-visible:outline-2 focus-visible:outline-[#ff4d3d] disabled:opacity-30"
+                            >
+                                <Redo2 className="size-4" />
+                            </button>
+                        </div>
+                        <Button
+                            asChild
+                            variant="outline"
+                            className="min-h-11 rounded-[2px] border-border bg-transparent px-3 shadow-none"
+                        >
+                            <a
+                                href={public_link}
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                Ver publicado
+                                <ExternalLink className="size-4" />
+                            </a>
+                        </Button>
+                        <Button
+                            type="submit"
+                            form="catalog-studio-form"
+                            disabled={
+                                settingsForm.processing ||
+                                !hasUnpublishedChanges
+                            }
+                            className="min-h-11 rounded-[2px] bg-[#ff4d3d] px-5 text-white shadow-none hover:bg-[#ed4536]"
+                        >
+                            <Save className="size-4" />
+                            {settingsForm.processing ? 'Salvando...' : 'Salvar'}
+                        </Button>
+                    </div>
+                </footer>
             </div>
 
             <ImageCropDialog
@@ -3338,10 +3661,6 @@ export default function CatalogSettings({
                 onOpenChange={setLogoCropDialogOpen}
                 imageFile={logoCropFile}
                 onCropped={handleLogoCropped}
-                onSkip={() => {
-                    setLogoCropFile(null);
-                    setLogoCropDialogOpen(false);
-                }}
                 aspectRatio={null}
                 title="Ajustar logo"
                 description="Recorte próximo da marca. O fundo transparente é preservado por padrão, inclusive em PNG e SVG. Escolher uma cor é opcional."

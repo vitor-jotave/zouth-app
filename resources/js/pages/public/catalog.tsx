@@ -27,6 +27,8 @@ import {
     Zap,
 } from 'lucide-react';
 import {
+    createContext,
+    useContext,
     useCallback,
     useEffect,
     useRef,
@@ -36,7 +38,7 @@ import {
     type MouseEvent,
     type ReactNode,
 } from 'react';
-import { CatalogHero } from '@/components/catalog-hero';
+import { CatalogHero, catalogHeroSubtitle } from '@/components/catalog-hero';
 import { Pagination } from '@/components/pagination';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -67,6 +69,20 @@ import {
     SheetTitle,
 } from '@/components/ui/sheet';
 import {
+    catalogPreviewProduct,
+    catalogPreviewPageNumbers,
+    isCatalogPreviewUpdate,
+    matchesCatalogPreviewFilters,
+    reconcileCatalogPreviewCart,
+    type CatalogPreviewMode,
+    type CatalogPreviewSection,
+} from '@/lib/catalog-preview-protocol';
+import {
+    catalogSelectionCountLabel,
+    mergeRestoredCatalogSelection,
+    parseCatalogSelection,
+} from '@/lib/catalog-selection';
+import {
     CATALOG_LOGO_SIZE,
     catalogCoverImageUrl,
     catalogLogoStyle,
@@ -80,6 +96,7 @@ import {
     type OrderRuleContract,
 } from '@/lib/order-rules';
 import { cn } from '@/lib/utils';
+import { selection as restoreSelection } from '@/routes/public/catalog';
 
 interface Manufacturer {
     id: number;
@@ -199,6 +216,7 @@ interface ProductDisplayOptions {
 }
 
 interface Props {
+    preview_mode?: boolean;
     manufacturer: Manufacturer;
     catalog_settings: CatalogSettings;
     products: Paginated<Product>;
@@ -300,6 +318,103 @@ interface LayoutProps {
         variationName: string,
         value: string,
     ) => void;
+}
+
+interface PreviewContextValue {
+    mode: CatalogPreviewMode;
+    selectedSection: CatalogPreviewSection | null;
+    changeFilters: (filters: CatalogFilters) => void;
+    page: number;
+    pages: number;
+    changePage: (page: number) => void;
+}
+
+const CatalogPreviewContext = createContext<PreviewContextValue | null>(null);
+
+function PreviewSectionTarget({ section }: { section: CatalogPreviewSection }) {
+    const preview = useContext(CatalogPreviewContext);
+    if (!preview || preview.mode !== 'edit') return null;
+    const labels = {
+        hero: 'Capa',
+        collections: 'Coleções',
+        product_grid: 'Produtos',
+    };
+
+    return (
+        <button
+            type="button"
+            aria-label={`Editar ${labels[section].toLowerCase()}`}
+            aria-pressed={preview.selectedSection === section}
+            onClick={() =>
+                window.parent.postMessage(
+                    { type: 'zouth:catalog-preview:select', section },
+                    window.location.origin,
+                )
+            }
+            className={cn(
+                'absolute inset-0 z-30 cursor-pointer border-2 border-transparent text-left outline-none focus-visible:border-[#ff4d3d] focus-visible:ring-2 focus-visible:ring-[#ff4d3d] focus-visible:ring-inset',
+                preview.selectedSection === section && 'border-[#ff4d3d]',
+            )}
+        >
+            {preview.selectedSection === section && (
+                <span className="absolute top-2 left-2 bg-[#ff4d3d] px-2 py-1 font-sans text-[11px] font-semibold text-white">
+                    {labels[section]}
+                </span>
+            )}
+        </button>
+    );
+}
+
+function CatalogPagination({ products }: { products: Paginated<Product> }) {
+    const preview = useContext(CatalogPreviewContext);
+    if (!preview)
+        return <Pagination links={products.meta?.links ?? products.links} />;
+    if (preview.pages <= 1) return null;
+
+    return (
+        <nav
+            aria-label="Páginas da coleção"
+            className="mt-8 flex flex-wrap items-center justify-center gap-2"
+        >
+            <Button
+                variant="outline"
+                size="sm"
+                className="min-h-11 min-w-11 rounded-[2px] px-4 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={preview.page === 1}
+                onClick={() => preview.changePage(preview.page - 1)}
+            >
+                ← Anterior
+            </Button>
+            {catalogPreviewPageNumbers(preview.page, preview.pages).map(
+                (page, index) => (
+                    <Button
+                        key={page ?? `ellipsis-${index}`}
+                        variant={page === preview.page ? 'default' : 'outline'}
+                        size="sm"
+                        className="min-h-11 min-w-11 rounded-[2px] px-4"
+                        aria-current={
+                            page === preview.page ? 'page' : undefined
+                        }
+                        disabled={page === null}
+                        onClick={() =>
+                            page !== null && preview.changePage(page)
+                        }
+                    >
+                        {page ?? '...'}
+                    </Button>
+                ),
+            )}
+            <Button
+                variant="outline"
+                size="sm"
+                className="min-h-11 min-w-11 rounded-[2px] px-4 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={preview.page === preview.pages}
+                onClick={() => preview.changePage(preview.page + 1)}
+            >
+                Próxima →
+            </Button>
+        </nav>
+    );
 }
 
 function formatPrice(priceCents?: number | null): string {
@@ -1228,6 +1343,7 @@ function CatalogFiltersDrawer({
     headingFont?: string;
     bodyFont?: string;
 }) {
+    const preview = useContext(CatalogPreviewContext);
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState(filters.search ?? '');
     const [categoryId, setCategoryId] = useState(filters.category_id ?? null);
@@ -1301,6 +1417,16 @@ function CatalogFiltersDrawer({
             payload.variations = variations;
         }
 
+        if (preview) {
+            preview.changeFilters({
+                search: trimmedSearch,
+                category_id: categoryId,
+                variations,
+            });
+            setOpen(false);
+            return;
+        }
+
         router.get(`/catalog/${catalogToken}`, payload, {
             preserveState: false,
             preserveScroll: true,
@@ -1314,6 +1440,16 @@ function CatalogFiltersDrawer({
         setCategoryId(null);
         selectedVariationsRef.current = {};
         setSelectedVariations({});
+
+        if (preview) {
+            preview.changeFilters({
+                search: '',
+                category_id: null,
+                variations: {},
+            });
+            setOpen(false);
+            return;
+        }
 
         router.get(
             `/catalog/${catalogToken}`,
@@ -1555,6 +1691,7 @@ function CatalogCollections({
     display?: string;
     trailingAction?: ReactNode;
 }) {
+    const preview = useContext(CatalogPreviewContext);
     if (categories.length === 0 && !trailingAction) {
         return null;
     }
@@ -1576,6 +1713,11 @@ function CatalogCollections({
 
         if (Object.keys(filters.variations ?? {}).length > 0) {
             payload.variations = filters.variations;
+        }
+
+        if (preview) {
+            preview.changeFilters({ ...filters, category_id: nextCategoryId });
+            return;
         }
 
         router.get(`/catalog/${catalogToken}`, payload, {
@@ -2364,13 +2506,16 @@ function MinimalLayout({
         fontMap['manrope'];
     const heroHeadline =
         (heroSection?.props?.headline as string | undefined) ?? '';
-    const heroSubtitle =
-        (heroSection?.props?.subtitle as string | undefined) ||
-        settings.description;
+    const heroSubtitle = catalogHeroSubtitle(
+        heroSection?.props?.subtitle as string | null | undefined,
+        settings.description,
+        heroSection?.props?.subtitle_fallback !== false,
+    );
     const heroAlign =
         (heroSection?.props?.align as string | undefined) ?? 'left';
     const heroEyebrow =
-        (heroSection?.props?.eyebrow as string | undefined) ?? 'Nova coleção';
+        (heroSection?.props?.eyebrow as string | null | undefined) ??
+        (heroSection?.props?.eyebrow_fallback === false ? '' : 'Nova coleção');
     const showProductCount = booleanSetting(
         heroSection?.props?.show_product_count,
         false,
@@ -2378,7 +2523,9 @@ function MinimalLayout({
     const showHeroCta = booleanSetting(heroSection?.props?.show_cta, true);
     const heroCtaText =
         (heroSection?.props?.cta_text as string | undefined) ||
-        'Conheça a coleção';
+        (heroSection?.props?.cta_text_fallback === false
+            ? ''
+            : 'Conheça a coleção');
     const collectionsDisplay =
         (collectionsSection?.props?.display as string | undefined) ?? 'tabs';
     const productColumns = Number(
@@ -2443,9 +2590,11 @@ function MinimalLayout({
         >
             {heroEnabled && (
                 <header
+                    data-catalog-section="hero"
                     className="relative -mx-6 -mt-12"
                     style={{ order: sectionOrder('hero') }}
                 >
+                    <PreviewSectionTarget section="hero" />
                     <CatalogHero
                         brandName={settings.brand_name ?? manufacturer.name}
                         brandTagline={settings.tagline}
@@ -2466,6 +2615,9 @@ function MinimalLayout({
                         overlayOpacity={heroSection?.props?.overlay_opacity}
                         eyebrow={heroEyebrow}
                         headline={heroHeadline}
+                        headlineFallback={
+                            heroSection?.props?.headline_fallback !== false
+                        }
                         subtitle={heroSubtitle}
                         showCta={showHeroCta && productGridEnabled}
                         ctaText={heroCtaText}
@@ -2477,7 +2629,12 @@ function MinimalLayout({
             )}
 
             {collectionsEnabled && (
-                <section style={{ order: sectionOrder('collections') }}>
+                <section
+                    data-catalog-section="collections"
+                    className="relative"
+                    style={{ order: sectionOrder('collections') }}
+                >
+                    <PreviewSectionTarget section="collections" />
                     <CatalogCollections
                         catalogToken={catalogToken}
                         filters={filters}
@@ -2503,8 +2660,11 @@ function MinimalLayout({
             {productGridEnabled && (
                 <section
                     id="catalog-products"
+                    data-catalog-section="product_grid"
+                    className="relative"
                     style={{ order: sectionOrder('product_grid') }}
                 >
+                    <PreviewSectionTarget section="product_grid" />
                     {!collectionsEnabled && (
                         <div className="mb-6 flex justify-end border-b border-black/10 pb-4">
                             <CatalogFiltersDrawer
@@ -2879,9 +3039,7 @@ function MinimalLayout({
                         </div>
                     )}
 
-                    <Pagination
-                        links={products.meta?.links ?? products.links}
-                    />
+                    <CatalogPagination products={products} />
                 </section>
             )}
         </div>
@@ -3507,15 +3665,172 @@ function BoutiqueLayout({
 
 export default function PublicCatalog({
     manufacturer,
-    catalog_settings,
-    products,
-    combos,
+    catalog_settings: publishedSettings,
+    products: publishedProducts,
+    combos: publishedCombos,
     catalog_token,
-    filters,
-    filter_options,
-    order_rules,
-    whatsapp_checkout,
+    filters: publishedFilters,
+    filter_options: publishedFilterOptions,
+    order_rules: publishedRules,
+    whatsapp_checkout: publishedWhatsapp,
+    preview_mode = false,
 }: Props) {
+    const [previewSettings, setPreviewSettings] = useState<
+        Partial<CatalogSettings>
+    >({});
+    const [previewMode, setPreviewMode] = useState<CatalogPreviewMode>('edit');
+    const [previewSection, setPreviewSection] =
+        useState<CatalogPreviewSection | null>(null);
+    const [previewFilters, setPreviewFilters] = useState<CatalogFilters>({
+        search: '',
+        category_id: null,
+        variations: {},
+    });
+    const [previewPage, setPreviewPage] = useState(1);
+    const [previewNotice, setPreviewNotice] = useState(false);
+    const lastPreviewSection = useRef<CatalogPreviewSection | null>(null);
+    const catalog_settings = preview_mode
+        ? { ...publishedSettings, ...previewSettings }
+        : publishedSettings;
+    const filters = preview_mode ? previewFilters : publishedFilters;
+    const preparedProducts = preview_mode
+        ? publishedProducts.data.map((product) =>
+              catalogPreviewProduct(
+                  product,
+                  catalog_settings.allow_orders_without_stock,
+              ),
+          )
+        : publishedProducts.data;
+    const filteredProducts = preview_mode
+        ? preparedProducts.filter((product) =>
+              matchesCatalogPreviewFilters(
+                  product,
+                  filters,
+                  publishedFilterOptions.variation_types,
+                  catalog_settings.allow_orders_without_stock,
+              ),
+          )
+        : preparedProducts;
+    const previewPages = Math.max(1, Math.ceil(filteredProducts.length / 24));
+    const currentPreviewPage = Math.min(previewPage, previewPages);
+    const products: Paginated<Product> = preview_mode
+        ? {
+              data: filteredProducts.slice(
+                  (currentPreviewPage - 1) * 24,
+                  currentPreviewPage * 24,
+              ),
+              meta: {
+                  current_page: currentPreviewPage,
+                  last_page: previewPages,
+                  total: filteredProducts.length,
+              },
+          }
+        : publishedProducts;
+    const combos = preview_mode
+        ? publishedCombos.filter((product) =>
+              matchesCatalogPreviewFilters(
+                  product,
+                  filters,
+                  publishedFilterOptions.variation_types,
+                  catalog_settings.allow_orders_without_stock,
+              ),
+          )
+        : publishedCombos;
+    const filter_options = preview_mode
+        ? {
+              ...publishedFilterOptions,
+              variation_types: publishedFilterOptions.variation_types
+                  .map((type) => ({
+                      ...type,
+                      values: type.values.filter((value) =>
+                          preparedProducts.some((product) =>
+                              product.variations.some(
+                                  (variation) =>
+                                      variation.type_name === type.name &&
+                                      variation.values.some(
+                                          (option) =>
+                                              option.value === value.value,
+                                      ),
+                              ),
+                          ),
+                      ),
+                  }))
+                  .filter((type) => type.values.length > 0),
+          }
+        : publishedFilterOptions;
+    const whatsapp_checkout = preview_mode
+        ? { ...publishedWhatsapp, enabled: catalog_settings.hide_prices }
+        : publishedWhatsapp;
+    const order_rules =
+        preview_mode && catalog_settings.hide_prices
+            ? publishedRules.filter(
+                  (rule) =>
+                      rule.action.type === 'block_checkout' &&
+                      rule.conditions.every(
+                          (condition) => condition.metric !== 'subtotal_cents',
+                      ),
+              )
+            : publishedRules;
+
+    useEffect(() => {
+        if (!preview_mode) return;
+
+        const receiveDraft = (event: MessageEvent) => {
+            if (
+                event.source !== window.parent ||
+                event.origin !== window.location.origin ||
+                !isCatalogPreviewUpdate(event.data)
+            )
+                return;
+            setPreviewSettings(event.data.settings as Partial<CatalogSettings>);
+            setPreviewMode(event.data.mode);
+            setPreviewSection(event.data.selectedSection);
+        };
+        window.addEventListener('message', receiveDraft);
+        window.parent.postMessage(
+            { type: 'zouth:catalog-preview:ready' },
+            window.location.origin,
+        );
+        return () => window.removeEventListener('message', receiveDraft);
+    }, [preview_mode]);
+
+    useEffect(() => {
+        if (previewMode === 'test') {
+            lastPreviewSection.current = null;
+            return;
+        }
+        if (!preview_mode || previewSection === lastPreviewSection.current)
+            return;
+        const section = previewSection
+            ? document.querySelector(
+                  `[data-catalog-section="${previewSection}"]`,
+              )
+            : null;
+        if (section || !previewSection) {
+            lastPreviewSection.current = previewSection;
+            section?.scrollIntoView({ block: 'start' });
+        }
+    }, [preview_mode, previewMode, previewSection, catalog_settings.sections]);
+
+    const previewContext: PreviewContextValue | null = preview_mode
+        ? {
+              mode: previewMode,
+              selectedSection: previewSection,
+              changeFilters: (nextFilters) => {
+                  setPreviewFilters(nextFilters);
+                  setPreviewPage(1);
+              },
+              page: currentPreviewPage,
+              pages: previewPages,
+              changePage: (page) => {
+                  setPreviewPage(page);
+                  document
+                      .getElementById('catalog-products')
+                      ?.scrollIntoView({ block: 'start' });
+              },
+          }
+        : null;
+
     const headingFont =
         fontMap[
             catalog_settings.heading_font_family ?? catalog_settings.font_family
@@ -3529,10 +3844,221 @@ export default function PublicCatalog({
 
     // Cart state
     const [cart, setCart] = useState<CartItem[]>([]);
+    const [hydratedCatalog, setHydratedCatalog] = useState<string | null>(null);
+    const [selectionNotice, setSelectionNotice] = useState('');
+    const [restoreAttempt, setRestoreAttempt] = useState(0);
+    const [restoreFailed, setRestoreFailed] = useState(false);
+    const selectionStorageKey = `zouth:catalog-selection:${catalog_token}`;
+    const restoredCatalogRef = useRef<string | null>(null);
+    const cartCatalogRef = useRef(catalog_token);
+
+    useEffect(() => {
+        if (preview_mode) return;
+        if (restoredCatalogRef.current === catalog_token) return;
+        if (cartCatalogRef.current !== catalog_token) {
+            cartCatalogRef.current = catalog_token;
+            setCart([]);
+        }
+        const controller = new AbortController();
+        const restore = async () => {
+            setRestoreFailed(false);
+            let saved;
+            try {
+                saved = parseCatalogSelection(
+                    window.localStorage.getItem(selectionStorageKey),
+                );
+            } catch {
+                setSelectionNotice(
+                    'Seu navegador não permite salvar a seleção. Mantenha esta aba aberta até concluir.',
+                );
+                setHydratedCatalog(catalog_token);
+                restoredCatalogRef.current = catalog_token;
+                return;
+            }
+            if (saved.length === 0) {
+                setHydratedCatalog(catalog_token);
+                restoredCatalogRef.current = catalog_token;
+                return;
+            }
+            setSelectionNotice(
+                'Recuperando sua seleção e conferindo a disponibilidade das peças…',
+            );
+            try {
+                const response = await fetch(
+                    restoreSelection(
+                        { token: catalog_token },
+                        {
+                            query: {
+                                product_ids: [
+                                    ...new Set(
+                                        saved.map((item) => item.product_id),
+                                    ),
+                                ],
+                            },
+                        },
+                    ).url,
+                    {
+                        headers: { Accept: 'application/json' },
+                        signal: controller.signal,
+                        cache: 'no-store',
+                    },
+                );
+                if (!response.ok) throw new Error('selection_unavailable');
+                const payload = (await response.json()) as {
+                    products: Product[];
+                };
+                const recovered: CartItem[] = [];
+                saved.forEach((item) => {
+                    const product = payload.products.find(
+                        (entry) => entry.id === item.product_id,
+                    );
+                    if (
+                        !product ||
+                        !productHasRequiredSelection(
+                            product,
+                            item.selected_variations,
+                        )
+                    )
+                        return;
+                    if (
+                        product.variations.length > 0 &&
+                        !selectedVariantStock(product, item.selected_variations)
+                    )
+                        return;
+                    const available = availableStockForSelection(
+                        product,
+                        item.selected_variations,
+                    );
+                    const maximum = maximumSelectableQuantity(
+                        product,
+                        item.selected_variations,
+                        catalog_settings.allow_orders_without_stock,
+                    );
+                    if (
+                        available === null ||
+                        (available === 0 &&
+                            !catalog_settings.allow_orders_without_stock &&
+                            !product.allow_quote_when_out_of_stock)
+                    )
+                        return;
+                    const options = cartOptionsFromSelection(
+                        product,
+                        item.selected_variations,
+                    );
+                    const key = cartItemKey(
+                        product.id,
+                        options.selected_variations,
+                    );
+                    const existing = recovered.find(
+                        (entry) => entry.key === key,
+                    );
+                    if (existing) {
+                        existing.quantity = normalizeRequestedQuantity(
+                            existing.quantity + item.quantity,
+                            maximum,
+                        );
+                    } else {
+                        recovered.push({
+                            key,
+                            product,
+                            quantity: normalizeRequestedQuantity(
+                                item.quantity,
+                                maximum,
+                            ),
+                            unit_price_cents: priceForSelection(
+                                product,
+                                item.selected_variations,
+                            ),
+                            ...options,
+                        });
+                    }
+                });
+                if (controller.signal.aborted) return;
+                setCart((current) =>
+                    mergeRestoredCatalogSelection(recovered, current, (item) =>
+                        maximumSelectableQuantity(
+                            item.product,
+                            item.selected_variations ?? {},
+                            catalog_settings.allow_orders_without_stock,
+                        ),
+                    ),
+                );
+                const adjusted =
+                    saved.length !== recovered.length ||
+                    recovered.some(
+                        (item) =>
+                            saved.find(
+                                (entry) =>
+                                    cartItemKey(
+                                        entry.product_id,
+                                        entry.selected_variations,
+                                    ) === item.key,
+                            )?.quantity !== item.quantity,
+                    );
+                setSelectionNotice(
+                    recovered.length === 0
+                        ? 'As peças da seleção anterior não estão mais disponíveis. Escolha novas peças para continuar.'
+                        : adjusted
+                          ? 'Sua seleção foi recuperada com ajustes de disponibilidade. Algumas peças ou quantidades mudaram; revise seu pedido.'
+                          : 'Sua seleção foi recuperada. Preços e disponibilidade foram conferidos; revise as quantidades antes de continuar.',
+                );
+                setHydratedCatalog(catalog_token);
+                restoredCatalogRef.current = catalog_token;
+            } catch {
+                if (!controller.signal.aborted) {
+                    setRestoreFailed(true);
+                    setSelectionNotice(
+                        'Não foi possível recuperar sua seleção agora. A seleção anterior continua guardada neste navegador. Novas peças ficam apenas nesta aba até a recuperação terminar.',
+                    );
+                }
+            }
+        };
+        void restore();
+        return () => controller.abort();
+    }, [
+        catalog_token,
+        selectionStorageKey,
+        catalog_settings.allow_orders_without_stock,
+        restoreAttempt,
+        preview_mode,
+    ]);
+
+    useEffect(() => {
+        if (preview_mode) return;
+        if (hydratedCatalog !== catalog_token) return;
+        try {
+            window.localStorage.setItem(
+                selectionStorageKey,
+                JSON.stringify(
+                    cart.map((item) => ({
+                        product_id: item.product.id,
+                        quantity: item.quantity,
+                        selected_variations: item.selected_variations ?? {},
+                    })),
+                ),
+            );
+        } catch {
+            setSelectionNotice(
+                'Seu navegador não permite salvar a seleção. Mantenha esta aba aberta até concluir.',
+            );
+        }
+    }, [
+        cart,
+        catalog_token,
+        hydratedCatalog,
+        selectionStorageKey,
+        preview_mode,
+    ]);
     const [cartOpen, setCartOpen] = useState(false);
-    const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(
+    const [quickViewSelection, setQuickViewProduct] = useState<Product | null>(
         null,
     );
+    const quickViewProduct =
+        preview_mode && quickViewSelection
+            ? ([...preparedProducts, ...publishedCombos].find(
+                  (product) => product.id === quickViewSelection.id,
+              ) ?? null)
+            : quickViewSelection;
     const [addedProductId, setAddedProductId] = useState<number | null>(null);
     const [selectedVariations, setSelectedVariations] =
         useState<SelectedVariations>({});
@@ -3548,6 +4074,87 @@ export default function PublicCatalog({
         Record<string, string>
     >({});
     const [submitting, setSubmitting] = useState(false);
+    const previousPreviewStockPolicy = useRef(
+        catalog_settings.allow_orders_without_stock,
+    );
+
+    useEffect(() => {
+        if (
+            !preview_mode ||
+            previousPreviewStockPolicy.current ===
+                catalog_settings.allow_orders_without_stock
+        )
+            return;
+        previousPreviewStockPolicy.current =
+            catalog_settings.allow_orders_without_stock;
+        const nextCart = reconcileCatalogPreviewCart(
+            cart,
+            [...preparedProducts, ...publishedCombos],
+            catalog_settings.allow_orders_without_stock,
+        );
+        setCart(nextCart);
+        setRequestedQuantities({});
+        setSelectedVariations((current) =>
+            Object.fromEntries(
+                Object.entries(current).map(([productId, selections]) => {
+                    const product = preparedProducts.find(
+                        (candidate) => candidate.id === Number(productId),
+                    );
+                    return [
+                        productId,
+                        Object.fromEntries(
+                            Object.entries(selections).filter(([name, value]) =>
+                                product?.variations.some(
+                                    (variation) =>
+                                        variation.type_name === name &&
+                                        variation.values.some(
+                                            (option) => option.value === value,
+                                        ),
+                                ),
+                            ),
+                        ),
+                    ];
+                }),
+            ),
+        );
+        if (
+            nextCart.length !== cart.length ||
+            nextCart.some(
+                (item, index) => item.quantity !== cart[index]?.quantity,
+            )
+        ) {
+            setSelectionNotice(
+                'A seleção de teste foi ajustada às novas condições de estoque.',
+            );
+        }
+    }, [
+        preview_mode,
+        catalog_settings.allow_orders_without_stock,
+        cart,
+        preparedProducts,
+        publishedCombos,
+    ]);
+
+    useEffect(() => {
+        if (!preview_mode || previewMode !== 'edit') return;
+        setCartOpen(false);
+        setQuickViewProduct(null);
+        setCheckoutOpen(false);
+        setPreviewNotice(false);
+    }, [preview_mode, previewMode]);
+
+    useEffect(() => {
+        if (
+            !preview_mode ||
+            previewMode !== 'test' ||
+            !catalog_settings.hide_prices ||
+            !checkoutOpen
+        )
+            return;
+        setCheckoutOpen(false);
+        setCheckoutErrors({});
+        setCartOpen(true);
+    }, [preview_mode, previewMode, catalog_settings.hide_prices, checkoutOpen]);
 
     // Checkout form
     const [customerName, setCustomerName] = useState('');
@@ -3584,7 +4191,7 @@ export default function PublicCatalog({
         cart.every((item) => item.product.product_type === 'combo');
     const cartSelectionLabel = hasOnlyCompositions
         ? `${cartCompositionTotal} ${cartCompositionTotal === 1 ? 'composição' : 'composições'}`
-        : `${cartTotal} ${cartTotal === 1 ? 'seleção' : 'seleções'}`;
+        : catalogSelectionCountLabel(cart.length);
     const cartPieceLabel = `${cartPieceTotal} ${cartPieceTotal === 1 ? 'peça' : 'peças'}`;
     const cartRequiresQuote =
         !catalog_settings.allow_orders_without_stock &&
@@ -3834,6 +4441,11 @@ export default function PublicCatalog({
     };
 
     const handleCheckout = () => {
+        if (preview_mode) {
+            setCheckoutOpen(false);
+            setPreviewNotice(true);
+            return;
+        }
         if (whatsapp_checkout.enabled) {
             return;
         }
@@ -3896,6 +4508,14 @@ export default function PublicCatalog({
                     setCheckoutErrors(errors);
                     setSubmitting(false);
                 },
+                onSuccess: () => {
+                    setCart([]);
+                    try {
+                        window.localStorage.removeItem(selectionStorageKey);
+                    } catch {
+                        /* Storage may be disabled by the browser. */
+                    }
+                },
                 onFinish: () => {
                     setSubmitting(false);
                 },
@@ -3937,6 +4557,7 @@ export default function PublicCatalog({
 
     return (
         <div
+            data-catalog-preview={preview_mode ? previewMode : undefined}
             className="relative min-h-screen text-[var(--brand-secondary)]"
             style={{
                 fontFamily: bodyFont,
@@ -3990,66 +4611,87 @@ export default function PublicCatalog({
                 />
             </Head>
 
-            <div className="relative mx-auto w-full max-w-7xl px-6 py-12">
-                {preset === 'playful' && (
-                    <PlayfulLayout
-                        manufacturer={manufacturer}
-                        settings={catalog_settings}
-                        products={products}
-                        combos={combos}
-                        tokens={tokens}
-                        onAddToCart={addToCart}
-                        onOpenQuickView={setQuickViewProduct}
-                        addedProductId={addedProductId}
-                        requestedQuantities={requestedQuantities}
-                        selectedVariations={selectedVariations}
-                        catalogToken={catalog_token}
-                        filters={filters}
-                        filterOptions={filter_options}
-                        onSelectVariation={selectVariation}
-                        onQuantityChange={changeRequestedQuantity}
-                    />
-                )}
-                {preset === 'boutique' && (
-                    <BoutiqueLayout
-                        manufacturer={manufacturer}
-                        settings={catalog_settings}
-                        products={products}
-                        combos={combos}
-                        tokens={tokens}
-                        onAddToCart={addToCart}
-                        onOpenQuickView={setQuickViewProduct}
-                        addedProductId={addedProductId}
-                        requestedQuantities={requestedQuantities}
-                        selectedVariations={selectedVariations}
-                        catalogToken={catalog_token}
-                        filters={filters}
-                        filterOptions={filter_options}
-                        onSelectVariation={selectVariation}
-                        onQuantityChange={changeRequestedQuantity}
-                    />
-                )}
-                {preset === 'minimal' && (
-                    <MinimalLayout
-                        manufacturer={manufacturer}
-                        settings={catalog_settings}
-                        products={products}
-                        combos={combos}
-                        tokens={tokens}
-                        onAddToCart={addToCart}
-                        onOpenQuickView={setQuickViewProduct}
-                        addedProductId={addedProductId}
-                        requestedQuantities={requestedQuantities}
-                        selectedVariations={selectedVariations}
-                        catalogToken={catalog_token}
-                        filters={filters}
-                        filterOptions={filter_options}
-                        onSelectVariation={selectVariation}
-                        onQuantityChange={changeRequestedQuantity}
-                    />
-                )}
-            </div>
+            {selectionNotice && (
+                <div
+                    role="status"
+                    className="relative mx-auto mt-4 max-w-7xl border border-black/15 bg-white/80 px-6 py-4 text-sm"
+                >
+                    {selectionNotice}
+                    {restoreFailed && (
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setRestoreAttempt((value) => value + 1)
+                            }
+                            className="ml-3 underline underline-offset-4"
+                        >
+                            Tentar recuperar novamente
+                        </button>
+                    )}
+                </div>
+            )}
 
+            <CatalogPreviewContext.Provider value={previewContext}>
+                <div className="relative mx-auto w-full max-w-7xl px-6 py-12">
+                    {preset === 'playful' && (
+                        <PlayfulLayout
+                            manufacturer={manufacturer}
+                            settings={catalog_settings}
+                            products={products}
+                            combos={combos}
+                            tokens={tokens}
+                            onAddToCart={addToCart}
+                            onOpenQuickView={setQuickViewProduct}
+                            addedProductId={addedProductId}
+                            requestedQuantities={requestedQuantities}
+                            selectedVariations={selectedVariations}
+                            catalogToken={catalog_token}
+                            filters={filters}
+                            filterOptions={filter_options}
+                            onSelectVariation={selectVariation}
+                            onQuantityChange={changeRequestedQuantity}
+                        />
+                    )}
+                    {preset === 'boutique' && (
+                        <BoutiqueLayout
+                            manufacturer={manufacturer}
+                            settings={catalog_settings}
+                            products={products}
+                            combos={combos}
+                            tokens={tokens}
+                            onAddToCart={addToCart}
+                            onOpenQuickView={setQuickViewProduct}
+                            addedProductId={addedProductId}
+                            requestedQuantities={requestedQuantities}
+                            selectedVariations={selectedVariations}
+                            catalogToken={catalog_token}
+                            filters={filters}
+                            filterOptions={filter_options}
+                            onSelectVariation={selectVariation}
+                            onQuantityChange={changeRequestedQuantity}
+                        />
+                    )}
+                    {preset === 'minimal' && (
+                        <MinimalLayout
+                            manufacturer={manufacturer}
+                            settings={catalog_settings}
+                            products={products}
+                            combos={combos}
+                            tokens={tokens}
+                            onAddToCart={addToCart}
+                            onOpenQuickView={setQuickViewProduct}
+                            addedProductId={addedProductId}
+                            requestedQuantities={requestedQuantities}
+                            selectedVariations={selectedVariations}
+                            catalogToken={catalog_token}
+                            filters={filters}
+                            filterOptions={filter_options}
+                            onSelectVariation={selectVariation}
+                            onQuantityChange={changeRequestedQuantity}
+                        />
+                    )}
+                </div>
+            </CatalogPreviewContext.Provider>
             <ProductQuickViewModal
                 product={quickViewProduct}
                 selectedValues={
@@ -4099,7 +4741,9 @@ export default function PublicCatalog({
                     type="button"
                     onClick={() => setCartOpen(true)}
                     className="fixed right-6 bottom-6 z-40 flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-xl transition-transform hover:scale-105"
-                    style={{ backgroundColor: catalog_settings.primary_color }}
+                    style={{
+                        backgroundColor: catalog_settings.primary_color,
+                    }}
                 >
                     <ShoppingCart className="h-5 w-5" />
                     <span>
@@ -4144,7 +4788,9 @@ export default function PublicCatalog({
                             Sua seleção
                             <span
                                 aria-hidden="true"
-                                style={{ color: catalog_settings.accent_color }}
+                                style={{
+                                    color: catalog_settings.accent_color,
+                                }}
                             >
                                 .
                             </span>
@@ -4376,7 +5022,9 @@ export default function PublicCatalog({
                                         <h3
                                             id="cart-requirements-title"
                                             className="text-xl font-semibold tracking-[-0.025em]"
-                                            style={{ fontFamily: headingFont }}
+                                            style={{
+                                                fontFamily: headingFont,
+                                            }}
                                         >
                                             {whatsapp_checkout.enabled
                                                 ? 'Antes de conversar'
@@ -4439,13 +5087,16 @@ export default function PublicCatalog({
                                 {pendingBenefit && (
                                     <section className="mt-7">
                                         <div className="flex items-center justify-between gap-4 text-[11px] font-semibold tracking-[0.14em] text-[#98968d] uppercase">
-                                            <span>Próxima vantagem</span>
                                             <span>
+                                                Progresso para a próxima
+                                                vantagem
+                                            </span>
+                                            <span className="shrink-0 whitespace-nowrap">
                                                 {Math.round(
                                                     pendingBenefit.progress
                                                         .ratio * 100,
                                                 )}
-                                                %
+                                                % da meta
                                             </span>
                                         </div>
                                         <progress
@@ -4543,7 +5194,9 @@ export default function PublicCatalog({
                                     <div className="w-full border-l-2 border-[#ff4d3d] pl-4 text-sm leading-6">
                                         <p
                                             className="font-semibold"
-                                            style={{ fontFamily: headingFont }}
+                                            style={{
+                                                fontFamily: headingFont,
+                                            }}
                                         >
                                             Esta seleção será enviada como
                                             orçamento.
@@ -4570,7 +5223,13 @@ export default function PublicCatalog({
                                             href={whatsappCheckoutUrl}
                                             target="_blank"
                                             rel="noreferrer"
-                                            onClick={() => setCartOpen(false)}
+                                            onClick={(event) => {
+                                                setCartOpen(false);
+                                                if (preview_mode) {
+                                                    event.preventDefault();
+                                                    setPreviewNotice(true);
+                                                }
+                                            }}
                                         >
                                             <MessageCircle className="mr-2 size-4" />
                                             Falar com o comercial
@@ -5110,6 +5769,28 @@ export default function PublicCatalog({
             </Dialog>
 
             {/* Order Success Dialog */}
+            <Dialog open={previewNotice} onOpenChange={setPreviewNotice}>
+                <DialogContent
+                    className="sm:max-w-md"
+                    style={{ fontFamily: bodyFont }}
+                >
+                    <DialogHeader>
+                        <DialogTitle style={{ fontFamily: headingFont }}>
+                            Você está testando sua vitrine.
+                        </DialogTitle>
+                        <DialogDescription>
+                            {whatsapp_checkout.enabled
+                                ? 'No catálogo publicado, este botão abre o WhatsApp com a seleção pronta. Nenhuma mensagem foi enviada neste teste.'
+                                : 'No catálogo publicado, este passo envia a seleção para sua equipe. Nenhum pedido foi criado e nenhuma peça foi reservada neste teste.'}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button onClick={() => setPreviewNotice(false)}>
+                            Continuar testando
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
             <Dialog
                 open={!!orderSuccess}
                 onOpenChange={() => setOrderSuccess(null)}

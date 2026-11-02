@@ -9,7 +9,10 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { useDraftState } from '@/hooks/use-draft-history';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import AppLayout from '@/layouts/app-layout';
+import { inspectAutomation, previewAutomation } from '@/lib/automation-preview';
 import { index, update } from '@/routes/manufacturer/atendimento/automations';
 import type { BreadcrumbItem } from '@/types';
 import type {
@@ -57,23 +60,63 @@ export default function AtendimentoAutomacoesEdit({
         { title: 'Automações', href: index().url },
         { title: automation.name, href: '#' },
     ];
-    const [definition, setDefinition] = useState<AutomationDefinition>(
+    const [definition, setDefinition] = useDraftState<AutomationDefinition>(
+        `automation-definition:${automation.id}`,
         automation.definition,
     );
-    const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
+    const [selectedNodeId, setSelectedNodeId] = useDraftState<string | null>(
+        `automation-selected:${automation.id}`,
         automation.definition.nodes.find((node) => node.kind === 'condition')
             ?.id ??
             automation.definition.nodes[0]?.id ??
             null,
     );
-    const [name, setName] = useState(automation.name);
-    const [dirty, setDirty] = useState(false);
+    const [name, setName] = useDraftState(
+        `automation-name:${automation.id}`,
+        automation.name,
+    );
+    const dirty =
+        name !== automation.name ||
+        JSON.stringify(definition) !== JSON.stringify(automation.definition);
+    const serverAutomation = useRef(automation);
+    useUnsavedChangesGuard(dirty);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [testingNodeId, setTestingNodeId] = useState<string | null>(null);
     const [testing, setTesting] = useState(false);
     const [testComplete, setTestComplete] = useState(false);
     const testTimers = useRef<number[]>([]);
+    const [exampleMessage, setExampleMessage] = useState(
+        'Olá, quero conhecer a coleção',
+    );
+    const [reviewOpen, setReviewOpen] = useState(false);
+    const [saveErrors, setSaveErrors] = useState<string[]>([]);
+    const [mobilePanel, setMobilePanel] = useState<
+        'library' | 'canvas' | 'inspector'
+    >('canvas');
+    const issues = inspectAutomation(definition, funnels);
+    const previewSteps = previewAutomation(definition, exampleMessage);
+    const displayDefinition = useMemo(
+        () => ({
+            ...definition,
+            nodes: definition.nodes.map((node) =>
+                node.movement === 'send_funnel'
+                    ? {
+                          ...node,
+                          data: {
+                              ...node.data,
+                              summary:
+                                  funnels.find(
+                                      (funnel) =>
+                                          funnel.id === node.data.funnel_id,
+                                  )?.name ?? 'Escolha um roteiro comercial',
+                          },
+                      }
+                    : node,
+            ),
+        }),
+        [definition, funnels],
+    );
 
     const selectedNode = useMemo(
         () =>
@@ -82,6 +125,8 @@ export default function AtendimentoAutomacoesEdit({
     );
 
     useEffect(() => {
+        if (serverAutomation.current === automation) return;
+        serverAutomation.current = automation;
         const currentDefinition = automation.definition;
 
         setDefinition(currentDefinition);
@@ -92,9 +137,8 @@ export default function AtendimentoAutomacoesEdit({
                 currentDefinition.nodes[0]?.id ??
                 null,
         );
-        setDirty(false);
         setSaved(false);
-    }, [automation]);
+    }, [automation, setDefinition, setName, setSelectedNodeId]);
 
     useEffect(
         () => () => {
@@ -104,11 +148,19 @@ export default function AtendimentoAutomacoesEdit({
     );
 
     const markChanged = () => {
-        setDirty(true);
+        testTimers.current.forEach((timer) => window.clearTimeout(timer));
+        setTesting(false);
+        setTestingNodeId(null);
+        setTestComplete(false);
         setSaved(false);
     };
 
     const persist = (isActive = automation.is_active) => {
+        setSaveErrors([]);
+        if (isActive && issues.length > 0) {
+            setReviewOpen(true);
+            return;
+        }
         setSaving(true);
         const payload = {
             name,
@@ -119,11 +171,11 @@ export default function AtendimentoAutomacoesEdit({
         router.put(update(automation.id).url, payload, {
             preserveScroll: true,
             onSuccess: () => {
-                setDirty(false);
                 setSaved(true);
                 window.setTimeout(() => setSaved(false), 1800);
             },
             onFinish: () => setSaving(false),
+            onError: (errors) => setSaveErrors(Object.values(errors)),
         });
     };
 
@@ -234,10 +286,10 @@ export default function AtendimentoAutomacoesEdit({
     };
 
     const testFlow = () => {
+        setReviewOpen(true);
+        if (issues.length > 0) return;
         testTimers.current.forEach((timer) => window.clearTimeout(timer));
-        const ordered = [...definition.nodes].sort(
-            (first, second) => first.position.x - second.position.x,
-        );
+        const ordered = previewSteps;
 
         setTesting(true);
         setTestComplete(false);
@@ -275,7 +327,7 @@ export default function AtendimentoAutomacoesEdit({
                 data-theme="dark"
                 className="flex h-[calc(100svh-4rem)] flex-col overflow-hidden bg-[#101015] font-zouth-body text-[#f6f4f0]"
             >
-                <header className="flex min-h-[6.9rem] shrink-0 items-center justify-between gap-6 border-b border-[#f6f4f0]/12 bg-[#141419] px-6 py-5 lg:px-8">
+                <header className="flex min-h-[6.9rem] shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#f6f4f0]/12 bg-[#141419] px-4 py-4 lg:px-8">
                     <div className="flex min-w-0 items-center gap-6">
                         <Link
                             href={index().url}
@@ -323,6 +375,7 @@ export default function AtendimentoAutomacoesEdit({
                             variant="outline"
                             onClick={testFlow}
                             disabled={testing}
+                            aria-label="Simular sem enviar mensagens"
                             className="h-11 rounded-[2px] border-[#f6f4f0]/14 bg-transparent px-4 text-[#f6f4f0] hover:border-[#ff4d3d] hover:bg-transparent hover:text-[#ff6a5c]"
                         >
                             {testing ? (
@@ -332,12 +385,12 @@ export default function AtendimentoAutomacoesEdit({
                             ) : (
                                 <CirclePlay className="size-4" />
                             )}
-                            <span className="hidden sm:inline">
+                            <span>
                                 {testing
-                                    ? 'Testando'
+                                    ? 'Simulando'
                                     : testComplete
-                                      ? 'Fluxo pronto'
-                                      : 'Testar fluxo'}
+                                      ? 'Simulação concluída'
+                                      : 'Simular'}
                             </span>
                         </Button>
                         <Button
@@ -362,30 +415,210 @@ export default function AtendimentoAutomacoesEdit({
                     </div>
                 </header>
 
-                <div className="grid min-h-0 min-w-[62rem] flex-1 grid-cols-[13.5rem_minmax(32rem,1fr)_17rem] overflow-hidden">
-                    <AutomationMovementLibrary onAddMovement={addMovement} />
-                    <section className="relative min-h-0 min-w-0 border-r border-[#f6f4f0]/12">
+                {saveErrors.length > 0 && (
+                    <div
+                        role="alert"
+                        className="shrink-0 border-b border-[#ff4d3d]/40 px-5 py-3 text-sm text-[#ff9f94]"
+                    >
+                        {saveErrors.join(' ')}
+                    </div>
+                )}
+                {reviewOpen && (
+                    <section
+                        aria-label="Conferência da automação"
+                        className="max-h-[40vh] shrink-0 overflow-y-auto border-b border-[#f6f4f0]/12 bg-[#18181f] p-4 text-sm"
+                    >
+                        <div className="flex items-center justify-between gap-3">
+                            <h2 className="font-semibold">
+                                Simulação sem envio
+                            </h2>
+                            <button
+                                type="button"
+                                onClick={() => setReviewOpen(false)}
+                                className="underline"
+                            >
+                                Fechar simulação
+                            </button>
+                        </div>
+                        <p className="mt-2 text-[#cac4ba]">
+                            Confere a configuração e o caminho da mensagem de
+                            exemplo. Não envia mensagens nem verifica a conexão
+                            do WhatsApp.
+                        </p>
+                        {issues.length > 0 ? (
+                            <ul
+                                role="alert"
+                                className="mt-3 list-inside list-disc text-[#ff9f94]"
+                            >
+                                {issues.map((issue) => (
+                                    <li key={issue}>{issue}</li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <>
+                                <label
+                                    className="mt-3 block"
+                                    htmlFor="automation-example"
+                                >
+                                    Mensagem de exemplo
+                                </label>
+                                <input
+                                    id="automation-example"
+                                    value={exampleMessage}
+                                    onChange={(event) => {
+                                        setExampleMessage(event.target.value);
+                                        setTestComplete(false);
+                                    }}
+                                    className="mt-2 min-h-11 w-full border border-white/20 bg-transparent px-3"
+                                />
+                                <ol
+                                    className="mt-3 list-inside list-decimal"
+                                    aria-label="Caminho simulado"
+                                >
+                                    {previewSteps.map((step) => (
+                                        <li key={step.id}>
+                                            {step.title} — {step.result}
+                                        </li>
+                                    ))}
+                                </ol>
+                            </>
+                        )}
+                    </section>
+                )}
+                <nav
+                    aria-label="Painéis da automação"
+                    className="flex shrink-0 border-b border-white/15 xl:hidden"
+                >
+                    {(
+                        [
+                            ['library', 'Movimentos'],
+                            ['canvas', 'Fluxo'],
+                            ['inspector', 'Configurar'],
+                        ] as const
+                    ).map(([panel, label]) => (
+                        <button
+                            key={panel}
+                            type="button"
+                            aria-pressed={mobilePanel === panel}
+                            onClick={() => setMobilePanel(panel)}
+                            className={`min-h-11 flex-1 px-2 text-sm ${mobilePanel === panel ? 'border-b-2 border-[#ff4d3d] text-white' : 'text-[#cac4ba]'}`}
+                        >
+                            {label}
+                        </button>
+                    ))}
+                </nav>
+
+                <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[13.5rem_minmax(0,1fr)_17rem]">
+                    <div
+                        className={`min-h-0 overflow-y-auto ${mobilePanel === 'library' ? 'block' : 'hidden'} xl:block`}
+                    >
+                        <AutomationMovementLibrary
+                            onAddMovement={addMovement}
+                        />
+                    </div>
+                    <section
+                        className={`relative min-h-0 min-w-0 border-r border-[#f6f4f0]/12 ${mobilePanel === 'canvas' ? 'block' : 'hidden'} xl:block`}
+                    >
                         <div className="absolute top-5 left-5 z-30 flex items-center gap-2 border border-[#f6f4f0]/12 bg-[#18181f]/92 px-3 py-2 text-[0.66rem] text-[#98968d] backdrop-blur-sm">
                             <span className="size-1.5 rounded-full bg-[#43c979]" />
-                            Cada caminho acontece em tempo real
+                            Quadro de configuração
                         </div>
-                        <AutomationCanvas
-                            definition={definition}
-                            selectedNodeId={selectedNodeId}
-                            testingNodeId={testingNodeId}
-                            onSelectNode={setSelectedNodeId}
-                            onMoveNode={moveNode}
-                            onDropMovement={addMovement}
-                        />
+                        <div className="hidden h-full xl:block">
+                            <AutomationCanvas
+                                definition={displayDefinition}
+                                selectedNodeId={selectedNodeId}
+                                testingNodeId={testingNodeId}
+                                onSelectNode={setSelectedNodeId}
+                                onMoveNode={moveNode}
+                                onDropMovement={addMovement}
+                            />
+                        </div>
+                        <div
+                            className="h-full overflow-y-auto px-4 pt-20 pb-6 xl:hidden"
+                            aria-label="Movimentos e caminhos do fluxo"
+                        >
+                            <p className="mb-4 text-xs text-[#cac4ba]">
+                                Toque em um movimento para configurar. Os
+                                caminhos abaixo mostram as ligações do fluxo.
+                            </p>
+                            {displayDefinition.nodes.map((node) => (
+                                <article
+                                    key={node.id}
+                                    className="mb-4 border border-white/15 bg-[#18181f] p-4"
+                                >
+                                    <button
+                                        type="button"
+                                        aria-label={`Configurar ${node.data.title}`}
+                                        onClick={() => {
+                                            setSelectedNodeId(node.id);
+                                            setMobilePanel('inspector');
+                                        }}
+                                        className="min-h-11 w-full text-left focus-visible:outline-2 focus-visible:outline-[#ff4d3d]"
+                                    >
+                                        <span className="block font-semibold">
+                                            {node.data.title}
+                                        </span>
+                                        <span className="mt-1 block text-xs text-[#cac4ba]">
+                                            {node.data.summary}
+                                        </span>
+                                    </button>
+                                    <ul className="mt-3 space-y-1 text-xs text-[#cac4ba]">
+                                        {definition.edges
+                                            .filter(
+                                                (edge) => edge.from === node.id,
+                                            )
+                                            .map((edge) => (
+                                                <li key={edge.id}>
+                                                    {edge.branch
+                                                        ? `${edge.branch === 'sim' ? 'Sim' : 'Não'} → `
+                                                        : 'Depois → '}
+                                                    {definition.nodes.find(
+                                                        (target) =>
+                                                            target.id ===
+                                                            edge.to,
+                                                    )?.data.title ??
+                                                        'Movimento indisponível'}
+                                                </li>
+                                            ))}
+                                    </ul>
+                                </article>
+                            ))}
+                        </div>
                     </section>
-                    <AutomationInspector
-                        node={selectedNode}
-                        funnels={funnels}
-                        saving={saving}
-                        onChange={changeNode}
-                        onDelete={deleteNode}
-                        onApply={() => persist()}
-                    />
+                    <div
+                        className={`min-h-0 overflow-y-auto ${mobilePanel === 'inspector' ? 'block' : 'hidden'} xl:block`}
+                    >
+                        <div className="border-b border-white/15 p-3 xl:hidden">
+                            <label
+                                htmlFor="mobile-automation-node"
+                                className="mb-2 block text-sm"
+                            >
+                                Movimento para configurar
+                            </label>
+                            <select
+                                id="mobile-automation-node"
+                                value={selectedNodeId ?? ''}
+                                onChange={(event) =>
+                                    setSelectedNodeId(event.target.value)
+                                }
+                                className="min-h-11 w-full border border-white/20 bg-[#18181f] px-2"
+                            >
+                                {definition.nodes.map((node) => (
+                                    <option key={node.id} value={node.id}>
+                                        {node.data.title}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <AutomationInspector
+                            node={selectedNode}
+                            funnels={funnels}
+                            saving={saving}
+                            onChange={changeNode}
+                            onDelete={deleteNode}
+                            onApply={() => persist()}
+                        />
+                    </div>
                 </div>
 
                 <footer className="flex min-h-14 shrink-0 items-center justify-between border-t border-[#f6f4f0]/12 bg-[#141419] px-5 text-xs text-[#77746d]">

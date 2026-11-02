@@ -91,9 +91,12 @@ it('shows tenant scoped commercial indicators and compares the selected period',
             ->where('report.summary.conversion_rate', 20)
             ->where('report.summary.net_revenue_change_percent', 50)
             ->where('report.top_products.0.name', 'Macacão Aconchego')
+            ->where('report.top_products.0.id', $product->id)
             ->where('report.top_products.0.units', 15)
             ->where('report.collection.categories.0.name', 'Macacões')
             ->where('report.customers.buyers_count', 1)
+            ->where('report.customers.top.0.customer_id', $customer->id)
+            ->where('report.customers.top.0.last_order_id', $secondOrder->id)
             ->where('report.customers.repeat_rate', 100)
             ->where('report.catalog.sources.0.source', 'Instagram')
             ->has('report.series', 30));
@@ -130,9 +133,29 @@ it('counts the physical pieces inside combos in report totals and product perfor
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('report.summary.units_sold', 6)
+            ->where('report.top_products.0.product_type', 'combo')
             ->where('report.collection.units_sold', 6)
             ->where('report.top_products.0.name', 'Combo Aconchego')
             ->where('report.top_products.0.units', 6));
+});
+
+it('keeps historical sales actionable without linking missing products or another tenant customer', function () {
+    $other = Manufacturer::factory()->create();
+    $foreignCustomer = Customer::factory()->forManufacturer($other)->create();
+    $product = Product::factory()->forManufacturer($this->manufacturer)->create();
+    $order = reportOrder($this->manufacturer, null, '2026-07-18 10:00:00', 10_000);
+    $order->update(['customer_id' => $foreignCustomer->id]);
+    reportItem($order, $product, 1, '100.00');
+    $product->delete();
+
+    $this->actingAs($this->owner)
+        ->get(route('manufacturer.reports.index', ['period' => '30_days']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('report.top_products.0.id', null)
+            ->where('report.top_products.0.product_type', null)
+            ->where('report.customers.top.0.customer_id', null)
+            ->where('report.customers.top.0.last_order_id', $order->id));
 });
 
 it('protects reports with the dedicated staff capability', function () {
@@ -168,6 +191,36 @@ it('validates custom report periods', function () {
             ->where('report.period.start', '2026-07-01')
             ->where('report.period.end', '2026-07-21'));
 });
+
+it('returns the applied dates when alternating preset and custom periods', function () {
+    foreach ([
+        ['period' => '30_days', 'start' => '2026-06-22', 'end' => '2026-07-21'],
+        ['period' => '7_days', 'start' => '2026-07-15', 'end' => '2026-07-21'],
+        ['period' => 'custom', 'start' => '2026-07-20', 'end' => '2026-07-21'],
+        ['period' => '30_days', 'start' => '2026-06-22', 'end' => '2026-07-21'],
+    ] as $scenario) {
+        $query = $scenario['period'] === 'custom'
+            ? $scenario
+            : ['period' => $scenario['period']];
+
+        $this->actingAs($this->owner)
+            ->get(route('manufacturer.reports.index', $query))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('report.period.key', $scenario['period'])
+                ->where('report.period.start', $scenario['start'])
+                ->where('report.period.end', $scenario['end']));
+    }
+});
+
+it('rejects missing and future custom report dates', function (array $dates, array $fields) {
+    $this->actingAs($this->owner)
+        ->get(route('manufacturer.reports.index', ['period' => 'custom', ...$dates]))
+        ->assertSessionHasErrors($fields);
+})->with([
+    'missing dates' => [[], ['start', 'end']],
+    'future end' => [['start' => '2026-07-20', 'end' => '2100-01-01'], ['end']],
+]);
 
 it('renders a useful empty report without inventing performance', function () {
     $this->actingAs($this->owner)

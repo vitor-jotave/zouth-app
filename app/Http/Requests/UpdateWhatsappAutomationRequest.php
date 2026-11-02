@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\WhatsappAutomation;
 use App\Models\WhatsappFunnel;
+use App\Support\WhatsappAutomationValidation;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -73,6 +74,11 @@ class UpdateWhatsappAutomationRequest extends FormRequest
             }
 
             $nodes = collect($this->input('definition.nodes', []));
+            if ($this->boolean('is_active')) {
+                foreach (app(WhatsappAutomationValidation::class)->issues($this->input('definition'), (int) $this->user()->current_manufacturer_id) as $issue) {
+                    $validator->errors()->add('definition', $issue);
+                }
+            }
             $nodeIds = $nodes->pluck('id');
 
             foreach ($this->input('definition.edges', []) as $index => $edge) {

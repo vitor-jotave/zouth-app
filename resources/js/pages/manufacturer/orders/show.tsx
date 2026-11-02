@@ -42,7 +42,13 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
+import { useDraftState } from '@/hooks/use-draft-history';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import AppLayout from '@/layouts/app-layout';
+import {
+    isCurrentStatusMovement,
+    orderStatusTimeline,
+} from '@/lib/order-status-timeline';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import manufacturer from '@/routes/manufacturer';
@@ -447,7 +453,8 @@ function DetailRow({
 
 export default function OrderShow({ order }: Props) {
     const isQuote = order.order_type === 'quote';
-    const [internalNotes, setInternalNotes] = useState(
+    const [internalNotes, setInternalNotes] = useDraftState(
+        `order-notes:${order.id}`,
         order.internal_notes ?? '',
     );
     const [savedNotes, setSavedNotes] = useState(order.internal_notes ?? '');
@@ -472,24 +479,10 @@ export default function OrderShow({ order }: Props) {
     const hasDeliveryAddress = Boolean(
         order.customer_street || order.customer_city || order.customer_zip_code,
     );
-    const timeline = order.status_history.reduce<StatusHistory[]>(
-        (entries, entry) => {
-            const existingIndex = entries.findIndex(
-                (existing) => existing.to_status === entry.to_status,
-            );
-
-            if (existingIndex === -1) {
-                return [...entries, entry];
-            }
-
-            return entries.map((existing, index) =>
-                index === existingIndex ? entry : existing,
-            );
-        },
-        [],
-    );
+    const timeline = orderStatusTimeline(order.status_history);
     const lastMovement = timeline.at(-1) ?? null;
     const notesAreDirty = internalNotes !== savedNotes;
+    useUnsavedChangesGuard(notesAreDirty);
 
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Visão geral', href: dashboard().url },
@@ -818,22 +811,31 @@ export default function OrderShow({ order }: Props) {
 
                             {timeline.length > 0 ? (
                                 <ol
-                                    className="mt-7 grid gap-5 md:auto-cols-fr md:grid-flow-col md:gap-0"
+                                    className="mt-7 grid gap-5"
                                     aria-label="Histórico do pedido"
                                 >
                                     {timeline.map((entry, index) => {
                                         const isCurrent =
-                                            index === timeline.length - 1;
+                                            isCurrentStatusMovement(
+                                                entry,
+                                                timeline,
+                                                order.status,
+                                            );
 
                                         return (
                                             <li
                                                 key={entry.id}
-                                                className="relative grid grid-cols-[1.5rem_minmax(0,1fr)] gap-3 md:block md:pr-5"
+                                                className="relative grid grid-cols-[1.5rem_minmax(0,1fr)] gap-3"
+                                                aria-current={
+                                                    isCurrent
+                                                        ? 'step'
+                                                        : undefined
+                                                }
                                             >
                                                 {index <
                                                     timeline.length - 1 && (
                                                     <span
-                                                        className="absolute top-6 bottom-[-1.25rem] left-[0.7rem] w-px bg-[#2e705a] md:top-[0.7rem] md:right-0 md:bottom-auto md:left-5 md:h-px md:w-[calc(100%-1.25rem)]"
+                                                        className="absolute top-6 bottom-[-1.25rem] left-[0.7rem] w-px bg-[#2e705a]"
                                                         aria-hidden="true"
                                                     />
                                                 )}
@@ -857,9 +859,23 @@ export default function OrderShow({ order }: Props) {
                                                         />
                                                     )}
                                                 </span>
-                                                <div className="md:mt-4">
+                                                <div>
                                                     <p className="font-zouth-display text-sm font-semibold">
+                                                        {entry.from_status !==
+                                                            entry.to_status && (
+                                                            <span className="font-normal text-muted-foreground">
+                                                                {
+                                                                    entry.from_label
+                                                                }{' '}
+                                                                →{' '}
+                                                            </span>
+                                                        )}
                                                         {entry.to_label}
+                                                        {isCurrent && (
+                                                            <span className="ml-2 text-xs font-normal text-[#b63329]">
+                                                                Status atual
+                                                            </span>
+                                                        )}
                                                     </p>
                                                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
                                                         {entry.changed_by && (

@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Enums\WhatsappInstanceStatus;
+use App\Models\CatalogSetting;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -10,6 +11,16 @@ class CatalogSettingUpdateRequest extends FormRequest
 {
     protected function prepareForValidation(): void
     {
+        if (is_array($this->input('sections'))) {
+            $this->merge(['sections' => CatalogSetting::normalizeSectionBooleans($this->input('sections'))]);
+        }
+
+        foreach (['remove_logo', 'remove_background_image', 'remove_cover_image'] as $field) {
+            if ($this->has($field)) {
+                $this->merge([$field => $this->boolean($field)]);
+            }
+        }
+
         if ($this->has('public_link_active')) {
             $this->merge([
                 'public_link_active' => $this->boolean('public_link_active'),
@@ -57,6 +68,12 @@ class CatalogSettingUpdateRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'logo' => ['sometimes', 'nullable', 'image', 'mimes:jpeg,jpg,png,webp,gif,bmp', 'max:2048', 'prohibited_if:remove_logo,true'],
+            'background_image' => ['sometimes', 'nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:5120', 'prohibited_if:remove_background_image,true'],
+            'cover_image' => ['sometimes', 'nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:8192', 'prohibited_if:remove_cover_image,true'],
+            'remove_logo' => ['sometimes', 'boolean'],
+            'remove_background_image' => ['sometimes', 'boolean'],
+            'remove_cover_image' => ['sometimes', 'boolean'],
             'brand_name' => ['required', 'string', 'max:80'],
             'show_brand_name' => ['sometimes', 'boolean'],
             'show_logo' => ['sometimes', 'boolean'],
@@ -98,9 +115,13 @@ class CatalogSettingUpdateRequest extends FormRequest
             'sections.*.props.image_fit' => ['sometimes', 'in:cover,contain,fill,manual'],
             'sections.*.props.image_scale' => ['sometimes', 'integer', 'min:50', 'max:200'],
             'sections.*.props.eyebrow' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'sections.*.props.eyebrow_fallback' => ['sometimes', 'boolean'],
             'sections.*.props.headline' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'sections.*.props.headline_fallback' => ['sometimes', 'boolean'],
             'sections.*.props.subtitle' => ['sometimes', 'nullable', 'string', 'max:300'],
+            'sections.*.props.subtitle_fallback' => ['sometimes', 'boolean'],
             'sections.*.props.cta_text' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'sections.*.props.cta_text_fallback' => ['sometimes', 'boolean'],
             'sections.*.props.show_cta' => ['sometimes', 'boolean'],
             'sections.*.props.show_product_count' => ['sometimes', 'boolean'],
             'sections.*.props.align' => ['sometimes', 'in:left,right,center,background'],
@@ -127,7 +148,19 @@ class CatalogSettingUpdateRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'logo.image' => 'Escolha uma imagem para a logo.',
+            'logo.mimes' => 'Use uma logo JPG, PNG, WebP, GIF ou BMP. A transparência é preservada.',
+            'logo.max' => 'A logo não pode passar de 2 MB.',
+            'logo.prohibited_if' => 'Escolha entre substituir ou remover a logo.',
+            'background_image.image' => 'Escolha uma imagem para o fundo.',
+            'background_image.mimes' => 'Use uma foto JPG, PNG ou WebP para o fundo.',
+            'background_image.max' => 'A imagem de fundo não pode passar de 5 MB.',
+            'background_image.prohibited_if' => 'Escolha entre substituir ou remover a imagem de fundo.',
+            'cover_image.prohibited_if' => 'Escolha entre substituir ou remover a imagem da capa.',
             'brand_name.required' => 'O nome da marca e obrigatorio.',
+            'cover_image.image' => 'Escolha uma imagem para a capa.',
+            'cover_image.mimes' => 'Use uma foto JPG, PNG ou WebP.',
+            'cover_image.max' => 'A imagem da capa não pode passar de 8 MB.',
             'brand_name.max' => 'O nome da marca deve ter no maximo 80 caracteres.',
             'tagline.max' => 'O slogan deve ter no maximo 120 caracteres.',
             'description.max' => 'A descricao deve ter no maximo 600 caracteres.',

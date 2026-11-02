@@ -15,7 +15,7 @@ import {
     verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import {
     ArrowLeft,
     Check,
@@ -27,7 +27,6 @@ import {
     Trash2,
 } from 'lucide-react';
 import type { FormEvent } from 'react';
-import { useState } from 'react';
 import {
     index as funnelsIndex,
     update,
@@ -46,6 +45,8 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { useDraftForm, useDraftState } from '@/hooks/use-draft-history';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import AppLayout from '@/layouts/app-layout';
 import type { BreadcrumbItem } from '@/types';
 import { VoiceMessagePreview } from '../components/voice-message-preview';
@@ -376,13 +377,15 @@ export default function AtendimentoFunisEdit({
     sender_profile,
 }: Props) {
     const initialSteps = funnel.steps.map(stepFromPayload);
-    const form = useForm({
+    const form = useDraftForm(`funnel:${funnel.id}`, {
         name: funnel.name,
         code: funnel.code,
         is_active: funnel.is_active,
         steps: initialSteps,
     });
-    const [selectedStepId, setSelectedStepId] = useState<string | null>(
+    useUnsavedChangesGuard(form.isDirty);
+    const [selectedStepId, setSelectedStepId] = useDraftState<string | null>(
+        `funnel-step:${funnel.id}`,
         initialSteps[0]?.clientId ?? null,
     );
     const errors = form.errors as Record<string, string>;

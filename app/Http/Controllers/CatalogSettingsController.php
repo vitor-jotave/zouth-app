@@ -11,7 +11,7 @@ use App\Http\Resources\CatalogSettingResource;
 use App\Models\CatalogSetting;
 use App\Models\CatalogVisit;
 use App\Models\Product;
-use App\Services\CatalogCoverImageStorage;
+use App\Services\CatalogPublicationService;
 use App\Services\TenantManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -79,6 +79,7 @@ class CatalogSettingsController extends Controller
 
         return Inertia::render('manufacturer/catalog-settings/index', [
             'catalog_settings' => (new CatalogSettingResource($setting))->resolve(request()),
+            'appearance_defaults' => CatalogSetting::appearanceDefaults($manufacturer->name),
             'public_link' => route('public.catalog.show', ['token' => $setting->public_token]),
             'stats' => $this->buildStats($setting),
             'sample_products' => $sampleProducts,
@@ -93,83 +94,73 @@ class CatalogSettingsController extends Controller
         ]);
     }
 
-    public function update(CatalogSettingUpdateRequest $request, TenantManager $tenantManager): RedirectResponse
+    public function update(CatalogSettingUpdateRequest $request, TenantManager $tenantManager, CatalogPublicationService $publication): RedirectResponse
     {
         $setting = $this->resolveSetting($tenantManager);
 
         $this->authorize('update', $setting);
 
-        $setting->update($request->validated());
+        $publication->publish($setting, $request->validated(), [
+            'logo' => $request->file('logo'),
+            'background_image' => $request->file('background_image'),
+            'cover_image' => $request->file('cover_image'),
+        ], [
+            'logo' => $request->boolean('remove_logo'),
+            'background_image' => $request->boolean('remove_background_image'),
+            'cover_image' => $request->boolean('remove_cover_image'),
+        ]);
 
         return redirect()
             ->back()
-            ->with('success', 'Personalizacao do catalogo atualizada com sucesso.');
+            ->with('success', 'Alterações do catálogo publicadas com sucesso.');
     }
 
-    public function uploadLogo(CatalogSettingLogoRequest $request, TenantManager $tenantManager): RedirectResponse
+    public function uploadLogo(CatalogSettingLogoRequest $request, TenantManager $tenantManager, CatalogPublicationService $publication): RedirectResponse
     {
         $setting = $this->resolveSetting($tenantManager);
 
         $this->authorize('update', $setting);
 
-        if ($setting->logo_path) {
-            $this->deleteCatalogMedia($setting->logo_path);
-        }
-
-        $path = $request->file('logo')->store('catalog-logos', $this->catalogMediaDisk());
-
-        $setting->update(['logo_path' => $path]);
+        $publication->publish($setting, files: ['logo' => $request->file('logo')]);
 
         return redirect()
             ->back()
             ->with('success', 'Logo atualizado com sucesso.');
     }
 
-    public function destroyLogo(Request $request, TenantManager $tenantManager): RedirectResponse
+    public function destroyLogo(Request $request, TenantManager $tenantManager, CatalogPublicationService $publication): RedirectResponse
     {
         $setting = $this->resolveSetting($tenantManager);
 
         $this->authorize('update', $setting);
 
-        if ($setting->logo_path) {
-            $this->deleteCatalogMedia($setting->logo_path);
-            $setting->update(['logo_path' => null]);
-        }
+        $publication->publish($setting, removals: ['logo' => true]);
 
         return redirect()
             ->back()
             ->with('success', 'Logo removido com sucesso.');
     }
 
-    public function uploadBackground(CatalogSettingBackgroundRequest $request, TenantManager $tenantManager): RedirectResponse
+    public function uploadBackground(CatalogSettingBackgroundRequest $request, TenantManager $tenantManager, CatalogPublicationService $publication): RedirectResponse
     {
         $setting = $this->resolveSetting($tenantManager);
 
         $this->authorize('update', $setting);
 
-        if ($setting->background_image_path) {
-            $this->deleteCatalogMedia($setting->background_image_path);
-        }
-
-        $path = $request->file('background_image')->store('catalog-backgrounds', $this->catalogMediaDisk());
-
-        $setting->update(['background_image_path' => $path]);
+        $publication->publish($setting, files: ['background_image' => $request->file('background_image')]);
 
         return redirect()
             ->back()
             ->with('success', 'Imagem de fundo atualizada com sucesso.');
     }
 
-    public function destroyBackground(Request $request, TenantManager $tenantManager): RedirectResponse
+    public function destroyBackground(Request $request, TenantManager $tenantManager, CatalogPublicationService $publication): RedirectResponse
     {
         $setting = $this->resolveSetting($tenantManager);
 
         $this->authorize('update', $setting);
 
-        if ($setting->background_image_path) {
-            $this->deleteCatalogMedia($setting->background_image_path);
-            $setting->update(['background_image_path' => null]);
-        }
+        $publication->publish($setting, removals: ['background_image' => true]);
 
         return redirect()
             ->back()
@@ -179,40 +170,16 @@ class CatalogSettingsController extends Controller
     public function uploadCover(
         CatalogSettingCoverRequest $request,
         TenantManager $tenantManager,
-        CatalogCoverImageStorage $coverStorage,
+        CatalogPublicationService $publication,
     ): RedirectResponse {
         $setting = $this->resolveSetting($tenantManager);
 
         $this->authorize('update', $setting);
 
-        $manufacturer = $tenantManager->get();
-
-        if (! $manufacturer) {
-            abort(403);
-        }
-
-        $uploadedFile = $request->file('cover_image');
-        $storedCover = $coverStorage->optimizeAndStore(
-            $manufacturer,
-            (string) $uploadedFile->get(),
-        );
-        $previousPath = $setting->cover_image_path;
-        $previousThumbnailPath = $setting->cover_thumbnail_path;
-
-        try {
-            $setting->update([
-                'cover_image_path' => $storedCover['path'],
-                'cover_thumbnail_path' => $storedCover['thumbnail_path'],
-                'cover_image_focal_x' => $request->integer('cover_image_focal_x', 50),
-                'cover_image_focal_y' => $request->integer('cover_image_focal_y', 50),
-            ]);
-        } catch (\Throwable $exception) {
-            $coverStorage->delete($storedCover['path'], $storedCover['thumbnail_path']);
-
-            throw $exception;
-        }
-
-        $coverStorage->delete($previousPath, $previousThumbnailPath);
+        $publication->publish($setting, [
+            'cover_image_focal_x' => $request->integer('cover_image_focal_x', 50),
+            'cover_image_focal_y' => $request->integer('cover_image_focal_y', 50),
+        ], ['cover_image' => $request->file('cover_image')]);
 
         return redirect()
             ->back()
@@ -222,23 +189,13 @@ class CatalogSettingsController extends Controller
     public function destroyCover(
         Request $request,
         TenantManager $tenantManager,
-        CatalogCoverImageStorage $coverStorage,
+        CatalogPublicationService $publication,
     ): RedirectResponse {
         $setting = $this->resolveSetting($tenantManager);
 
         $this->authorize('update', $setting);
 
-        $previousPath = $setting->cover_image_path;
-        $previousThumbnailPath = $setting->cover_thumbnail_path;
-
-        $setting->update([
-            'cover_image_path' => null,
-            'cover_thumbnail_path' => null,
-            'cover_image_focal_x' => 50,
-            'cover_image_focal_y' => 50,
-        ]);
-
-        $coverStorage->delete($previousPath, $previousThumbnailPath);
+        $publication->publish($setting, removals: ['cover_image' => true]);
 
         return redirect()
             ->back()
@@ -269,11 +226,11 @@ class CatalogSettingsController extends Controller
 
         $manufacturer = $tenantManager->get();
 
-        $setting->update(CatalogSetting::defaults($manufacturer?->name));
+        $setting->update(CatalogSetting::appearanceDefaults($manufacturer?->name));
 
         return redirect()
             ->back()
-            ->with('success', 'Configuracoes restauradas para os valores padrao.');
+            ->with('success', 'Aparência restaurada. Imagens e condições comerciais foram preservadas.');
     }
 
     private function resolveSetting(TenantManager $tenantManager): CatalogSetting
@@ -288,18 +245,6 @@ class CatalogSettingsController extends Controller
             ['manufacturer_id' => $manufacturer->id],
             CatalogSetting::defaults($manufacturer->name)
         );
-    }
-
-    private function catalogMediaDisk(): string
-    {
-        return (string) config('filesystems.catalog_media_disk', 'public');
-    }
-
-    private function deleteCatalogMedia(string $path): void
-    {
-        foreach (array_unique(['public', $this->catalogMediaDisk()]) as $disk) {
-            Storage::disk($disk)->delete($path);
-        }
     }
 
     private function maskPhoneNumber(?string $phoneNumber): ?string

@@ -62,7 +62,7 @@ class CatalogSettingResource extends JsonResource
             'pattern_color' => $this->pattern_color,
             'pattern_opacity' => $this->pattern_opacity ?? 12,
             'gradient_id' => $this->gradient_id,
-            'sections' => $this->sections ?? CatalogSetting::defaultSections(),
+            'sections' => CatalogSetting::normalizeSectionBooleans($this->sections ?? CatalogSetting::defaultSections()),
         ];
     }
 }

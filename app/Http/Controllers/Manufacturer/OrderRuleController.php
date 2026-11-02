@@ -44,7 +44,17 @@ class OrderRuleController extends Controller
                 ->where('manufacturer_id', $manufacturer->id)
                 ->where('is_active', true)
                 ->orderBy('name')
-                ->get(['id', 'name', 'sku', 'product_category_id']),
+                ->with('comboItems.componentProduct')
+                ->get(['id', 'name', 'sku', 'product_category_id', 'price_cents'])
+                ->map(fn (Product $product): array => [
+                    'id' => $product->id, 'name' => $product->name, 'sku' => $product->sku,
+                    'product_category_id' => $product->product_category_id, 'price_cents' => $product->price_cents,
+                    'components' => $product->comboItems->map(fn ($item): array => [
+                        'product_id' => $item->component_product_id,
+                        'product_category_id' => $item->componentProduct?->product_category_id,
+                        'quantity_per_unit' => $item->quantity,
+                    ])->all(),
+                ]),
             'categories' => ProductCategory::query()
                 ->where('manufacturer_id', $manufacturer->id)
                 ->orderBy('name')

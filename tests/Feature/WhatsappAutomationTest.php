@@ -13,6 +13,31 @@ use App\Models\WhatsappMessage;
 use App\Services\WhatsappAutomationRunner;
 use Illuminate\Support\Facades\Queue;
 
+it('keeps incomplete automation definitions as drafts but refuses activation', function (string $problem) {
+    Queue::fake();
+    [$user, $manufacturer] = createWhatsappAutomationContext();
+    $funnel = WhatsappFunnel::factory()->forManufacturer($manufacturer)->create(['is_active' => true]);
+    $definition = WhatsappAutomation::starterDefinition($funnel->id);
+    if ($problem === 'funnel') {
+        $definition['nodes'][2]['data']['funnel_id'] = null;
+    } elseif ($problem === 'keywords') {
+        $definition['nodes'][1]['data']['keywords'] = [];
+    } elseif ($problem === 'cycle') {
+        $definition['edges'][] = ['id' => 'cycle', 'from' => 'action-funnel', 'to' => 'trigger-message', 'branch' => null];
+    } elseif ($problem === 'disconnected') {
+        $definition['edges'] = array_slice($definition['edges'], 0, 2);
+    } elseif ($problem === 'ambiguous') {
+        $definition['edges'][] = ['id' => 'ambiguous', 'from' => 'condition-interest', 'to' => 'action-wait', 'branch' => 'sim'];
+    }
+    $automation = WhatsappAutomation::factory()->for($manufacturer)->create(['is_active' => false]);
+    $payload = ['name' => 'Conferir configuração', 'is_active' => false, 'definition' => $definition];
+    $this->actingAs($user)->put(route('manufacturer.atendimento.automations.update', $automation), $payload)->assertSessionHasNoErrors();
+    $payload['is_active'] = true;
+    $this->put(route('manufacturer.atendimento.automations.update', $automation), $payload)->assertSessionHasErrors('definition');
+    expect($automation->fresh()->is_active)->toBeFalse();
+    Queue::assertNothingPushed();
+})->with(['funnel', 'keywords', 'cycle', 'disconnected', 'ambiguous']);
+
 function createWhatsappAutomationContext(): array
 {
     $manufacturer = Manufacturer::factory()->create(['is_active' => true]);
@@ -104,7 +129,8 @@ it('creates an automation as a safe draft', function () {
 it('updates and activates an automation owned by the current manufacturer', function () {
     [$user, $manufacturer] = createWhatsappAutomationContext();
     $automation = WhatsappAutomation::factory()->for($manufacturer)->create();
-    $definition = WhatsappAutomation::starterDefinition();
+    $funnel = WhatsappFunnel::factory()->forManufacturer($manufacturer)->create(['is_active' => true]);
+    $definition = WhatsappAutomation::starterDefinition($funnel->id);
     $definition['nodes'][1]['data']['keywords'] = ['atacado', 'coleção'];
 
     $this->actingAs($user)

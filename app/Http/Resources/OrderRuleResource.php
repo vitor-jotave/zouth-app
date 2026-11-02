@@ -23,6 +23,7 @@ class OrderRuleResource extends JsonResource
             'conditions' => $this->conditions,
             'action' => $this->action,
             'public_message' => $this->public_message,
+            'message_mode' => $this->message_mode,
             'sort_order' => (int) $this->sort_order,
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),

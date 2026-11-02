@@ -26,19 +26,43 @@ it('keeps the catalog studio controls accessible while the preview scrolls', fun
     $studio = file_get_contents(resource_path('js/pages/manufacturer/catalog-settings/index.tsx'));
 
     expect($studio)
-        ->toMatch('/data-testid="catalog-studio-structure"[^>]+xl:sticky[^>]+xl:top-0[^>]+xl:max-h-svh[^>]+xl:overflow-y-auto/s')
-        ->toMatch('/data-testid="catalog-studio-preview-toolbar"[^>]+xl:sticky[^>]+xl:top-0[^>]+xl:z-30/s')
-        ->toMatch('/data-testid="catalog-studio-inspector"[^>]+xl:sticky[^>]+xl:top-0[^>]+xl:max-h-svh[^>]+xl:overflow-y-auto/s');
+        ->toContain('data-testid="catalog-studio-workspace"')
+        ->toContain('h-[calc(100svh-4rem)]')
+        ->toMatch('/data-testid="catalog-studio-structure"[^>]+overflow-y-auto/s')
+        ->toMatch('/data-testid="catalog-studio-preview-toolbar"[^>]+shrink-0/s')
+        ->toMatch('/data-testid="catalog-studio-inspector"[^>]+overflow-y-auto/s')
+        ->toContain('form="catalog-studio-form"')
+        ->toContain('inert={settingsForm.processing}');
 });
 
 it('renders the desktop preview at the same canonical width as the public catalog', function () {
     $studio = file_get_contents(resource_path('js/pages/manufacturer/catalog-settings/index.tsx'));
 
     expect($studio)
-        ->toContain("const previewCanvasWidth = viewport === 'mobile' ? 390 : 1280")
+        ->toContain("const previewCanvasWidth = viewport === 'mobile' ? 390 : 1440")
         ->toContain('data-testid="catalog-preview-stage"')
         ->toContain('width: `${previewCanvasWidth}px`')
-        ->toContain('zoom: previewScale');
+        ->toContain('transform: `scale(${previewScale})`');
+});
+
+it('uses an isolated live public page instead of a second sample catalog', function () {
+    $studio = file_get_contents(resource_path('js/pages/manufacturer/catalog-settings/index.tsx'));
+    $preview = file_get_contents(resource_path('js/components/catalog-preview.tsx'));
+
+    expect($preview)
+        ->toContain('<iframe')
+        ->toContain('manufacturer.catalogSettings.preview.url()')
+        ->toContain('event.source !== frame.current?.contentWindow')
+        ->toContain('event.origin !== window.location.origin')
+        ->toContain('sandbox="allow-scripts allow-same-origin"')
+        ->not->toContain('products.slice(')
+        ->and($studio)
+        ->toContain('Testar como lojista')
+        ->toContain('data-testid="catalog-preview-viewport"')
+        ->toContain('Math.floor(previewStageHeight / previewScale)')
+        ->toContain('height={previewCanvasHeight}')
+        ->not->toContain('id="collections-title"')
+        ->not->toContain('id="products-title"');
 });
 
 it('reveals the section and field responsible for catalog validation errors', function () {
@@ -78,7 +102,7 @@ it('keeps the catalog logo inside the shared hero surface', function () {
         ->toContain('@container/catalog-hero')
         ->toContain('data-testid="catalog-hero-copy"')
         ->and($preview)
-        ->toContain('<CatalogHero')
+        ->toContain('manufacturer.catalogSettings.preview.url()')
         ->and($catalog)
         ->toContain('<CatalogHero');
 });
@@ -92,7 +116,7 @@ it('uses the same explicit campaign image rule in the studio preview and public 
     expect($theming)
         ->toContain('export function catalogCoverImageUrl(')
         ->and($preview)
-        ->toContain('catalogCoverImageUrl(settings)')
+        ->toContain('manufacturer.catalogSettings.preview.url()')
         ->not->toContain('heroProduct?.primary_image')
         ->and($catalog)
         ->toContain('catalogCoverImageUrl(settings)')
@@ -107,7 +131,7 @@ it('uses the same stock visibility default in the preview and public catalog', f
     $catalog = file_get_contents(resource_path('js/pages/public/catalog.tsx'));
 
     expect($preview)
-        ->toContain("sectionValue(section, 'show_stock', true)")
+        ->toContain('manufacturer.catalogSettings.preview.url()')
         ->and($catalog)
         ->toContain('booleanSetting(productGridSection?.props?.show_stock, true)');
 });
@@ -125,11 +149,11 @@ it('uses the same campaign image resizing in the studio preview and public catal
         ->and($hero)
         ->toContain('catalogCoverImageStyle(')
         ->and($preview)
-        ->toContain('<CatalogHero')
+        ->toContain('manufacturer.catalogSettings.preview.url()')
         ->and($catalog)
         ->toContain('<CatalogHero')
         ->and($studio)
-        ->toContain('Como a foto ocupa a capa')
+        ->toContain('Tamanho da Imagem de Capa')
         ->toContain('Tamanho manual')
         ->toContain('Tamanho da imagem');
 });

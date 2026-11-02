@@ -20,7 +20,7 @@ import {
     UserCheck,
     Users,
 } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import {
@@ -146,6 +146,7 @@ function useNavItems() {
                     manufacturer.catalogSettings?.index().url ??
                     '/manufacturer/catalog-settings',
                 icon: Palette,
+                collapseSidebarOnNavigate: true,
             });
         }
 
@@ -245,21 +246,38 @@ export function AppSidebar() {
     const { activeService } = useActiveService();
     const page = usePage<SharedData>();
     const { auth } = page.props;
-    const { isMobile, setOpen } = useSidebar();
+    const { isMobile, open, setOpen } = useSidebar();
     const pathname = page.url.split('?')[0];
+    const focusedWorkspace =
+        pathname === '/manufacturer/atendimento' ||
+        pathname === '/manufacturer/catalog-settings';
+    const previousFocusedWorkspace = useRef<boolean | null>(null);
 
     useEffect(() => {
-        if (isMobile || pathname === '/manufacturer/atendimento') {
+        if (isMobile || previousFocusedWorkspace.current === focusedWorkspace) {
+            return;
+        }
+        previousFocusedWorkspace.current = focusedWorkspace;
+
+        const previousState = sessionStorage.getItem(
+            RESTORE_SIDEBAR_AFTER_CHAT_KEY,
+        );
+        if (focusedWorkspace) {
+            if (previousState === null) {
+                sessionStorage.setItem(
+                    RESTORE_SIDEBAR_AFTER_CHAT_KEY,
+                    String(open),
+                );
+            }
+            setOpen(false);
             return;
         }
 
-        if (sessionStorage.getItem(RESTORE_SIDEBAR_AFTER_CHAT_KEY) !== 'true') {
-            return;
+        if (previousState !== null) {
+            sessionStorage.removeItem(RESTORE_SIDEBAR_AFTER_CHAT_KEY);
+            setOpen(previousState === 'true');
         }
-
-        sessionStorage.removeItem(RESTORE_SIDEBAR_AFTER_CHAT_KEY);
-        setOpen(true);
-    }, [isMobile, pathname, setOpen]);
+    }, [isMobile, focusedWorkspace, open, setOpen]);
 
     const isManufacturerUser = auth.user.user_type === 'manufacturer_user';
     const visibleService =
