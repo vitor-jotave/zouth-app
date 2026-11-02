@@ -93,13 +93,32 @@ class CatalogSettingsController extends Controller
         ]);
     }
 
-    public function update(CatalogSettingUpdateRequest $request, TenantManager $tenantManager): RedirectResponse
+    public function update(CatalogSettingUpdateRequest $request, TenantManager $tenantManager, CatalogCoverImageStorage $coverStorage): RedirectResponse
     {
         $setting = $this->resolveSetting($tenantManager);
 
         $this->authorize('update', $setting);
 
-        $setting->update($request->validated());
+        $data = $request->safe()->except('cover_image');
+        $previousPath = $setting->cover_image_path;
+        $previousThumbnailPath = $setting->cover_thumbnail_path;
+        $storedCover = null;
+        if ($request->hasFile('cover_image')) {
+            $storedCover = $coverStorage->optimizeAndStore($setting->manufacturer, (string) $request->file('cover_image')->get());
+            $data['cover_image_path'] = $storedCover['path'];
+            $data['cover_thumbnail_path'] = $storedCover['thumbnail_path'];
+        }
+        try {
+            $setting->update($data);
+        } catch (\Throwable $exception) {
+            if ($storedCover !== null) {
+                $coverStorage->delete($storedCover['path'], $storedCover['thumbnail_path']);
+            }
+            throw $exception;
+        }
+        if ($storedCover !== null) {
+            $coverStorage->delete($previousPath, $previousThumbnailPath);
+        }
 
         return redirect()
             ->back()

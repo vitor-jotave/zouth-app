@@ -1,4 +1,4 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import {
     AlignCenter,
     AlignLeft,
@@ -56,6 +56,8 @@ import {
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
+import { useDraftForm } from '@/hooks/use-draft-history';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import AppLayout from '@/layouts/app-layout';
 import {
     CATALOG_COVER_SCALE,
@@ -266,6 +268,7 @@ function panelForError(
             'show_logo',
             'tagline',
             'description',
+            'cover_image',
             'cover_image_focal_x',
             'cover_image_focal_y',
         ].includes(errorKey)
@@ -525,6 +528,26 @@ export default function CatalogSettings({
     whatsapp_channel,
 }: Props) {
     const [activePanel, setActivePanel] = useState<CatalogPanel>('hero');
+    const [mobileView, setMobileView] = useState<
+        'structure' | 'edit' | 'preview'
+    >('edit');
+    const selectPanel = (panel: CatalogPanel) => {
+        setActivePanel(panel);
+        setMobileView('edit');
+        window.requestAnimationFrame(() => {
+            if (window.innerWidth < 1280) {
+                inspectorRef.current?.focus({ preventScroll: true });
+                inspectorRef.current?.scrollIntoView({
+                    block: 'start',
+                    behavior: window.matchMedia(
+                        '(prefers-reduced-motion: reduce)',
+                    ).matches
+                        ? 'auto'
+                        : 'smooth',
+                });
+            }
+        });
+    };
     const [viewport, setViewport] = useState<ViewportMode>('desktop');
     const [zoom, setZoom] = useState(100);
     const [copied, setCopied] = useState(false);
@@ -542,7 +565,7 @@ export default function CatalogSettings({
     const previewStageRef = useRef<HTMLDivElement>(null);
     const [previewStageWidth, setPreviewStageWidth] = useState(0);
 
-    const settingsForm = useForm({
+    const settingsForm = useDraftForm(`catalog:${settings.id}`, {
         brand_name: settings.brand_name ?? '',
         show_brand_name: settings.show_brand_name ?? true,
         show_logo: settings.show_logo ?? true,
@@ -597,18 +620,38 @@ export default function CatalogSettings({
         sections: normalizeSections(settings.sections ?? []),
     });
 
-    const backgroundForm = useForm<{ background_image: File | null }>({
-        background_image: null,
-    });
-    const coverForm = useForm<{
+    const backgroundForm = useDraftForm<{ background_image: File | null }>(
+        `catalog-background:${settings.id}`,
+        {
+            background_image: null,
+        },
+    );
+    const coverForm = useDraftForm<{
         cover_image: File | null;
         cover_image_focal_x: number;
         cover_image_focal_y: number;
-    }>({
+    }>(`catalog-cover:${settings.id}`, {
         cover_image: null,
         cover_image_focal_x: settings.cover_image_focal_x ?? 50,
         cover_image_focal_y: settings.cover_image_focal_y ?? 50,
     });
+
+    useUnsavedChangesGuard(
+        settingsForm.isDirty ||
+            Boolean(coverForm.data.cover_image) ||
+            Boolean(backgroundForm.data.background_image),
+    );
+
+    useEffect(() => {
+        const file = coverForm.data.cover_image;
+        if (!file) {
+            setCoverPreviewUrl(null);
+            return;
+        }
+        const url = URL.createObjectURL(file);
+        setCoverPreviewUrl(url);
+        return () => URL.revokeObjectURL(url);
+    }, [coverForm.data.cover_image]);
 
     const draftSettings = useMemo(
         () => ({
@@ -810,17 +853,26 @@ export default function CatalogSettings({
             return;
         }
 
-        setActivePanel(
-            panelForError(firstErrorKey, settingsForm.data.sections),
-        );
+        selectPanel(panelForError(firstErrorKey, settingsForm.data.sections));
         setPendingErrorKey(firstErrorKey);
     };
 
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
-        settingsForm.put(manufacturer.catalogSettings.update().url, {
+        settingsForm.transform((data) => ({
+            ...data,
+            _method: 'put',
+            cover_image: coverForm.data.cover_image,
+        }));
+        settingsForm.post(manufacturer.catalogSettings.update().url, {
+            forceFormData: true,
             preserveScroll: true,
+            onSuccess: () => {
+                settingsForm.setDefaults();
+                coverForm.reset('cover_image');
+            },
             onError: (errors) => guideToFirstError(errors),
+            onFinish: () => settingsForm.transform((data) => data),
         });
     };
 
@@ -913,26 +965,7 @@ export default function CatalogSettings({
             return;
         }
 
-        if (coverPreviewUrl) {
-            URL.revokeObjectURL(coverPreviewUrl);
-        }
-
         coverForm.setData('cover_image', file);
-        setCoverPreviewUrl(URL.createObjectURL(file));
-    };
-
-    const handleCoverUpload = () => {
-        coverForm.post(manufacturer.catalogSettings.cover().url, {
-            preserveScroll: true,
-            onSuccess: () => {
-                coverForm.reset('cover_image');
-
-                if (coverPreviewUrl) {
-                    URL.revokeObjectURL(coverPreviewUrl);
-                    setCoverPreviewUrl(null);
-                }
-            },
-        });
     };
 
     const handleRemoveCover = () => {
@@ -945,11 +978,6 @@ export default function CatalogSettings({
                     cover_image_focal_x: 50,
                     cover_image_focal_y: 50,
                 }));
-
-                if (coverPreviewUrl) {
-                    URL.revokeObjectURL(coverPreviewUrl);
-                    setCoverPreviewUrl(null);
-                }
             },
         });
     };
@@ -1251,7 +1279,10 @@ export default function CatalogSettings({
                                 className="sr-only"
                                 id="catalog-cover-file"
                             />
-                            <div className="grid grid-cols-2 gap-2">
+                            <div
+                                className="grid grid-cols-2 gap-2"
+                                data-catalog-error="cover_image"
+                            >
                                 <Label
                                     htmlFor="catalog-cover-file"
                                     className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 border border-border px-3 text-xs font-semibold hover:bg-[#e7e3dc]/45"
@@ -1265,27 +1296,37 @@ export default function CatalogSettings({
                                 <Button
                                     type="button"
                                     variant="outline"
-                                    onClick={handleCoverUpload}
+                                    onClick={handleSubmit}
                                     disabled={
-                                        coverForm.processing ||
+                                        settingsForm.processing ||
                                         !coverForm.data.cover_image
                                     }
                                     className="min-h-11 rounded-[2px] shadow-none"
                                 >
-                                    {coverForm.processing
-                                        ? 'Enviando...'
-                                        : 'Usar na capa'}
+                                    {settingsForm.processing
+                                        ? 'Salvando...'
+                                        : 'Salvar catálogo'}
                                 </Button>
                             </div>
-                            {coverForm.progress && (
+                            {coverForm.data.cover_image && (
+                                <p
+                                    role="status"
+                                    className="text-xs text-muted-foreground"
+                                >
+                                    Foto escolhida para a prévia. Clique em
+                                    Salvar para publicar a foto e os demais
+                                    ajustes juntos.
+                                </p>
+                            )}
+                            {settingsForm.progress && (
                                 <div
                                     className="h-1 overflow-hidden bg-[#d7d2c9]"
-                                    aria-label={`Envio da capa em ${coverForm.progress.percentage}%`}
+                                    aria-label={`Envio do catálogo em ${settingsForm.progress.percentage}%`}
                                 >
                                     <div
                                         className="h-full bg-[#ff4d3d] transition-[width]"
                                         style={{
-                                            width: `${coverForm.progress.percentage}%`,
+                                            width: `${settingsForm.progress.percentage}%`,
                                         }}
                                     />
                                 </div>
@@ -1300,7 +1341,15 @@ export default function CatalogSettings({
                                 </button>
                             )}
                             <InputError
-                                message={coverForm.errors.cover_image}
+                                message={
+                                    (
+                                        settingsForm.errors as Record<
+                                            string,
+                                            string
+                                        >
+                                    ).cover_image ??
+                                    coverForm.errors.cover_image
+                                }
                             />
 
                             <div className="space-y-4 border-t border-border pt-4">
@@ -2925,7 +2974,7 @@ export default function CatalogSettings({
                             </h1>
                             <StatusLabel
                                 tone={
-                                    settingsForm.data.public_link_active
+                                    settings.public_link_active
                                         ? 'mineral'
                                         : 'muted'
                                 }
@@ -2934,15 +2983,24 @@ export default function CatalogSettings({
                                 <span
                                     className={cn(
                                         'size-1.5 rounded-full',
-                                        settingsForm.data.public_link_active
+                                        settings.public_link_active
                                             ? 'bg-[#2e705a]'
                                             : 'bg-[#98968d]',
                                     )}
                                 />
-                                {settingsForm.data.public_link_active
+                                {settings.public_link_active
                                     ? 'Publicado'
                                     : 'Fora do ar'}
                             </StatusLabel>
+                            {(settingsForm.isDirty ||
+                                coverForm.data.cover_image) && (
+                                <span
+                                    role="status"
+                                    className="text-xs font-semibold text-[#b43f32]"
+                                >
+                                    Alterações ainda não publicadas
+                                </span>
+                            )}
                             {settingsForm.recentlySuccessful && (
                                 <span className="text-xs font-semibold text-[#2e705a]">
                                     Alterações salvas
@@ -3017,14 +3075,36 @@ export default function CatalogSettings({
                     </div>
                 )}
 
+                <nav
+                    aria-label="Áreas do editor de catálogo"
+                    className="sticky top-0 z-30 flex border-y border-border bg-[#f6f4f0] xl:hidden"
+                >
+                    {(
+                        [
+                            ['structure', 'Estrutura'],
+                            ['edit', 'Editar'],
+                            ['preview', 'Prévia'],
+                        ] as const
+                    ).map(([view, label]) => (
+                        <button
+                            key={view}
+                            type="button"
+                            aria-pressed={mobileView === view}
+                            onClick={() => setMobileView(view)}
+                            className={`min-h-12 flex-1 px-3 text-sm ${mobileView === view ? 'border-b-2 border-[#ff4d3d] font-semibold' : 'text-muted-foreground'}`}
+                        >
+                            {label}
+                        </button>
+                    ))}
+                </nav>
                 <form
                     id="catalog-studio-form"
                     onSubmit={handleSubmit}
-                    className="grid min-h-[780px] flex-1 grid-cols-1 border-b border-border xl:grid-cols-[12.5rem_minmax(0,1fr)_19rem] xl:items-start 2xl:grid-cols-[14rem_minmax(0,1fr)_21rem]"
+                    className="grid min-h-0 flex-1 grid-cols-1 border-b border-border xl:min-h-[780px] xl:grid-cols-[12.5rem_minmax(0,1fr)_19rem] xl:items-start 2xl:grid-cols-[14rem_minmax(0,1fr)_21rem]"
                 >
                     <aside
                         data-testid="catalog-studio-structure"
-                        className="border-b border-border bg-[#f6f4f0] xl:sticky xl:top-0 xl:z-20 xl:max-h-svh xl:self-start xl:overflow-y-auto xl:overscroll-contain xl:border-r xl:border-b-0"
+                        className={`border-b border-border bg-[#f6f4f0] ${mobileView === 'structure' ? 'block' : 'hidden'} xl:sticky xl:top-0 xl:z-20 xl:block xl:max-h-svh xl:self-start xl:overflow-y-auto xl:overscroll-contain xl:border-r xl:border-b-0`}
                     >
                         <div className="border-b border-border px-4 py-5">
                             <p className="text-[0.64rem] font-bold tracking-[0.18em] uppercase">
@@ -3073,7 +3153,7 @@ export default function CatalogSettings({
                                             <button
                                                 type="button"
                                                 onClick={() =>
-                                                    setActivePanel(section.type)
+                                                    selectPanel(section.type)
                                                 }
                                                 className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-3 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#ff4d3d]"
                                             >
@@ -3108,7 +3188,7 @@ export default function CatalogSettings({
                                                     }
                                                     disabled={index === 0}
                                                     aria-label={`Mover ${meta.label} para cima`}
-                                                    className="hidden size-8 items-center justify-center text-muted-foreground group-hover:flex hover:text-foreground focus-visible:flex disabled:opacity-25"
+                                                    className="flex size-11 items-center justify-center text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-[#ff4d3d] disabled:opacity-25 xl:size-8"
                                                 >
                                                     <ChevronUp className="size-3.5" />
                                                 </button>
@@ -3127,7 +3207,7 @@ export default function CatalogSettings({
                                                             1
                                                     }
                                                     aria-label={`Mover ${meta.label} para baixo`}
-                                                    className="hidden size-8 items-center justify-center text-muted-foreground group-hover:flex hover:text-foreground focus-visible:flex disabled:opacity-25"
+                                                    className="flex size-11 items-center justify-center text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-[#ff4d3d] disabled:opacity-25 xl:size-8"
                                                 >
                                                     <ChevronDown className="size-3.5" />
                                                 </button>
@@ -3156,7 +3236,7 @@ export default function CatalogSettings({
                         <div className="border-t border-border">
                             <button
                                 type="button"
-                                onClick={() => setActivePanel('appearance')}
+                                onClick={() => selectPanel('appearance')}
                                 className={cn(
                                     'relative flex min-h-[4.75rem] w-full items-center gap-3 px-4 text-left transition-colors hover:bg-white/35',
                                     activePanel === 'appearance' &&
@@ -3181,7 +3261,7 @@ export default function CatalogSettings({
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setActivePanel('publish')}
+                                onClick={() => selectPanel('publish')}
                                 className={cn(
                                     'relative flex min-h-[4.75rem] w-full items-center gap-3 border-t border-border px-4 text-left transition-colors hover:bg-white/35',
                                     activePanel === 'publish' && 'bg-white/55',
@@ -3206,7 +3286,9 @@ export default function CatalogSettings({
                         </div>
                     </aside>
 
-                    <main className="flex min-w-0 flex-col bg-[#e7e3dc]/55">
+                    <main
+                        className={`min-w-0 flex-col bg-[#e7e3dc]/55 ${mobileView === 'preview' ? 'flex' : 'hidden'} xl:flex`}
+                    >
                         <div
                             data-testid="catalog-studio-preview-toolbar"
                             className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-border bg-[#f6f4f0] px-4 py-2.5 xl:sticky xl:top-0 xl:z-30"
@@ -3314,7 +3396,7 @@ export default function CatalogSettings({
                                                     : null
                                             }
                                             onSelectSection={(section) =>
-                                                setActivePanel(section)
+                                                selectPanel(section)
                                             }
                                         />
                                     </div>
@@ -3326,7 +3408,9 @@ export default function CatalogSettings({
                     <aside
                         ref={inspectorRef}
                         data-testid="catalog-studio-inspector"
-                        className="min-w-0 border-t border-border bg-[#f6f4f0] xl:sticky xl:top-0 xl:z-20 xl:max-h-svh xl:self-start xl:overflow-y-auto xl:overscroll-contain xl:border-t-0 xl:border-l"
+                        aria-label="Configurar seção do catálogo"
+                        tabIndex={-1}
+                        className={`min-w-0 border-t border-border bg-[#f6f4f0] ${mobileView === 'edit' ? 'block' : 'hidden'} xl:sticky xl:top-0 xl:z-20 xl:block xl:max-h-svh xl:self-start xl:overflow-y-auto xl:overscroll-contain xl:border-t-0 xl:border-l`}
                     >
                         {renderInspector()}
                     </aside>

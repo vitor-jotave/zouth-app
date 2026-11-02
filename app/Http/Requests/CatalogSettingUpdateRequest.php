@@ -57,6 +57,7 @@ class CatalogSettingUpdateRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'cover_image' => ['sometimes', 'nullable', 'image', 'mimes:jpeg,jpg,png,webp', 'max:8192'],
             'brand_name' => ['required', 'string', 'max:80'],
             'show_brand_name' => ['sometimes', 'boolean'],
             'show_logo' => ['sometimes', 'boolean'],
@@ -128,6 +129,9 @@ class CatalogSettingUpdateRequest extends FormRequest
     {
         return [
             'brand_name.required' => 'O nome da marca e obrigatorio.',
+            'cover_image.image' => 'Escolha uma imagem para a capa.',
+            'cover_image.mimes' => 'Use uma foto JPG, PNG ou WebP.',
+            'cover_image.max' => 'A imagem da capa não pode passar de 8 MB.',
             'brand_name.max' => 'O nome da marca deve ter no maximo 80 caracteres.',
             'tagline.max' => 'O slogan deve ter no maximo 120 caracteres.',
             'description.max' => 'A descricao deve ter no maximo 600 caracteres.',

@@ -66,6 +66,55 @@ function catalogSettingsUpdatePayload(array $overrides = []): array
     ];
 }
 
+it('saves campaign image and catalog settings together through the main save action', function () {
+    Storage::fake('public');
+    config(['filesystems.catalog_media_disk' => 'public']);
+    $setting = createCatalogSettingFor($this->manufacturer);
+    $setting->update(['cover_image_path' => 'old-cover.jpg', 'cover_thumbnail_path' => 'old-thumb.jpg']);
+    Storage::disk('public')->put('old-cover.jpg', 'previous');
+    Storage::disk('public')->put('old-thumb.jpg', 'previous');
+    $this->actingAs($this->user)->post(route('manufacturer.catalog-settings.update'), catalogSettingsUpdatePayload([
+        '_method' => 'put',
+        'brand_name' => 'Coleção salva em conjunto',
+        'cover_image' => UploadedFile::fake()->image('campaign.jpg', 1200, 800),
+    ]))->assertSessionHasNoErrors()->assertRedirect();
+    $setting->refresh();
+    expect($setting->brand_name)->toBe('Coleção salva em conjunto')->and($setting->cover_image_path)->not->toBe('old-cover.jpg');
+    Storage::disk('public')->assertExists([$setting->cover_image_path, $setting->cover_thumbnail_path]);
+    Storage::disk('public')->assertMissing(['old-cover.jpg', 'old-thumb.jpg']);
+    $this->get(route('public.catalog.show', ['token' => $setting->public_token]))->assertInertia(fn ($page) => $page->where('catalog_settings.brand_name', 'Coleção salva em conjunto')->where('catalog_settings.cover_image_url', Storage::disk('public')->url($setting->cover_image_path)));
+});
+
+it('keeps the published cover and settings intact when combined save has validation errors', function () {
+    Storage::fake('public');
+    config(['filesystems.catalog_media_disk' => 'public']);
+    $setting = createCatalogSettingFor($this->manufacturer);
+    $setting->update(['cover_image_path' => 'original.jpg']);
+    Storage::disk('public')->put('original.jpg', 'previous');
+    $this->actingAs($this->user)->post(route('manufacturer.catalog-settings.update'), catalogSettingsUpdatePayload([
+        '_method' => 'put', 'brand_name' => '', 'cover_image' => UploadedFile::fake()->image('new.jpg'),
+    ]))->assertSessionHasErrors('brand_name');
+    expect($setting->fresh()->cover_image_path)->toBe('original.jpg');
+    Storage::disk('public')->assertExists('original.jpg');
+    expect(Storage::disk('public')->allFiles())->toHaveCount(1);
+});
+
+it('rejects invalid campaign files without replacing the existing cover', function (string $fileType) {
+    Storage::fake('public');
+    config(['filesystems.catalog_media_disk' => 'public']);
+    $setting = createCatalogSettingFor($this->manufacturer);
+    $setting->update(['cover_image_path' => 'original.jpg']);
+    Storage::disk('public')->put('original.jpg', 'previous');
+    $file = $fileType === 'oversized'
+        ? UploadedFile::fake()->image('campaign.jpg')->size(8193)
+        : UploadedFile::fake()->create('campaign.png', 1, 'text/plain');
+    $this->actingAs($this->user)->post(route('manufacturer.catalog-settings.update'), catalogSettingsUpdatePayload([
+        '_method' => 'put', 'cover_image' => $file,
+    ]))->assertSessionHasErrors('cover_image');
+    expect($setting->fresh()->cover_image_path)->toBe('original.jpg');
+    Storage::disk('public')->assertExists('original.jpg');
+})->with(['oversized', 'invalid-content']);
+
 it('persists the full background composition for the editor and public catalog', function () {
     $setting = createCatalogSettingFor($this->manufacturer);
     $sections = CatalogSetting::defaultSections();
