@@ -187,6 +187,9 @@
 .zo-stage form {
     display: contents;
 }
+.zo-mobile-brand {
+    display: none;
+}
 .zo-eyebrow {
     margin: 0 0 16px;
     color: var(--zo-accent);
@@ -611,6 +614,66 @@
     }
     .zo-primary {
         min-height: 51px;
+    }
+}
+@media (max-width: 900px) {
+    .zo-cover {
+        min-height: 240px;
+    }
+    .zo-onboarding:not([data-stage='1']) .zo-cover {
+        display: none;
+    }
+    .zo-onboarding[data-mobile-preview='true'] .zo-cover {
+        display: block;
+    }
+    .zo-cover__copy {
+        top: 112px;
+    }
+    .zo-cover__copy h1 {
+        overflow-wrap: anywhere;
+    }
+    .zo-rail {
+        display: flex;
+        min-height: auto;
+        flex-direction: column;
+    }
+    .zo-rail__header {
+        padding: 10px 22px;
+    }
+    .zo-mobile-brand {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 0 22px 10px;
+        font-size: 12px;
+    }
+    .zo-mobile-brand > span {
+        min-width: 0;
+        overflow-wrap: anywhere;
+        font-weight: 600;
+    }
+    .zo-mobile-brand button {
+        flex: 0 0 auto;
+        min-height: 44px;
+        border: 0;
+        background: transparent;
+        padding: 0 8px;
+        text-decoration: underline;
+        text-underline-offset: 4px;
+        cursor: pointer;
+    }
+    .zo-mobile-brand button:focus-visible {
+        outline: 2px solid var(--zo-accent);
+        outline-offset: 2px;
+    }
+    .zo-stage {
+        align-self: stretch;
+        overflow: visible;
+        padding-top: 24px;
+    }
+    .zo-onboarding[data-stage='3'] .zo-lead {
+        margin: 16px 0 20px;
     }
 }
 @media (prefers-reduced-motion: reduce) {

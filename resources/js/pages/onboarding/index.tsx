@@ -109,8 +109,10 @@ export default function OnboardingIndex() {
         props.catalogPreview?.logo_url ?? '',
     );
     const [processing, setProcessing] = useState(false);
+    const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
     const rootRef = useRef<HTMLElement>(null);
     const stageRef = useRef<HTMLDivElement>(null);
+    const previousStageRef = useRef(stage);
 
     useEffect(() => {
         setStage(props.stage);
@@ -160,6 +162,19 @@ export default function OnboardingIndex() {
     useEffect(() => {
         const target = stageRef.current;
 
+        if (target && previousStageRef.current !== stage) {
+            previousStageRef.current = stage;
+            setMobilePreviewOpen(false);
+            const heading = target.querySelector('h2');
+            if (heading) {
+                heading.tabIndex = -1;
+                heading.focus({ preventScroll: true });
+            }
+            if (window.matchMedia('(max-width: 900px)').matches) {
+                target.closest('.zo-rail')?.scrollIntoView({ block: 'start' });
+            }
+        }
+
         if (
             !target ||
             window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -167,7 +182,7 @@ export default function OnboardingIndex() {
             return;
         }
 
-        gsap.fromTo(
+        const animation = gsap.fromTo(
             target.children,
             { y: 18, opacity: 0 },
             {
@@ -178,6 +193,10 @@ export default function OnboardingIndex() {
                 ease: 'power3.out',
             },
         );
+
+        return () => {
+            animation.kill();
+        };
     }, [stage]);
 
     useEffect(() => {
@@ -195,7 +214,11 @@ export default function OnboardingIndex() {
         brandName.trim() || props.catalogPreview?.brand_name || 'Sua marca';
 
     const goTo = (nextStage: number) => {
+        if (processing) {
+            return;
+        }
         if (nextStage > stage) {
+            setProcessing(true);
             router.post(
                 progress.url(),
                 {
@@ -207,6 +230,7 @@ export default function OnboardingIndex() {
                     preserveScroll: true,
                     preserveState: true,
                     onSuccess: () => setStage(nextStage),
+                    onFinish: () => setProcessing(false),
                 },
             );
             return;
@@ -250,6 +274,8 @@ export default function OnboardingIndex() {
     return (
         <main
             className="zo-onboarding"
+            data-stage={stage}
+            data-mobile-preview={mobilePreviewOpen}
             ref={rootRef}
             style={{ '--zo-accent': accentColor } as React.CSSProperties}
         >
@@ -257,6 +283,7 @@ export default function OnboardingIndex() {
 
             <section
                 className="zo-cover"
+                id="onboarding-brand-preview"
                 aria-label="Prévia da primeira vitrine"
             >
                 <div className="zo-cover__topline">
@@ -300,6 +327,24 @@ export default function OnboardingIndex() {
                     <span>{Math.min(stage, 5)} / 5</span>
                 </header>
 
+                {stage > 1 && (
+                    <div className="zo-mobile-brand">
+                        <span>{visibleBrandName}</span>
+                        <button
+                            type="button"
+                            aria-expanded={mobilePreviewOpen}
+                            aria-controls="onboarding-brand-preview"
+                            onClick={() =>
+                                setMobilePreviewOpen(!mobilePreviewOpen)
+                            }
+                        >
+                            {mobilePreviewOpen
+                                ? 'Ocultar prévia'
+                                : 'Ver prévia'}
+                        </button>
+                    </div>
+                )}
+
                 <div
                     className="zo-progress"
                     aria-label={`Etapa ${Math.min(stage, 5)} de 5`}
@@ -338,7 +383,9 @@ export default function OnboardingIndex() {
                             <button
                                 className="zo-primary"
                                 type="button"
-                                disabled={brandName.trim().length < 2}
+                                disabled={
+                                    processing || brandName.trim().length < 2
+                                }
                                 onClick={() => goTo(2)}
                             >
                                 Ver minha marca ganhar movimento{' '}
@@ -394,7 +441,7 @@ export default function OnboardingIndex() {
                             <button
                                 className="zo-primary"
                                 type="button"
-                                disabled={!sellingMethod}
+                                disabled={processing || !sellingMethod}
                                 onClick={() => goTo(3)}
                             >
                                 Continuar <ArrowRight aria-hidden="true" />
