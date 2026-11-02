@@ -1,5 +1,5 @@
 import { arrayMove } from '@dnd-kit/sortable';
-import { router, useForm } from '@inertiajs/react';
+import { router } from '@inertiajs/react';
 import {
     Check,
     CircleAlert,
@@ -8,7 +8,7 @@ import {
     RotateCcw,
     Save,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ImageCropDialog } from '@/components/image-crop-dialog';
 import {
     EditorField,
@@ -37,7 +37,9 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { useDraftForm } from '@/hooks/use-draft-history';
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
+import { rememberVariantDrafts } from '@/lib/product-variant-drafts';
 import manufacturer from '@/routes/manufacturer';
 
 export const PRODUCT_EDITOR_FORM_ID = 'product-editor-form';
@@ -249,7 +251,7 @@ export function ProductForm({
         setDefaults,
         isDirty,
         recentlySuccessful,
-    } = useForm<ProductEditorData>({
+    } = useDraftForm<ProductEditorData>(`product:${product?.id ?? 'new'}`, {
         name: product?.name ?? '',
         sku: product?.sku ?? '',
         description: product?.description ?? '',
@@ -266,6 +268,8 @@ export function ProductForm({
         images: [],
     });
     const formErrors = errors as ProductEditorErrors;
+    const variantDrafts = useRef(initialStocks);
+    const variationSelections = useRef(initialVariations);
     const [activeSection, setActiveSection] =
         useState<EditorSectionKey>('presentation');
     const [mediaItems, setMediaItems] = useState<ProductMediaItem[]>(
@@ -391,13 +395,26 @@ export function ProductForm({
     };
 
     const rebuildStocks = (nextVariations: ProductVariationSelection[]) => {
+        variantDrafts.current = rememberVariantDrafts(
+            variantDrafts.current,
+            data.variant_stocks,
+        );
+        data.variations.forEach((variation) => {
+            variationSelections.current = [
+                ...variationSelections.current.filter(
+                    (entry) =>
+                        entry.variation_type_id !== variation.variation_type_id,
+                ),
+                { ...variation, values: [...variation.values] },
+            ];
+        });
         setData('variations', nextVariations);
         setData(
             'variant_stocks',
             buildVariantStocks(
                 nextVariations,
                 variationTypes,
-                data.variant_stocks,
+                variantDrafts.current,
             ),
         );
     };
@@ -412,13 +429,16 @@ export function ProductForm({
                 return;
             }
 
-            if (data.variations.length === 0 && data.base_quantity > 0) {
-                setData('base_quantity', 0);
-            }
-
             rebuildStocks([
                 ...data.variations,
-                { variation_type_id: typeId, values: [] },
+                {
+                    variation_type_id: typeId,
+                    values: [
+                        ...(variationSelections.current.find(
+                            (entry) => entry.variation_type_id === typeId,
+                        )?.values ?? []),
+                    ],
+                },
             ]);
             return;
         }
@@ -1000,6 +1020,9 @@ export function ProductForm({
                             <button
                                 type="button"
                                 onClick={() => {
+                                    variantDrafts.current = initialStocks;
+                                    variationSelections.current =
+                                        initialVariations;
                                     reset();
                                     clearErrors();
                                 }}
