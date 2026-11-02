@@ -1,5 +1,6 @@
 import { Link, router } from '@inertiajs/react';
-import { LogOut, Settings } from 'lucide-react';
+import { History, LogOut, Settings } from 'lucide-react';
+import { useChangelog } from '@/components/changelog-provider';
 import {
     DropdownMenuGroup,
     DropdownMenuItem,
@@ -18,6 +19,7 @@ type Props = {
 
 export function UserMenuContent({ user }: Props) {
     const cleanup = useMobileNavigation();
+    const showChangelog = useChangelog();
 
     const handleLogout = () => {
         cleanup();
@@ -45,6 +47,13 @@ export function UserMenuContent({ user }: Props) {
                     </Link>
                 </DropdownMenuItem>
             </DropdownMenuGroup>
+            <DropdownMenuItem
+                className="cursor-pointer"
+                onSelect={showChangelog}
+            >
+                <History className="mr-2" />
+                Changelog
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
                 <Link

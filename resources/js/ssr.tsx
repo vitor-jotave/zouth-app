@@ -2,6 +2,7 @@ import { createInertiaApp } from '@inertiajs/react';
 import createServer from '@inertiajs/react/server';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import ReactDOMServer from 'react-dom/server';
+import { ChangelogProvider } from '@/components/changelog-provider';
 import { UnsavedChangesProvider } from '@/components/unsaved-changes-provider';
 
 const appName = 'ZOUTH';
@@ -19,7 +20,9 @@ createServer((page) =>
         setup: ({ App, props }) => {
             return (
                 <UnsavedChangesProvider>
-                    <App {...props} />
+                    <ChangelogProvider>
+                        <App {...props} />
+                    </ChangelogProvider>
                 </UnsavedChangesProvider>
             );
         },

@@ -2,6 +2,7 @@ import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { StrictMode } from 'react';
 import { createRoot, hydrateRoot } from 'react-dom/client';
+import { ChangelogProvider } from '@/components/changelog-provider';
 import { UnsavedChangesProvider } from '@/components/unsaved-changes-provider';
 import '../css/app.css';
 
@@ -18,7 +19,9 @@ createInertiaApp({
         const application = (
             <StrictMode>
                 <UnsavedChangesProvider>
-                    <App {...props} />
+                    <ChangelogProvider>
+                        <App {...props} />
+                    </ChangelogProvider>
                 </UnsavedChangesProvider>
             </StrictMode>
         );
