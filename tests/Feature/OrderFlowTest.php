@@ -948,6 +948,37 @@ it('allows moving an order backwards after an accidental advance', function () {
         ->exists())->toBeTrue();
 });
 
+it('keeps every repeated status movement in chronological order for the internal history', function () {
+    Illuminate\Support\Facades\Notification::fake();
+    $this->freezeTime();
+    $order = Order::factory()->forManufacturer($this->manufacturer)->status(OrderStatus::New)->create();
+    $statuses = ['confirmed', 'preparing', 'confirmed', 'new'];
+
+    foreach ($statuses as $status) {
+        $this->actingAs($this->owner)
+            ->post(route('manufacturer.orders.update-status', $order), ['status' => $status])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+    }
+
+    expect($order->refresh()->status)->toBe(OrderStatus::New);
+    expect($order->statusHistory->pluck('to_status')->map(fn (OrderStatus $status): string => $status->value)->all())
+        ->toBe($statuses);
+
+    $this->actingAs($this->owner)
+        ->get(route('manufacturer.orders.show', $order))
+        ->assertOk()
+        ->assertInertia(fn (Inertia\Testing\AssertableInertia $page) => $page
+            ->where('order.status', 'new')
+            ->has('order.status_history', 4)
+            ->where('order.status_history.0.to_status', 'confirmed')
+            ->where('order.status_history.1.to_status', 'preparing')
+            ->where('order.status_history.2.from_status', 'preparing')
+            ->where('order.status_history.2.to_status', 'confirmed')
+            ->where('order.status_history.3.to_status', 'new')
+            ->where('order.status_history.3.changed_by', $this->owner->name));
+});
+
 it('keeps cancelled orders terminal because their stock was released', function () {
     $order = Order::factory()->forManufacturer($this->manufacturer)->status(OrderStatus::Cancelled)->create();
 
