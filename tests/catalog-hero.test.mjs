@@ -40,7 +40,9 @@ function loadComponent(path) {
     return exports;
 }
 
-const { CatalogHero } = loadComponent('components/catalog-hero.tsx');
+const { CatalogHero, catalogHeroSubtitle } = loadComponent(
+    'components/catalog-hero.tsx',
+);
 
 const props = {
     brandName: 'Zouth',
@@ -99,6 +101,77 @@ test('a campaign tagline remains available without restoring the brand name', ()
     assert.match(
         render({ brandTagline: 'Feita para descobrir' }),
         /<h1[^>]*>Feita para descobrir<\/h1>/,
+    );
+});
+
+test('an explicitly cleared campaign title never restores the brand or legacy tagline', () => {
+    for (const showBrandName of [true, false]) {
+        for (const headline of ['', '   ']) {
+            const html = render({
+                showBrandName,
+                headline,
+                headlineFallback: false,
+                brandTagline: 'Slogan antigo',
+            });
+            assert.doesNotMatch(html, /<h1/);
+        }
+    }
+});
+
+test('an explicit campaign title survives with fallback disabled and brand name hidden', () => {
+    assert.match(
+        render({
+            headline: 'Dias leves',
+            headlineFallback: false,
+            showBrandName: false,
+        }),
+        /<h1[^>]*>Dias leves<\/h1>/,
+    );
+});
+
+test('an empty eyebrow does not render a paragraph or leave a title gap', () => {
+    for (const eyebrow of ['', '   ']) {
+        const html = render({
+            eyebrow,
+            headline: 'Dias leves',
+            headlineFallback: false,
+        });
+        assert.doesNotMatch(html, /tracking-\[0\.16em\]/);
+        assert.doesNotMatch(html, /<h1[^>]*mt-4/);
+        assert.match(html, /<h1[^>]*>Dias leves<\/h1>/);
+    }
+});
+
+test('an empty call to action never renders an unnamed link or arrow', () => {
+    for (const ctaText of ['', '   ']) {
+        const html = render({
+            ctaText,
+            ctaHref: '#catalog-products',
+            showCta: true,
+        });
+        assert.doesNotMatch(html, /href="#catalog-products"/);
+        assert.doesNotMatch(html, /lucide-arrow-right/);
+    }
+});
+
+test('legacy subtitles remain available only until the editor explicitly clears them', () => {
+    for (const subtitle of [undefined, null, '']) {
+        assert.equal(
+            catalogHeroSubtitle(subtitle, 'Descrição antiga'),
+            'Descrição antiga',
+        );
+        assert.equal(
+            catalogHeroSubtitle(subtitle, 'Descrição antiga', false),
+            '',
+        );
+        const html = render({
+            subtitle: catalogHeroSubtitle(subtitle, 'Descrição antiga', false),
+        });
+        assert.doesNotMatch(html, /Descrição antiga/);
+    }
+    assert.equal(
+        catalogHeroSubtitle('Nova descrição', 'Descrição antiga', false),
+        'Nova descrição',
     );
 });
 
