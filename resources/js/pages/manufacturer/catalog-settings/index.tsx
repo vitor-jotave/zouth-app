@@ -356,7 +356,7 @@ function sectionProp<T extends string | number | boolean | null>(
 
 function InspectorHeader({
     eyebrow,
-    title
+    title,
 }: {
     eyebrow: string;
     title: string;
@@ -1143,10 +1143,7 @@ export default function CatalogSettings({
 
             return (
                 <>
-                    <InspectorHeader
-                        eyebrow="Configurações"
-                        title="Marca"
-                    />
+                    <InspectorHeader eyebrow="Configurações" title="Marca" />
                     <InspectorSection title="Identidade">
                         <div className="space-y-4">
                             <div

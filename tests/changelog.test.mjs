@@ -33,6 +33,23 @@ function load(path, overrides = {}) {
     return exports;
 }
 const releases = load('lib/changelog.ts');
+test('catalog refinement release records the requested improvements without replacing earlier history', () => {
+    const release = releases.changelog.find(
+        (entry) => entry.id === '2026-11-02-editor-catalogo',
+    );
+    assert.equal(release.date, '2026-11-02');
+    assert.equal(release.updates.length, 7);
+    assert.ok(
+        release.updates.some(
+            (entry) => entry.title === 'Experimente como lojista',
+        ),
+    );
+    assert.ok(
+        releases.changelog.some(
+            (entry) => entry.id === '2026-11-02-experiencia',
+        ),
+    );
+});
 const ui = new Proxy(
     {},
     {

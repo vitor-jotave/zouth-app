@@ -153,7 +153,7 @@ it('uses the same campaign image resizing in the studio preview and public catal
         ->and($catalog)
         ->toContain('<CatalogHero')
         ->and($studio)
-        ->toContain('Como a foto ocupa a capa')
+        ->toContain('Tamanho da Imagem de Capa')
         ->toContain('Tamanho manual')
         ->toContain('Tamanho da imagem');
 });

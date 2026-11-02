@@ -19,6 +19,57 @@ type ChangelogRelease = {
 
 export const changelog = [
     {
+        id: '2026-11-02-editor-catalogo',
+        date: '2026-11-02',
+        title: 'Mais espaço para criar sua vitrine.',
+        summary:
+            'Personalização reorganizada, prévia fiel ao catálogo e mais segurança para ajustar e publicar a coleção.',
+        updates: [
+            {
+                kind: 'melhoria',
+                title: 'Cada ajuste no seu lugar',
+                description:
+                    'Estrutura reúne Capa, Coleções e Produtos. Configurações reúne Marca, Aparência e Publicar. Nome, logo, tamanho e alinhamento ficam em Marca, sem alterar o que você já configurou.',
+            },
+            {
+                kind: 'melhoria',
+                title: 'Mais espaço para editar',
+                description:
+                    'As ações de salvar, desfazer, refazer e ver o catálogo publicado ficam no rodapé. A barra lateral retrai ao entrar no editor e recupera seu estado anterior ao sair.',
+            },
+            {
+                kind: 'correção',
+                title: 'Prévia e catálogo com a mesma apresentação',
+                description:
+                    'A prévia usa a mesma apresentação do catálogo público, com enquadramento, fontes, imagens e textos coerentes no computador e no celular. O zoom e a área de edição receberam ajustes de estabilidade.',
+            },
+            {
+                kind: 'novidade',
+                title: 'Experimente como lojista',
+                description:
+                    'Teste a seleção de peças, as variações, o carrinho e o fechamento dentro da prévia, sem criar pedidos reais nem reservar estoque.',
+            },
+            {
+                kind: 'melhoria',
+                title: 'Publique suas mudanças com segurança',
+                description:
+                    'Logo, foto de campanha, fundo e demais ajustes são publicados juntos ao salvar. Substituições e remoções podem ser desfeitas antes da publicação; se algo falhar, a versão anterior é preservada.',
+            },
+            {
+                kind: 'melhoria',
+                title: 'Mais controle, menos retrabalho',
+                description:
+                    'Desfaça e refaça alterações. Restaurar a aparência preserva as decisões comerciais. Textos apagados não reaparecem, e a transparência da logo pode ser conferida sem impor um fundo ao catálogo.',
+            },
+            {
+                kind: 'melhoria',
+                title: 'Controles mais claros e acessíveis',
+                description:
+                    'Navegação simplificada, itens alinhados, controles de tamanho e recorte mais acessíveis e orientações de contraste sem limitar a liberdade de personalização.',
+            },
+        ],
+    },
+    {
         id: '2026-11-02-experiencia',
         date: '2026-11-02',
         title: 'Mais fluidez em cada etapa.',
