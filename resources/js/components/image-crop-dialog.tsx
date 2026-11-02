@@ -1,5 +1,12 @@
 import { Loader2, ZoomIn, ZoomOut } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    useCallback,
+    useEffect,
+    useId,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import ReactCrop, {
     centerCrop,
     makeAspectCrop,
@@ -24,6 +31,22 @@ import { cn } from '@/lib/utils';
 const DEFAULT_ASPECT_RATIO = 4 / 5;
 const DEFAULT_DESCRIPTION =
     'Enquadre a imagem no formato 4:5. Use o zoom para ampliar e escolha a cor de fundo para áreas transparentes.';
+
+const CROP_LABELS = {
+    cropArea: 'Use as setas do teclado para mover a área de recorte.',
+    nwDragHandle:
+        'Canto superior esquerdo: use as setas para ajustar o recorte.',
+    nDragHandle: 'Borda superior: use as setas para ajustar o recorte.',
+    neDragHandle:
+        'Canto superior direito: use as setas para ajustar o recorte.',
+    eDragHandle: 'Borda direita: use as setas para ajustar o recorte.',
+    seDragHandle:
+        'Canto inferior direito: use as setas para ajustar o recorte.',
+    sDragHandle: 'Borda inferior: use as setas para ajustar o recorte.',
+    swDragHandle:
+        'Canto inferior esquerdo: use as setas para ajustar o recorte.',
+    wDragHandle: 'Borda esquerda: use as setas para ajustar o recorte.',
+};
 
 const BG_PRESETS = [
     { label: 'Branco', value: '#ffffff' },
@@ -71,6 +94,8 @@ export function ImageCropDialog({
     description = DEFAULT_DESCRIPTION,
     allowTransparentBackground = false,
 }: ImageCropDialogProps) {
+    const zoomLabelId = useId();
+    const cropHelpId = useId();
     const [crop, setCrop] = useState<Crop>();
     const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
     const [processing, setProcessing] = useState(false);
@@ -219,8 +244,8 @@ export function ImageCropDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-h-[95vh] overflow-y-auto sm:max-w-2xl">
-                <DialogHeader>
+            <DialogContent className="max-h-[95vh] overflow-y-auto sm:max-w-2xl [&>button:last-child]:top-2 [&>button:last-child]:right-2 [&>button:last-child]:grid [&>button:last-child]:size-11 [&>button:last-child]:place-items-center">
+                <DialogHeader className="pr-9">
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>{description}</DialogDescription>
                 </DialogHeader>
@@ -244,6 +269,8 @@ export function ImageCropDialog({
                         }}
                     >
                         <ReactCrop
+                            ariaLabels={CROP_LABELS}
+                            className="[&_.ReactCrop__drag-handle]:after:absolute [&_.ReactCrop__drag-handle]:after:top-1/2 [&_.ReactCrop__drag-handle]:after:left-1/2 [&_.ReactCrop__drag-handle]:after:size-11 [&_.ReactCrop__drag-handle]:after:-translate-x-1/2 [&_.ReactCrop__drag-handle]:after:-translate-y-1/2 [&_.ReactCrop__drag-handle]:after:content-['']"
                             crop={crop}
                             onChange={(_, percentCrop) => setCrop(percentCrop)}
                             onComplete={(c) => setCompletedCrop(c)}
@@ -252,7 +279,7 @@ export function ImageCropDialog({
                             <img
                                 ref={imgRef}
                                 src={imageUrl}
-                                alt="Preview para corte"
+                                alt="Imagem para recortar"
                                 onLoad={onImageLoad}
                                 style={{
                                     maxHeight: '55vh',
@@ -266,12 +293,22 @@ export function ImageCropDialog({
                     </div>
                 )}
 
+                <p
+                    id={cropHelpId}
+                    className="text-xs leading-relaxed text-muted-foreground"
+                >
+                    Arraste o recorte para enquadrar a imagem. Pelo teclado, use
+                    Tab para escolher uma borda e as setas para ajustá-la.
+                </p>
+
                 {/* Controls */}
                 <div className="space-y-4 pt-1">
                     {/* Zoom */}
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                            <Label className="text-xs">Zoom</Label>
+                            <Label id={zoomLabelId} className="text-xs">
+                                Zoom
+                            </Label>
                             <span className="text-xs text-muted-foreground">
                                 {Math.round(scale * 100)}%
                             </span>
@@ -279,12 +316,15 @@ export function ImageCropDialog({
                         <div className="flex items-center gap-3">
                             <ZoomOut className="size-4 shrink-0 text-muted-foreground" />
                             <Slider
+                                aria-labelledby={zoomLabelId}
+                                aria-describedby={cropHelpId}
+                                aria-valuetext={`${Math.round(scale * 100)}%`}
                                 min={50}
                                 max={300}
                                 step={5}
                                 value={[Math.round(scale * 100)]}
                                 onValueChange={([v]) => setScale(v / 100)}
-                                className="flex-1"
+                                className="min-h-11 flex-1"
                             />
                             <ZoomIn className="size-4 shrink-0 text-muted-foreground" />
                         </div>
@@ -302,7 +342,7 @@ export function ImageCropDialog({
                                     aria-pressed={bgColor === null}
                                     onClick={() => setBgColor(null)}
                                     className={cn(
-                                        'relative h-8 overflow-hidden rounded-md border-2 px-2 text-xs font-medium text-black transition-all',
+                                        'relative min-h-11 overflow-hidden rounded-md border-2 px-3 text-xs font-medium text-black transition-all',
                                         bgColor === null
                                             ? 'scale-110 border-primary shadow-md'
                                             : 'border-transparent hover:border-muted-foreground/50',
@@ -329,7 +369,7 @@ export function ImageCropDialog({
                                     aria-pressed={bgColor === preset.value}
                                     onClick={() => setBgColor(preset.value)}
                                     className={cn(
-                                        'size-8 rounded-md border-2 transition-all',
+                                        'size-11 rounded-md border-2 transition-all',
                                         bgColor === preset.value
                                             ? 'scale-110 border-primary shadow-md'
                                             : 'border-transparent hover:border-muted-foreground/50',
@@ -345,7 +385,7 @@ export function ImageCropDialog({
                                 onChange={(e) => setBgColor(e.target.value)}
                                 title="Cor personalizada"
                                 aria-label="Escolher cor de fundo personalizada"
-                                className="size-8 cursor-pointer rounded-md border border-input p-0.5"
+                                className="size-11 cursor-pointer rounded-md border border-input p-0.5"
                             />
 
                             <span className="font-mono text-xs text-muted-foreground">
@@ -361,18 +401,22 @@ export function ImageCropDialog({
                         variant="outline"
                         onClick={handleCancel}
                         disabled={processing}
+                        className="min-h-11"
                     >
-                        Pular
+                        {onSkip ? 'Pular imagem' : 'Cancelar'}
                     </Button>
                     <Button
                         type="button"
                         onClick={handleConfirm}
                         disabled={processing || !completedCrop}
+                        className="min-h-11"
                     >
                         {processing && (
                             <Loader2 className="size-4 animate-spin" />
                         )}
-                        {processing ? 'Processando...' : 'Confirmar'}
+                        {processing
+                            ? 'Preparando imagem…'
+                            : 'Usar imagem ajustada'}
                     </Button>
                 </DialogFooter>
             </DialogContent>
