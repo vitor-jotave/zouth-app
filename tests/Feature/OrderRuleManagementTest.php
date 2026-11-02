@@ -32,6 +32,39 @@ function validOrderRulePayload(array $overrides = []): array
     ], $overrides);
 }
 
+it('resolves automatic and legacy rule copy from the current benefit while preserving custom messages', function () {
+    $rule = OrderRule::factory()->make(['action' => ['type' => 'percentage_discount', 'value' => 1000], 'public_message' => 'Você liberou 5% de desconto neste pedido.']);
+    expect($rule->publicRepresentation()['public_message'])->toBe('Você liberou 10% de desconto neste pedido.');
+    $rule->public_message = 'Converse com o comercial para definir o prazo.';
+    expect($rule->publicRepresentation()['public_message'])->toBe('Converse com o comercial para definir o prazo.');
+    $rule->public_message = null;
+    $rule->action = ['type' => 'fixed_discount', 'value' => 25000];
+    expect($rule->publicRepresentation()['public_message'])->toBe('Você liberou R$ 250,00 de desconto neste pedido.');
+    $rule->message_mode = 'custom';
+    $rule->public_message = 'Você liberou 5% de desconto neste pedido.';
+    expect($rule->publicRepresentation()['public_message'])->toBe('Você liberou 5% de desconto neste pedido.');
+});
+
+it('persists explicit automatic and custom copy modes and rejects empty custom messages', function () {
+    $payload = validOrderRulePayload(['message_mode' => 'auto', 'public_message' => null]);
+    $this->actingAs($this->owner)->post(route('manufacturer.order-rules.store'), $payload)->assertSessionHasNoErrors();
+    $rule = OrderRule::query()->sole();
+    expect($rule->message_mode)->toBe('auto')->and($rule->publicRepresentation()['public_message'])->toBe('Você liberou 5% de desconto neste pedido.');
+    $payload['message_mode'] = 'custom';
+    $this->put(route('manufacturer.order-rules.update', $rule), $payload)->assertSessionHasErrors('public_message');
+    $payload['public_message'] = 'Mensagem exclusiva da marca.';
+    $this->put(route('manufacturer.order-rules.update', $rule), $payload)->assertSessionHasNoErrors();
+    expect($rule->fresh()->message_mode)->toBe('custom')->and($rule->fresh()->publicRepresentation()['public_message'])->toBe('Mensagem exclusiva da marca.');
+});
+
+it('provides real prices and categories to the rule simulator without exposing another manufacturer products', function () {
+    $category = ProductCategory::factory()->create(['manufacturer_id' => $this->manufacturer->id]);
+    $product = Product::factory()->create(['manufacturer_id' => $this->manufacturer->id, 'product_category_id' => $category->id, 'price_cents' => 12345, 'is_active' => true]);
+    Product::factory()->create(['is_active' => true]);
+    $this->actingAs($this->owner)->get(route('manufacturer.order-rules.index'))->assertInertia(fn (Assert $page) => $page
+        ->has('products', 1)->where('products.0.id', $product->id)->where('products.0.product_category_id', $category->id)->where('products.0.price_cents', 12345));
+});
+
 beforeEach(function () {
     $this->withoutVite();
 

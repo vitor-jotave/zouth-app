@@ -1,4 +1,4 @@
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import {
     AlertTriangle,
     ArrowRight,
@@ -14,7 +14,7 @@ import {
     Trash2,
     X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { AppPageHeader } from '@/components/app-page-header';
 import InputError from '@/components/input-error';
 import {
@@ -53,7 +53,20 @@ import {
 } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { useConfirmDiscardChanges } from '@/components/unsaved-changes-provider';
+import { useDraftForm, useDraftState } from '@/hooks/use-draft-history';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import AppLayout from '@/layouts/app-layout';
+import {
+    automaticRuleMessage,
+    isAutomaticRuleMessage,
+} from '@/lib/order-rule-messages';
+import {
+    buildRuleSimulation,
+    orderRuleSimulationIssue,
+    type RuleSimulationSelection,
+    type RuleSimulationProduct,
+} from '@/lib/order-rule-simulation';
 import {
     evaluateOrderRules,
     pendingRuleProgress,
@@ -71,7 +84,7 @@ import { dashboard } from '@/routes';
 import manufacturer from '@/routes/manufacturer';
 import type { BreadcrumbItem } from '@/types';
 
-type ProductOption = {
+type ProductOption = RuleSimulationProduct & {
     id: number;
     name: string;
     sku: string | null;
@@ -118,12 +131,6 @@ type ShortcutKey =
     | 'discount_volume'
     | 'minimum_variety'
     | 'scoped_condition';
-
-type SimulationState = {
-    subtotal_cents: number;
-    total_quantity: number;
-    distinct_products: number;
-};
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Visão geral', href: dashboard().url },
@@ -379,34 +386,6 @@ function ruleSentence(
     return `Se ${phrases.join(rule.match_mode === 'all' ? ' e ' : ' ou ')}, então ${actionLabel(rule.action)}.`;
 }
 
-function simulationCart(simulation: SimulationState) {
-    const modelCount = Math.max(
-        1,
-        Math.min(simulation.distinct_products, simulation.total_quantity),
-    );
-    const items = Array.from({ length: modelCount }, (_, index) => ({
-        product_id: index + 1,
-        product_category_id: index === 0 ? 1 : null,
-        quantity: 1,
-        unit_price_cents: index === 0 ? simulation.subtotal_cents : null,
-    }));
-    const remainingQuantity = Math.max(
-        0,
-        simulation.total_quantity - modelCount,
-    );
-
-    if (remainingQuantity > 0) {
-        items.push({
-            product_id: 1,
-            product_category_id: 1,
-            quantity: remainingQuantity,
-            unit_price_cents: null,
-        });
-    }
-
-    return items;
-}
-
 function evaluationStatus(
     rule: Pick<OrderRuleContract, 'action'>,
     matched: boolean,
@@ -423,7 +402,7 @@ function evaluationStatus(
 }
 
 function evaluationMessage(
-    rule: Pick<OrderRuleContract, 'action' | 'public_message'>,
+    rule: Pick<OrderRuleContract, 'action' | 'public_message' | 'message_mode'>,
     matched: boolean,
     fallback: string,
 ): string {
@@ -435,7 +414,9 @@ function evaluationMessage(
         return 'A vantagem ainda não aparece no carrinho; a régua mostra quanto falta para liberar.';
     }
 
-    return rule.public_message || fallback;
+    return isAutomaticRuleMessage(rule.public_message, rule.message_mode)
+        ? automaticRuleMessage(rule.action)
+        : rule.public_message || fallback;
 }
 
 function numberInputValue(
@@ -458,27 +439,66 @@ function numberInputToStored(
         : Math.round(parsed);
 }
 
+function ruleFormData(rule: OrderRuleContract): RuleFormData {
+    return {
+        name: rule.name,
+        description: rule.description ?? '',
+        is_active: rule.is_active !== false,
+        match_mode: rule.match_mode,
+        conditions: rule.conditions,
+        action: rule.action,
+        public_message: isAutomaticRuleMessage(
+            rule.public_message,
+            rule.message_mode,
+        )
+            ? ''
+            : (rule.public_message ?? ''),
+        sort_order: rule.sort_order,
+    };
+}
+
 export default function OrderRulesIndex({
     order_rules,
     rule_summary,
     products,
     categories,
 }: Props) {
-    const [selectedRuleId, setSelectedRuleId] = useState<number | null>(
+    const [selectedRuleId, setSelectedRuleId] = useDraftState<number | null>(
+        'order-rule-selected',
         order_rules[0]?.id ?? null,
     );
-    const [editor, setEditor] = useState<EditorState | null>(null);
+    const [editor, setEditor] = useDraftState<EditorState | null>(
+        'order-rule-editor',
+        null,
+    );
+    const [customMessage, setCustomMessage] = useDraftState(
+        'order-rule-custom-message',
+        false,
+    );
+    const [customMessageDraft, setCustomMessageDraft] = useDraftState(
+        'order-rule-custom-copy',
+        '',
+    );
     const [deleteRule, setDeleteRule] = useState<OrderRuleContract | null>(
         null,
     );
-    const [simulation, setSimulation] = useState<SimulationState>({
-        subtotal_cents: 168000,
-        total_quantity: 18,
-        distinct_products: 7,
-    });
-    const form = useForm<RuleFormData>(
-        shortcutForm('minimum_order', categories, products),
+    const [simulationSelection, setSimulationSelection] =
+        useState<RuleSimulationSelection>({});
+    const form = useDraftForm<RuleFormData>(
+        'order-rule',
+        editor?.mode === 'edit'
+            ? ruleFormData(editor.rule)
+            : {
+                  ...shortcutForm(
+                      editor?.shortcut ?? 'minimum_order',
+                      categories,
+                      products,
+                  ),
+                  public_message: '',
+              },
     );
+    useUnsavedChangesGuard(Boolean(editor) && form.isDirty);
+    const confirmDiscard = useConfirmDiscardChanges();
 
     const limits = order_rules.filter(
         (rule) => rule.action.type === 'block_checkout',
@@ -491,11 +511,20 @@ export default function OrderRulesIndex({
         order_rules[0] ??
         null;
     const liveRule: OrderRuleContract | null = selectedRule
-        ? { ...selectedRule, is_active: true }
+        ? {
+              ...selectedRule,
+              is_active: true,
+              public_message: isAutomaticRuleMessage(
+                  selectedRule.public_message,
+                  selectedRule.message_mode,
+              )
+                  ? automaticRuleMessage(selectedRule.action)
+                  : selectedRule.public_message,
+          }
         : null;
     const simulationItems = useMemo(
-        () => simulationCart(simulation),
-        [simulation],
+        () => buildRuleSimulation(products, simulationSelection),
+        [products, simulationSelection],
     );
     const selectedEvaluation = liveRule
         ? evaluateOrderRules([liveRule], simulationItems)
@@ -520,25 +549,31 @@ export default function OrderRulesIndex({
         ) {
             setSelectedRuleId(order_rules[0]?.id ?? null);
         }
-    }, [order_rules, selectedRuleId]);
+    }, [order_rules, selectedRuleId, setSelectedRuleId]);
 
     const openCreateEditor = (shortcut: ShortcutKey = 'minimum_order') => {
-        form.setData(shortcutForm(shortcut, categories, products));
+        setCustomMessage(false);
+        setCustomMessageDraft('');
+        const data = shortcutForm(shortcut, categories, products);
+        data.public_message = '';
+        form.setDefaults(data);
+        form.setData(data);
         form.clearErrors();
         setEditor({ mode: 'create', shortcut });
     };
 
     const openEditEditor = (rule: OrderRuleContract) => {
-        form.setData({
-            name: rule.name,
-            description: rule.description ?? '',
-            is_active: rule.is_active !== false,
-            match_mode: rule.match_mode,
-            conditions: rule.conditions,
-            action: rule.action,
-            public_message: rule.public_message ?? '',
-            sort_order: rule.sort_order,
-        });
+        setCustomMessageDraft(
+            isAutomaticRuleMessage(rule.public_message, rule.message_mode)
+                ? ''
+                : (rule.public_message ?? ''),
+        );
+        setCustomMessage(
+            !isAutomaticRuleMessage(rule.public_message, rule.message_mode),
+        );
+        const data = ruleFormData(rule);
+        form.setDefaults(data);
+        form.setData(data);
         form.clearErrors();
         setSelectedRuleId(rule.id);
         setEditor({ mode: 'edit', rule });
@@ -548,9 +583,26 @@ export default function OrderRulesIndex({
         setEditor(null);
         form.clearErrors();
     };
+    const requestCloseEditor = async () => {
+        if (await confirmDiscard(form.isDirty)) {
+            form.reset();
+            closeEditor();
+        }
+    };
 
     const submitRule = (event: React.FormEvent) => {
         event.preventDefault();
+        form.transform((data) => ({
+            ...data,
+            message_mode: customMessage ? 'custom' : 'auto',
+        }));
+        if (customMessage && !form.data.public_message.trim()) {
+            form.setError(
+                'public_message',
+                'Escreva a mensagem ou desative a personalização para usar a mensagem automática.',
+            );
+            return;
+        }
         const options = {
             preserveScroll: true,
             onSuccess: closeEditor,
@@ -635,17 +687,25 @@ export default function OrderRulesIndex({
         id: 0,
         name: form.data.name || 'Nova regra',
         is_active: true,
+        message_mode: customMessage ? 'custom' : 'auto',
         match_mode: form.data.match_mode,
         conditions: form.data.conditions,
         action: form.data.action,
-        public_message: form.data.public_message,
+        public_message:
+            form.data.public_message || automaticRuleMessage(form.data.action),
     };
+    const editorConfigurationIssue = orderRuleSimulationIssue(
+        form.data.conditions,
+        form.data.action,
+    );
     const editorEvaluation = evaluateOrderRules(
-        [editorSimulationRule],
+        editorConfigurationIssue ? [] : [editorSimulationRule],
         simulationItems,
     );
     const editorMatched = editorEvaluation.evaluations[0]?.matched ?? false;
-    const editorStatus = evaluationStatus(editorSimulationRule, editorMatched);
+    const editorStatus = editorConfigurationIssue
+        ? { label: 'Complete a regra', isPositive: false }
+        : evaluationStatus(editorSimulationRule, editorMatched);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -789,50 +849,223 @@ export default function OrderRulesIndex({
                                     <p className="font-zouth-display text-sm font-semibold text-foreground">
                                         Cenário do carrinho
                                     </p>
-                                    <div className="mt-4 grid grid-cols-3 gap-2">
-                                        <SimulationInput
-                                            label="Subtotal"
-                                            value={
-                                                simulation.subtotal_cents / 100
-                                            }
-                                            prefix="R$"
-                                            onChange={(value) =>
-                                                setSimulation((current) => ({
-                                                    ...current,
-                                                    subtotal_cents: Math.max(
-                                                        0,
-                                                        Math.round(value * 100),
-                                                    ),
-                                                }))
-                                            }
-                                        />
-                                        <SimulationInput
-                                            label="Peças"
-                                            value={simulation.total_quantity}
-                                            onChange={(value) =>
-                                                setSimulation((current) => ({
-                                                    ...current,
-                                                    total_quantity: Math.max(
-                                                        1,
-                                                        Math.round(value),
-                                                    ),
-                                                }))
-                                            }
-                                        />
-                                        <SimulationInput
-                                            label="Modelos"
-                                            value={simulation.distinct_products}
-                                            onChange={(value) =>
-                                                setSimulation((current) => ({
-                                                    ...current,
-                                                    distinct_products: Math.max(
-                                                        1,
-                                                        Math.round(value),
-                                                    ),
-                                                }))
-                                            }
-                                        />
-                                    </div>
+                                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                                        Monte uma seleção com peças reais.
+                                        Categorias e composição dos combos são
+                                        consideradas; nenhum pedido é criado.
+                                    </p>
+                                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                                        Conferência isolada desta regra. No
+                                        pedido, prevalece o maior desconto
+                                        elegível. Ajustar preços aqui não altera
+                                        o catálogo.
+                                    </p>
+                                    <label
+                                        htmlFor="simulation-product"
+                                        className="mt-4 block text-xs font-semibold"
+                                    >
+                                        Adicionar peça à simulação
+                                    </label>
+                                    <select
+                                        id="simulation-product"
+                                        value=""
+                                        onChange={(event) => {
+                                            const product = products.find(
+                                                (item) =>
+                                                    item.id ===
+                                                    Number(event.target.value),
+                                            );
+                                            if (product)
+                                                setSimulationSelection(
+                                                    (current) => ({
+                                                        ...current,
+                                                        [product.id]: {
+                                                            quantity: 1,
+                                                            unit_price_cents:
+                                                                product.price_cents,
+                                                        },
+                                                    }),
+                                                );
+                                        }}
+                                        className="mt-2 min-h-11 w-full border border-border bg-transparent px-2 text-sm"
+                                    >
+                                        <option value="">
+                                            Escolha uma peça ou combo
+                                        </option>
+                                        {products
+                                            .filter(
+                                                (product) =>
+                                                    !simulationSelection[
+                                                        product.id
+                                                    ],
+                                            )
+                                            .map((product) => (
+                                                <option
+                                                    key={product.id}
+                                                    value={product.id}
+                                                >
+                                                    {product.name}
+                                                    {product.sku
+                                                        ? ` · ${product.sku}`
+                                                        : ''}
+                                                </option>
+                                            ))}
+                                    </select>
+                                    {products
+                                        .filter(
+                                            (product) =>
+                                                simulationSelection[product.id],
+                                        )
+                                        .map((product) => (
+                                            <div
+                                                key={product.id}
+                                                className="mt-4 border-y border-border py-3"
+                                            >
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <p className="text-sm font-semibold">
+                                                        {product.name}
+                                                        <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                                                            {categories.find(
+                                                                (category) =>
+                                                                    category.id ===
+                                                                    product.product_category_id,
+                                                            )?.name ??
+                                                                'Sem categoria'}
+                                                        </span>
+                                                    </p>
+                                                    <button
+                                                        type="button"
+                                                        aria-label={`Remover ${product.name} da simulação`}
+                                                        onClick={() =>
+                                                            setSimulationSelection(
+                                                                (current) => {
+                                                                    const next =
+                                                                        {
+                                                                            ...current,
+                                                                        };
+                                                                    delete next[
+                                                                        product
+                                                                            .id
+                                                                    ];
+                                                                    return next;
+                                                                },
+                                                            )
+                                                        }
+                                                        className="min-h-11 px-2 text-xs underline"
+                                                    >
+                                                        Remover
+                                                    </button>
+                                                </div>
+                                                <div className="mt-3 grid grid-cols-2 gap-3">
+                                                    <SimulationInput
+                                                        label={`Quantidade de ${product.name} na simulação`}
+                                                        displayLabel="Quantidade"
+                                                        value={
+                                                            simulationSelection[
+                                                                product.id
+                                                            ].quantity
+                                                        }
+                                                        onChange={(value) =>
+                                                            setSimulationSelection(
+                                                                (current) => ({
+                                                                    ...current,
+                                                                    [product.id]:
+                                                                        {
+                                                                            ...current[
+                                                                                product
+                                                                                    .id
+                                                                            ],
+                                                                            quantity:
+                                                                                Math.max(
+                                                                                    1,
+                                                                                    Math.min(
+                                                                                        9999,
+                                                                                        Math.round(
+                                                                                            value,
+                                                                                        ),
+                                                                                    ),
+                                                                                ),
+                                                                        },
+                                                                }),
+                                                            )
+                                                        }
+                                                    />
+                                                    <div>
+                                                        <Label
+                                                            htmlFor={`simulation-price-${product.id}`}
+                                                            className="text-xs"
+                                                        >
+                                                            Preço unitário
+                                                        </Label>
+                                                        <Input
+                                                            id={`simulation-price-${product.id}`}
+                                                            aria-label={`Preço unitário de ${product.name} na simulação`}
+                                                            type="number"
+                                                            min={0}
+                                                            step="0.01"
+                                                            placeholder="Sob consulta"
+                                                            value={
+                                                                simulationSelection[
+                                                                    product.id
+                                                                ]
+                                                                    .unit_price_cents ===
+                                                                null
+                                                                    ? ''
+                                                                    : simulationSelection[
+                                                                          product
+                                                                              .id
+                                                                      ]
+                                                                          .unit_price_cents! /
+                                                                      100
+                                                            }
+                                                            onChange={(event) =>
+                                                                setSimulationSelection(
+                                                                    (
+                                                                        current,
+                                                                    ) => ({
+                                                                        ...current,
+                                                                        [product.id]:
+                                                                            {
+                                                                                ...current[
+                                                                                    product
+                                                                                        .id
+                                                                                ],
+                                                                                unit_price_cents:
+                                                                                    event
+                                                                                        .target
+                                                                                        .value ===
+                                                                                    ''
+                                                                                        ? null
+                                                                                        : Math.max(
+                                                                                              0,
+                                                                                              Math.round(
+                                                                                                  Number(
+                                                                                                      event
+                                                                                                          .target
+                                                                                                          .value,
+                                                                                                  ) *
+                                                                                                      100,
+                                                                                              ),
+                                                                                          ),
+                                                                            },
+                                                                    }),
+                                                                )
+                                                            }
+                                                            className="mt-2 rounded-[2px]"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    {simulationItems.length === 0 && (
+                                        <p
+                                            role="status"
+                                            className="mt-4 text-xs text-muted-foreground"
+                                        >
+                                            Adicione peças para conferir esta
+                                            regra.
+                                        </p>
+                                    )}
 
                                     <div className="mt-6">
                                         <div className="flex items-end justify-between gap-4">
@@ -950,7 +1183,7 @@ export default function OrderRulesIndex({
 
             <Sheet
                 open={editor !== null}
-                onOpenChange={(open) => !open && closeEditor()}
+                onOpenChange={(open) => !open && void requestCloseEditor()}
             >
                 <SheetContent
                     side="right"
@@ -1332,7 +1565,14 @@ export default function OrderRulesIndex({
                                 </Label>
                                 <Textarea
                                     id="public-message"
-                                    value={form.data.public_message}
+                                    value={
+                                        customMessage
+                                            ? form.data.public_message
+                                            : automaticRuleMessage(
+                                                  form.data.action,
+                                              )
+                                    }
+                                    readOnly={!customMessage}
                                     onChange={(event) =>
                                         form.setData(
                                             'public_message',
@@ -1344,10 +1584,40 @@ export default function OrderRulesIndex({
                                     className="mt-5 min-h-28 rounded-[2px] bg-transparent shadow-none focus-visible:ring-0"
                                     placeholder="Explique o próximo passo com clareza."
                                 />
+                                <label className="mt-4 flex items-center gap-3 text-sm">
+                                    <Switch
+                                        checked={customMessage}
+                                        onCheckedChange={(checked) => {
+                                            setCustomMessage(checked);
+                                            if (!checked)
+                                                setCustomMessageDraft(
+                                                    form.data.public_message,
+                                                );
+                                            form.setData(
+                                                'public_message',
+                                                checked
+                                                    ? customMessageDraft ||
+                                                          automaticRuleMessage(
+                                                              form.data.action,
+                                                          )
+                                                    : '',
+                                            );
+                                        }}
+                                        aria-label="Personalizar mensagem no carrinho"
+                                    />
+                                    Personalizar mensagem
+                                </label>
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                    {customMessage
+                                        ? 'Texto personalizado: revise os valores sempre que alterar a regra.'
+                                        : 'Mensagem automática: acompanha o benefício configurado, sem valores desatualizados.'}
+                                </p>
                                 <div className="mt-2 flex justify-between text-xs text-muted-foreground">
                                     <span>Aparece no carrinho público.</span>
                                     <span>
-                                        {form.data.public_message.length}/240
+                                        {customMessage
+                                            ? `${form.data.public_message.length}/240`
+                                            : 'Mensagem automática'}
                                     </span>
                                 </div>
                                 <InputError
@@ -1375,11 +1645,12 @@ export default function OrderRulesIndex({
                                             </span>
                                         </p>
                                         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                                            {evaluationMessage(
-                                                editorSimulationRule,
-                                                editorMatched,
-                                                editorSentence,
-                                            )}
+                                            {editorConfigurationIssue ??
+                                                evaluationMessage(
+                                                    editorSimulationRule,
+                                                    editorMatched,
+                                                    editorSentence,
+                                                )}
                                         </p>
                                     </div>
                                     <div className="text-left sm:text-right">
@@ -1418,7 +1689,7 @@ export default function OrderRulesIndex({
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={closeEditor}
+                                onClick={() => void requestCloseEditor()}
                                 className="min-h-12 rounded-[2px] bg-transparent shadow-none"
                             >
                                 Cancelar
@@ -1860,7 +2131,10 @@ function ConditionEditor({
                                 })
                             }
                         >
-                            <SelectTrigger className="h-11 w-full rounded-[2px] bg-transparent shadow-none sm:w-52">
+                            <SelectTrigger
+                                aria-label={`Recorte da coleção da condição ${index + 1}`}
+                                className="h-11 w-full rounded-[2px] bg-transparent shadow-none sm:w-52"
+                            >
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent className="rounded-[2px]">
@@ -1931,21 +2205,23 @@ function ConditionEditor({
 
 function SimulationInput({
     label,
+    displayLabel,
     value,
     prefix,
     onChange,
 }: {
     label: string;
+    displayLabel?: string;
     value: number;
     prefix?: string;
     onChange: (value: number) => void;
 }) {
-    const id = `simulation-${label.toLowerCase()}`;
+    const id = useId();
 
     return (
         <div>
             <Label htmlFor={id} className="text-[0.65rem] uppercase">
-                {label}
+                {displayLabel ?? label}
             </Label>
             <div className="relative mt-2">
                 {prefix && (
@@ -1955,6 +2231,7 @@ function SimulationInput({
                 )}
                 <Input
                     id={id}
+                    aria-label={label}
                     type="number"
                     min="0"
                     value={value}
