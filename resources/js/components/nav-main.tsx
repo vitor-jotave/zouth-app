@@ -9,7 +9,6 @@ import {
     useSidebar,
 } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/hooks/use-current-url';
-import { RESTORE_SIDEBAR_AFTER_CHAT_KEY } from '@/lib/sidebar-state';
 import type { NavItem } from '@/types';
 
 export function NavMain({
@@ -20,7 +19,7 @@ export function NavMain({
     label?: string;
 }) {
     const { isCurrentUrl } = useCurrentUrl();
-    const { isMobile, open, setOpen, setOpenMobile } = useSidebar();
+    const { isMobile, setOpenMobile } = useSidebar();
 
     if (items.length === 0) {
         return null;
@@ -58,19 +57,6 @@ export function NavMain({
 
                                             if (isMobile) {
                                                 setOpenMobile(false);
-                                            } else {
-                                                if (open) {
-                                                    sessionStorage.setItem(
-                                                        RESTORE_SIDEBAR_AFTER_CHAT_KEY,
-                                                        'true',
-                                                    );
-                                                } else {
-                                                    sessionStorage.removeItem(
-                                                        RESTORE_SIDEBAR_AFTER_CHAT_KEY,
-                                                    );
-                                                }
-
-                                                setOpen(false);
                                             }
                                         }}
                                     >
