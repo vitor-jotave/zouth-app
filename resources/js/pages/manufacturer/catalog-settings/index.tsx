@@ -356,12 +356,10 @@ function sectionProp<T extends string | number | boolean | null>(
 
 function InspectorHeader({
     eyebrow,
-    title,
-    description,
+    title
 }: {
     eyebrow: string;
     title: string;
-    description: string;
 }) {
     return (
         <header className="border-b border-border px-5 pt-6 pb-5">
@@ -371,9 +369,6 @@ function InspectorHeader({
             <h2 className="mt-2 font-zouth-display text-xl font-semibold tracking-[-0.035em]">
                 {title}
             </h2>
-            <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                {description}
-            </p>
         </header>
     );
 }
@@ -1151,7 +1146,6 @@ export default function CatalogSettings({
                     <InspectorHeader
                         eyebrow="Configurações"
                         title="Marca"
-                        description=""
                     />
                     <InspectorSection title="Identidade">
                         <div className="space-y-4">
@@ -1416,7 +1410,6 @@ export default function CatalogSettings({
                     <InspectorHeader
                         eyebrow="Seção selecionada"
                         title="Capa do catálogo"
-                        description="Apresente a coleção antes de mostrar as peças."
                     />
                     <InspectorSection title="Imagem de campanha">
                         <div className="space-y-4">
@@ -1519,7 +1512,7 @@ export default function CatalogSettings({
                                     data-catalog-error={`sections.${heroSectionIndex}.props.image_fit`}
                                 >
                                     <Label className="text-xs">
-                                        Como a foto ocupa a capa
+                                        Tamanho da Imagem de Capa
                                     </Label>
                                     <div
                                         className="grid grid-cols-2 border-t border-l border-border"
@@ -1570,7 +1563,7 @@ export default function CatalogSettings({
                                 </div>
 
                                 <SegmentedControl
-                                    label="Composição da capa"
+                                    label="Alinhamento da capa"
                                     value={
                                         sectionProp<string>(
                                             selectedSection,
@@ -1812,7 +1805,7 @@ export default function CatalogSettings({
                             </div>
                         </div>
                     </InspectorSection>
-                    <InspectorSection title="Apresentação">
+                    <InspectorSection title="Textos da Capa">
                         <div className="space-y-4">
                             <div className="space-y-2">
                                 <Label
@@ -1916,7 +1909,7 @@ export default function CatalogSettings({
                             </div>
                             <div className="space-y-3 border-t border-border pt-4">
                                 <OptionSwitch
-                                    label="Mostrar convite"
+                                    label="Mostrar Âncora"
                                     description="Leva o lojista diretamente para as peças."
                                     checked={sectionProp(
                                         selectedSection,
@@ -1960,7 +1953,6 @@ export default function CatalogSettings({
                     <InspectorHeader
                         eyebrow="Seção selecionada"
                         title="Coleções"
-                        description="Crie caminhos rápidos para o lojista explorar sua linha."
                     />
                     <InspectorSection>
                         <div className="flex items-center justify-between gap-4">
@@ -2015,7 +2007,6 @@ export default function CatalogSettings({
                     <InspectorHeader
                         eyebrow="Seção selecionada"
                         title="Produtos"
-                        description="Defina o ritmo da vitrine sem esconder as peças."
                     />
                     <InspectorSection>
                         <div className="flex items-center justify-between gap-4">
@@ -2277,7 +2268,6 @@ export default function CatalogSettings({
                     <InspectorHeader
                         eyebrow="Identidade da vitrine"
                         title="Aparência"
-                        description="A coleção continua sendo protagonista; a identidade dá o tom."
                     />
                     <InspectorSection title="Cores">
                         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
@@ -2755,9 +2745,8 @@ export default function CatalogSettings({
         return (
             <>
                 <InspectorHeader
-                    eyebrow="Catálogo em circulação"
+                    eyebrow="Publicação"
                     title="Publicar e compartilhar"
-                    description="Leve a coleção ao lojista e acompanhe sua chegada."
                 />
                 <InspectorSection title="Forma de negociação">
                     <div className="space-y-4" data-catalog-error="hide_prices">
