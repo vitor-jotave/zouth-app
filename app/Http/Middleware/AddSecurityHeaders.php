@@ -35,12 +35,12 @@ class AddSecurityHeaders
                 'Content-Security-Policy',
                 "default-src 'self'; "
                 ."script-src 'self' 'nonce-{$nonce}' https://js.stripe.com; "
-                ."style-src 'self' 'unsafe-inline'; "
+                ."style-src 'self' 'unsafe-inline' https://fonts.bunny.net; "
                 ."img-src {$imageSources}; "
-                ."font-src 'self' data:; "
+                ."font-src 'self' data: https://fonts.bunny.net; "
                 ."connect-src 'self' https://api.stripe.com; "
                 .'media-src \'self\' https: blob:; '
-                .'frame-src https://js.stripe.com https://hooks.stripe.com '
+                ."frame-src 'self' https://js.stripe.com https://hooks.stripe.com "
                 .'https://www.youtube-nocookie.com https://player.vimeo.com '
                 .'https://www.dailymotion.com https://www.loom.com; '
                 ."object-src 'none'; "

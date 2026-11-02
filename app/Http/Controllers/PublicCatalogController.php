@@ -14,6 +14,7 @@ use App\Models\ProductCategory;
 use App\Models\ProductVariantStock;
 use App\Models\VariationType;
 use App\Services\PlanLimitService;
+use App\Services\TenantManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -24,6 +25,21 @@ use Inertia\Response;
 class PublicCatalogController extends Controller
 {
     public function __construct(private PlanLimitService $planLimitService) {}
+
+    public function preview(Request $request, TenantManager $tenantManager): Response
+    {
+        $manufacturer = $tenantManager->get();
+        abort_unless($manufacturer, 403);
+
+        $setting = CatalogSetting::query()
+            ->with('manufacturer')
+            ->where('manufacturer_id', $manufacturer->id)
+            ->firstOrFail();
+
+        $this->authorize('view', $setting);
+
+        return $this->renderCatalog($request, $setting, preview: true);
+    }
 
     public function selection(RestoreCatalogSelectionRequest $request, string $token): JsonResponse
     {
@@ -81,9 +97,14 @@ class PublicCatalogController extends Controller
             report($e);
         }
 
-        $search = trim((string) $request->input('search', ''));
-        $categoryId = $request->filled('category_id') ? (string) $request->input('category_id') : null;
-        $variationFilters = $this->normalizeVariationFilters($request->input('variations', []));
+        return $this->renderCatalog($request, $setting);
+    }
+
+    private function renderCatalog(Request $request, CatalogSetting $setting, bool $preview = false): Response
+    {
+        $search = $preview ? '' : trim((string) $request->input('search', ''));
+        $categoryId = ! $preview && $request->filled('category_id') ? (string) $request->input('category_id') : null;
+        $variationFilters = $preview ? [] : $this->normalizeVariationFilters($request->input('variations', []));
         $variationTypeNames = VariationType::query()
             ->where('manufacturer_id', $setting->manufacturer_id)
             ->whereIn('id', array_keys($variationFilters))
@@ -114,7 +135,7 @@ class PublicCatalogController extends Controller
                 });
         };
 
-        $products = $applySearchAndCategory(
+        $productQuery = $applySearchAndCategory(
             Product::query()
                 ->where('manufacturer_id', $setting->manufacturer_id)
                 ->where('is_active', true)
@@ -156,8 +177,10 @@ class PublicCatalogController extends Controller
             })
             ->with(['category', 'media', 'productVariations.variationType.values', 'variantStocks', 'comboItems.componentProduct', 'comboItems.componentVariantStock'])
             ->orderBy('sort_order')
-            ->orderBy('name')
-            ->paginate(24)
+            ->orderBy('name');
+
+        $products = $productQuery
+            ->paginate($preview ? max(1, (clone $productQuery)->count()) : 24, ['*'], 'page', $preview ? 1 : null)
             ->withQueryString();
 
         $combos = $applySearchAndCategory(
@@ -171,10 +194,10 @@ class PublicCatalogController extends Controller
             ->orderBy('name')
             ->get();
 
-        $request->attributes->set('catalog_hide_prices', (bool) $setting->hide_prices);
+        $request->attributes->set('catalog_hide_prices', ! $preview && (bool) $setting->hide_prices);
         $request->attributes->set(
             'catalog_allow_orders_without_stock',
-            $allowOrdersWithoutStock,
+            $preview || $allowOrdersWithoutStock,
         );
 
         $orderRules = OrderRule::query()
@@ -184,7 +207,7 @@ class PublicCatalogController extends Controller
             ->orderBy('id')
             ->get();
 
-        if ($setting->hide_prices) {
+        if (! $preview && $setting->hide_prices) {
             $orderRules = $orderRules
                 ->filter(function (OrderRule $rule): bool {
                     if (($rule->action['type'] ?? null) !== 'block_checkout') {
@@ -208,6 +231,7 @@ class PublicCatalogController extends Controller
             && preg_match('/^\d{8,15}$/', $whatsappPhoneNumber) === 1;
 
         return Inertia::render('public/catalog', [
+            'preview_mode' => $preview,
             'manufacturer' => [
                 'id' => $setting->manufacturer->id,
                 'name' => $setting->manufacturer->name,
@@ -234,7 +258,7 @@ class PublicCatalogController extends Controller
                     ->mapWithKeys(fn (array $values, int|string $typeId) => [(string) $typeId => $values])
                     ->all(),
             ],
-            'filter_options' => $this->buildFilterOptions($setting),
+            'filter_options' => $this->buildFilterOptions($setting, $preview),
         ]);
     }
 
@@ -321,11 +345,11 @@ class PublicCatalogController extends Controller
     /**
      * @return array{categories: array<int, array{id: int, name: string}>, variation_types: array<int, array{id: int, name: string, is_color_type: bool, values: array<int, array{value: string, hex: string|null, image_url: string|null}>}>}
      */
-    private function buildFilterOptions(CatalogSetting $setting): array
+    private function buildFilterOptions(CatalogSetting $setting, bool $preview = false): array
     {
         $activeVariantStocks = ProductVariantStock::query()
             ->when(
-                ! $setting->allow_orders_without_stock,
+                ! $preview && ! $setting->allow_orders_without_stock,
                 fn ($query) => $query->where(function ($query) {
                     $query->where('quantity', '>', 0)
                         ->orWhereHas('product', fn ($productQuery) => $productQuery

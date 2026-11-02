@@ -198,6 +198,7 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant', 'manufacturer.enti
             ->middleware('manufacturer.capability:catalog.manage')
             ->group(function () {
                 Route::get('/', 'index')->name('index');
+                Route::get('preview', [PublicCatalogController::class, 'preview'])->name('preview');
                 Route::put('/', 'update')->name('update');
                 Route::post('logo', 'uploadLogo')->name('logo');
                 Route::delete('logo', 'destroyLogo')->name('logo.destroy');
