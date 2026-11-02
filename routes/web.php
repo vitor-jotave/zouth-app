@@ -113,6 +113,9 @@ Route::controller(LegalController::class)->prefix('legal')->name('legal.')->grou
 Route::get('catalog/{token}', [PublicCatalogController::class, 'show'])
     ->middleware('throttle:60,1')
     ->name('public.catalog.show');
+Route::get('catalog/{token}/selection', [PublicCatalogController::class, 'selection'])
+    ->middleware('throttle:60,1')
+    ->name('public.catalog.selection');
 
 // Public order routes
 Route::post('catalog/{catalogSetting:public_token}/orders', [PublicOrderController::class, 'store'])

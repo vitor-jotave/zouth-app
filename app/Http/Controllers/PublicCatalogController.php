@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\WhatsappInstanceStatus;
+use App\Http\Requests\RestoreCatalogSelectionRequest;
 use App\Http\Resources\CatalogSettingResource;
 use App\Http\Resources\ProductCatalogResource;
 use App\Models\CatalogSetting;
@@ -13,6 +14,7 @@ use App\Models\ProductCategory;
 use App\Models\ProductVariantStock;
 use App\Models\VariationType;
 use App\Services\PlanLimitService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -22,6 +24,25 @@ use Inertia\Response;
 class PublicCatalogController extends Controller
 {
     public function __construct(private PlanLimitService $planLimitService) {}
+
+    public function selection(RestoreCatalogSelectionRequest $request, string $token): JsonResponse
+    {
+        $setting = CatalogSetting::query()->with('manufacturer')
+            ->where('public_token', $token)->where('public_link_active', true)
+            ->whereHas('manufacturer', fn ($query) => $query->where('is_active', true))
+            ->firstOrFail();
+        abort_unless($this->planLimitService->hasOperationalAccess($setting->manufacturer), 403);
+        $request->attributes->set('catalog_hide_prices', (bool) $setting->hide_prices);
+        $request->attributes->set('catalog_allow_orders_without_stock', (bool) $setting->allow_orders_without_stock);
+        $products = Product::query()
+            ->where('manufacturer_id', $setting->manufacturer_id)->where('is_active', true)
+            ->whereIn('id', $request->validated('product_ids'))
+            ->with(['category', 'media', 'productVariations.variationType.values', 'variantStocks', 'comboItems.componentProduct.media', 'comboItems.componentVariantStock'])
+            ->get();
+
+        return response()->json(['products' => ProductCatalogResource::collection($products)->resolve($request)])
+            ->header('Cache-Control', 'no-store, private');
+    }
 
     public function show(Request $request, string $token): Response
     {

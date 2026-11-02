@@ -67,6 +67,11 @@ import {
     SheetTitle,
 } from '@/components/ui/sheet';
 import {
+    catalogSelectionCountLabel,
+    mergeRestoredCatalogSelection,
+    parseCatalogSelection,
+} from '@/lib/catalog-selection';
+import {
     CATALOG_LOGO_SIZE,
     catalogCoverImageUrl,
     catalogLogoStyle,
@@ -80,6 +85,7 @@ import {
     type OrderRuleContract,
 } from '@/lib/order-rules';
 import { cn } from '@/lib/utils';
+import { selection as restoreSelection } from '@/routes/public/catalog';
 
 interface Manufacturer {
     id: number;
@@ -3529,6 +3535,202 @@ export default function PublicCatalog({
 
     // Cart state
     const [cart, setCart] = useState<CartItem[]>([]);
+    const [hydratedCatalog, setHydratedCatalog] = useState<string | null>(null);
+    const [selectionNotice, setSelectionNotice] = useState('');
+    const [restoreAttempt, setRestoreAttempt] = useState(0);
+    const [restoreFailed, setRestoreFailed] = useState(false);
+    const selectionStorageKey = `zouth:catalog-selection:${catalog_token}`;
+    const restoredCatalogRef = useRef<string | null>(null);
+    const cartCatalogRef = useRef(catalog_token);
+
+    useEffect(() => {
+        if (restoredCatalogRef.current === catalog_token) return;
+        if (cartCatalogRef.current !== catalog_token) {
+            cartCatalogRef.current = catalog_token;
+            setCart([]);
+        }
+        const controller = new AbortController();
+        const restore = async () => {
+            setRestoreFailed(false);
+            let saved;
+            try {
+                saved = parseCatalogSelection(
+                    window.localStorage.getItem(selectionStorageKey),
+                );
+            } catch {
+                setSelectionNotice(
+                    'Seu navegador não permite salvar a seleção. Mantenha esta aba aberta até concluir.',
+                );
+                setHydratedCatalog(catalog_token);
+                restoredCatalogRef.current = catalog_token;
+                return;
+            }
+            if (saved.length === 0) {
+                setHydratedCatalog(catalog_token);
+                restoredCatalogRef.current = catalog_token;
+                return;
+            }
+            setSelectionNotice(
+                'Recuperando sua seleção e conferindo a disponibilidade das peças…',
+            );
+            try {
+                const response = await fetch(
+                    restoreSelection(
+                        { token: catalog_token },
+                        {
+                            query: {
+                                product_ids: [
+                                    ...new Set(
+                                        saved.map((item) => item.product_id),
+                                    ),
+                                ],
+                            },
+                        },
+                    ).url,
+                    {
+                        headers: { Accept: 'application/json' },
+                        signal: controller.signal,
+                        cache: 'no-store',
+                    },
+                );
+                if (!response.ok) throw new Error('selection_unavailable');
+                const payload = (await response.json()) as {
+                    products: Product[];
+                };
+                const recovered: CartItem[] = [];
+                saved.forEach((item) => {
+                    const product = payload.products.find(
+                        (entry) => entry.id === item.product_id,
+                    );
+                    if (
+                        !product ||
+                        !productHasRequiredSelection(
+                            product,
+                            item.selected_variations,
+                        )
+                    )
+                        return;
+                    if (
+                        product.variations.length > 0 &&
+                        !selectedVariantStock(product, item.selected_variations)
+                    )
+                        return;
+                    const available = availableStockForSelection(
+                        product,
+                        item.selected_variations,
+                    );
+                    const maximum = maximumSelectableQuantity(
+                        product,
+                        item.selected_variations,
+                        catalog_settings.allow_orders_without_stock,
+                    );
+                    if (
+                        available === null ||
+                        (available === 0 &&
+                            !catalog_settings.allow_orders_without_stock &&
+                            !product.allow_quote_when_out_of_stock)
+                    )
+                        return;
+                    const options = cartOptionsFromSelection(
+                        product,
+                        item.selected_variations,
+                    );
+                    const key = cartItemKey(
+                        product.id,
+                        options.selected_variations,
+                    );
+                    const existing = recovered.find(
+                        (entry) => entry.key === key,
+                    );
+                    if (existing) {
+                        existing.quantity = normalizeRequestedQuantity(
+                            existing.quantity + item.quantity,
+                            maximum,
+                        );
+                    } else {
+                        recovered.push({
+                            key,
+                            product,
+                            quantity: normalizeRequestedQuantity(
+                                item.quantity,
+                                maximum,
+                            ),
+                            unit_price_cents: priceForSelection(
+                                product,
+                                item.selected_variations,
+                            ),
+                            ...options,
+                        });
+                    }
+                });
+                if (controller.signal.aborted) return;
+                setCart((current) =>
+                    mergeRestoredCatalogSelection(recovered, current, (item) =>
+                        maximumSelectableQuantity(
+                            item.product,
+                            item.selected_variations ?? {},
+                            catalog_settings.allow_orders_without_stock,
+                        ),
+                    ),
+                );
+                const adjusted =
+                    saved.length !== recovered.length ||
+                    recovered.some(
+                        (item) =>
+                            saved.find(
+                                (entry) =>
+                                    cartItemKey(
+                                        entry.product_id,
+                                        entry.selected_variations,
+                                    ) === item.key,
+                            )?.quantity !== item.quantity,
+                    );
+                setSelectionNotice(
+                    recovered.length === 0
+                        ? 'As peças da seleção anterior não estão mais disponíveis. Escolha novas peças para continuar.'
+                        : adjusted
+                          ? 'Sua seleção foi recuperada com ajustes de disponibilidade. Algumas peças ou quantidades mudaram; revise seu pedido.'
+                          : 'Sua seleção foi recuperada. Preços e disponibilidade foram conferidos; revise as quantidades antes de continuar.',
+                );
+                setHydratedCatalog(catalog_token);
+                restoredCatalogRef.current = catalog_token;
+            } catch {
+                if (!controller.signal.aborted) {
+                    setRestoreFailed(true);
+                    setSelectionNotice(
+                        'Não foi possível recuperar sua seleção agora. A seleção anterior continua guardada neste navegador. Novas peças ficam apenas nesta aba até a recuperação terminar.',
+                    );
+                }
+            }
+        };
+        void restore();
+        return () => controller.abort();
+    }, [
+        catalog_token,
+        selectionStorageKey,
+        catalog_settings.allow_orders_without_stock,
+        restoreAttempt,
+    ]);
+
+    useEffect(() => {
+        if (hydratedCatalog !== catalog_token) return;
+        try {
+            window.localStorage.setItem(
+                selectionStorageKey,
+                JSON.stringify(
+                    cart.map((item) => ({
+                        product_id: item.product.id,
+                        quantity: item.quantity,
+                        selected_variations: item.selected_variations ?? {},
+                    })),
+                ),
+            );
+        } catch {
+            setSelectionNotice(
+                'Seu navegador não permite salvar a seleção. Mantenha esta aba aberta até concluir.',
+            );
+        }
+    }, [cart, catalog_token, hydratedCatalog, selectionStorageKey]);
     const [cartOpen, setCartOpen] = useState(false);
     const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(
         null,
@@ -3584,7 +3786,7 @@ export default function PublicCatalog({
         cart.every((item) => item.product.product_type === 'combo');
     const cartSelectionLabel = hasOnlyCompositions
         ? `${cartCompositionTotal} ${cartCompositionTotal === 1 ? 'composição' : 'composições'}`
-        : `${cartTotal} ${cartTotal === 1 ? 'seleção' : 'seleções'}`;
+        : catalogSelectionCountLabel(cart.length);
     const cartPieceLabel = `${cartPieceTotal} ${cartPieceTotal === 1 ? 'peça' : 'peças'}`;
     const cartRequiresQuote =
         !catalog_settings.allow_orders_without_stock &&
@@ -3896,6 +4098,14 @@ export default function PublicCatalog({
                     setCheckoutErrors(errors);
                     setSubmitting(false);
                 },
+                onSuccess: () => {
+                    setCart([]);
+                    try {
+                        window.localStorage.removeItem(selectionStorageKey);
+                    } catch {
+                        /* Storage may be disabled by the browser. */
+                    }
+                },
                 onFinish: () => {
                     setSubmitting(false);
                 },
@@ -3989,6 +4199,26 @@ export default function PublicCatalog({
                     rel="stylesheet"
                 />
             </Head>
+
+            {selectionNotice && (
+                <div
+                    role="status"
+                    className="relative mx-auto mt-4 max-w-7xl border border-black/15 bg-white/80 px-6 py-4 text-sm"
+                >
+                    {selectionNotice}
+                    {restoreFailed && (
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setRestoreAttempt((value) => value + 1)
+                            }
+                            className="ml-3 underline underline-offset-4"
+                        >
+                            Tentar recuperar novamente
+                        </button>
+                    )}
+                </div>
+            )}
 
             <div className="relative mx-auto w-full max-w-7xl px-6 py-12">
                 {preset === 'playful' && (
@@ -4439,13 +4669,16 @@ export default function PublicCatalog({
                                 {pendingBenefit && (
                                     <section className="mt-7">
                                         <div className="flex items-center justify-between gap-4 text-[11px] font-semibold tracking-[0.14em] text-[#98968d] uppercase">
-                                            <span>Próxima vantagem</span>
                                             <span>
+                                                Progresso para a próxima
+                                                vantagem
+                                            </span>
+                                            <span className="shrink-0 whitespace-nowrap">
                                                 {Math.round(
                                                     pendingBenefit.progress
                                                         .ratio * 100,
                                                 )}
-                                                %
+                                                % da meta
                                             </span>
                                         </div>
                                         <progress
