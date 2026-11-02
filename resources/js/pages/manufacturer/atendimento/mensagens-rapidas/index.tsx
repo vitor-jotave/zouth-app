@@ -1,4 +1,4 @@
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import {
     Check,
     ChevronRight,
@@ -25,6 +25,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { useConfirmDiscardChanges } from '@/components/unsaved-changes-provider';
+import { useDraftForm, useDraftState } from '@/hooks/use-draft-history';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import AppLayout from '@/layouts/app-layout';
 import {
     destroy,
@@ -78,18 +81,28 @@ export default function AtendimentoMensagensRapidasIndex({
     quick_replies,
 }: Props) {
     const [search, setSearch] = useState('');
-    const [selectedId, setSelectedId] = useState<number | null>(
+    const [selectedId, setSelectedId] = useDraftState<number | null>(
+        'quick-reply-selected',
         quick_replies[0]?.id ?? null,
     );
-    const [creating, setCreating] = useState(quick_replies.length === 0);
+    const [creating, setCreating] = useDraftState(
+        'quick-reply-creating',
+        quick_replies.length === 0,
+    );
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [copied, setCopied] = useState(false);
     const selectedReply = quick_replies.find(
         (quickReply) => quickReply.id === selectedId,
     );
-    const form = useForm<QuickReplyForm>(
+    const form = useDraftForm<QuickReplyForm>(
+        'quick-reply',
         selectedReply ? formValues(selectedReply) : emptyForm,
     );
+    const hasUnsavedChanges =
+        JSON.stringify(form.data) !==
+        JSON.stringify(selectedReply ? formValues(selectedReply) : emptyForm);
+    useUnsavedChangesGuard(hasUnsavedChanges);
+    const confirmDiscardChanges = useConfirmDiscardChanges();
 
     const filteredReplies = useMemo(() => {
         const query = normalizedSearch(search.trim());
@@ -105,7 +118,13 @@ export default function AtendimentoMensagensRapidasIndex({
         );
     }, [quick_replies, search]);
 
-    const startCreating = () => {
+    const startCreating = async (skipConfirmation = false) => {
+        if (
+            !skipConfirmation &&
+            !(await confirmDiscardChanges(hasUnsavedChanges))
+        ) {
+            return;
+        }
         setCreating(true);
         setSelectedId(null);
         setCopied(false);
@@ -113,7 +132,19 @@ export default function AtendimentoMensagensRapidasIndex({
         form.setData(emptyForm);
     };
 
-    const selectReply = (quickReply: QuickReply) => {
+    const selectReply = async (
+        quickReply: QuickReply,
+        skipConfirmation = false,
+    ) => {
+        if (quickReply.id === selectedId && !creating) {
+            return;
+        }
+        if (
+            !skipConfirmation &&
+            !(await confirmDiscardChanges(hasUnsavedChanges))
+        ) {
+            return;
+        }
         setCreating(false);
         setSelectedId(quickReply.id);
         setCopied(false);
@@ -140,7 +171,7 @@ export default function AtendimentoMensagensRapidasIndex({
                     );
 
                     if (createdReply) {
-                        selectReply(createdReply);
+                        selectReply(createdReply, true);
                     }
                 },
             });
@@ -170,9 +201,9 @@ export default function AtendimentoMensagensRapidasIndex({
                 setDeleteOpen(false);
 
                 if (replies[0]) {
-                    selectReply(replies[0]);
+                    selectReply(replies[0], true);
                 } else {
-                    startCreating();
+                    startCreating(true);
                 }
             },
         });
@@ -220,7 +251,7 @@ export default function AtendimentoMensagensRapidasIndex({
 
                         <Button
                             type="button"
-                            onClick={startCreating}
+                            onClick={() => startCreating()}
                             className="h-12 rounded-[2px] bg-zouth-coral px-6 font-zouth-display font-semibold text-[#18181f] hover:bg-[#ff6a5c]"
                         >
                             <Plus className="size-4" />
@@ -330,7 +361,7 @@ export default function AtendimentoMensagensRapidasIndex({
                                         <Button
                                             type="button"
                                             variant="outline"
-                                            onClick={startCreating}
+                                            onClick={() => startCreating()}
                                             className="mt-6 rounded-[2px] border-white/15 bg-transparent text-zouth-ivory hover:border-zouth-coral hover:bg-transparent hover:text-zouth-coral"
                                         >
                                             Criar primeira mensagem
