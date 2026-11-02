@@ -11,7 +11,7 @@ import {
     ReceiptText,
     ShoppingBag,
 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { AppPageHeader } from '@/components/app-page-header';
 import type { CustomerFormData } from '@/components/customer-form-dialog';
 import { CustomerFormDialog } from '@/components/customer-form-dialog';
@@ -19,6 +19,7 @@ import { MetricRail } from '@/components/metric-rail';
 import { Pagination } from '@/components/pagination';
 import { StatusLabel, type StatusLabelTone } from '@/components/status-label';
 import { Button } from '@/components/ui/button';
+import { useDraftState } from '@/hooks/use-draft-history';
 import AppLayout from '@/layouts/app-layout';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
@@ -328,7 +329,7 @@ function OrderJourneyRow({ order }: { order: Order }) {
 }
 
 export default function CustomersShow({ customer, orders }: Props) {
-    const [editOpen, setEditOpen] = useState(false);
+    const [editOpen, setEditOpen] = useDraftState('customer-edit-open', false);
     const relationship = relationshipFor(customer);
     const averageTicket =
         customer.commercial_orders_count > 0

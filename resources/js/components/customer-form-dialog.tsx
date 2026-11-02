@@ -1,6 +1,5 @@
-import { useForm } from '@inertiajs/react';
 import type { FormEvent } from 'react';
-import { useEffect } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,6 +19,9 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { useConfirmDiscardChanges } from '@/components/unsaved-changes-provider';
+import { useDraftForm } from '@/hooks/use-draft-history';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 
 type DocumentType = 'cpf' | 'cnpj';
 
@@ -41,6 +43,7 @@ export interface CustomerFormData {
 }
 
 interface Props {
+    draftKey?: string;
     open: boolean;
     onOpenChange: (open: boolean) => void;
     customer?: CustomerFormData | null;
@@ -64,38 +67,67 @@ const emptyForm = {
 
 const onlyDigits = (value: string) => value.replace(/\D/g, '');
 
-export function CustomerFormDialog({ open, onOpenChange, customer }: Props) {
+export function CustomerFormDialog({
+    open,
+    onOpenChange,
+    customer,
+    draftKey = 'customer',
+}: Props) {
     const isEditing = Boolean(customer);
-    const form = useForm(emptyForm);
-    const { clearErrors, setData } = form;
+    const initialData = useMemo(
+        () =>
+            customer
+                ? {
+                      name: customer.name,
+                      phone: customer.phone ?? '',
+                      email: customer.email ?? '',
+                      customer_document_type: customer.customer_document_type,
+                      customer_document: customer.customer_document,
+                      zip_code: customer.zip_code ?? '',
+                      state: customer.state ?? '',
+                      city: customer.city ?? '',
+                      neighborhood: customer.neighborhood ?? '',
+                      street: customer.street ?? '',
+                      address_number: customer.address_number ?? '',
+                      address_complement: customer.address_complement ?? '',
+                      address_reference: customer.address_reference ?? '',
+                  }
+                : emptyForm,
+        [customer],
+    );
+    const form = useDraftForm(
+        `${draftKey}:${customer?.id ?? 'new'}`,
+        initialData,
+    );
+    const previousContext = useRef({ open, customer });
+    const { clearErrors, setData, setDefaults } = form;
+    useUnsavedChangesGuard(open && form.isDirty);
+    const confirmDiscardChanges = useConfirmDiscardChanges();
+
+    const requestOpenChange = async (nextOpen: boolean) => {
+        if (!nextOpen && !(await confirmDiscardChanges(form.isDirty))) {
+            return;
+        }
+        if (!nextOpen) form.reset();
+        onOpenChange(nextOpen);
+    };
 
     useEffect(() => {
+        if (
+            previousContext.current.open === open &&
+            previousContext.current.customer === customer
+        )
+            return;
+        previousContext.current = { open, customer };
         if (!open) {
             return;
         }
 
         clearErrors();
 
-        if (customer) {
-            setData({
-                name: customer.name,
-                phone: customer.phone ?? '',
-                email: customer.email ?? '',
-                customer_document_type: customer.customer_document_type,
-                customer_document: customer.customer_document,
-                zip_code: customer.zip_code ?? '',
-                state: customer.state ?? '',
-                city: customer.city ?? '',
-                neighborhood: customer.neighborhood ?? '',
-                street: customer.street ?? '',
-                address_number: customer.address_number ?? '',
-                address_complement: customer.address_complement ?? '',
-                address_reference: customer.address_reference ?? '',
-            });
-        } else {
-            setData(emptyForm);
-        }
-    }, [clearErrors, customer, open, setData]);
+        setDefaults(initialData);
+        setData(initialData);
+    }, [clearErrors, customer, initialData, setDefaults, open, setData]);
 
     const submit = (event: FormEvent) => {
         event.preventDefault();
@@ -124,7 +156,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: Props) {
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={requestOpenChange}>
             <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
                 <DialogHeader>
                     <DialogTitle>
@@ -358,7 +390,7 @@ export function CustomerFormDialog({ open, onOpenChange, customer }: Props) {
                         <Button
                             type="button"
                             variant="outline"
-                            onClick={() => onOpenChange(false)}
+                            onClick={() => requestOpenChange(false)}
                         >
                             Cancelar
                         </Button>
