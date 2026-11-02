@@ -1,4 +1,4 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router, usePage, useRemember } from '@inertiajs/react';
 import {
     AlertTriangle,
     ArrowDownRight,
@@ -25,10 +25,11 @@ import {
     type ReactNode,
 } from 'react';
 import AppLayout from '@/layouts/app-layout';
+import { reportPeriodError } from '@/lib/report-period';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import manufacturer from '@/routes/manufacturer';
-import type { BreadcrumbItem } from '@/types';
+import type { BreadcrumbItem, SharedData } from '@/types';
 
 type ReportTab =
     | 'overview'
@@ -70,6 +71,7 @@ interface SeriesPoint {
 
 interface ProductPerformance {
     id: number | null;
+    product_type: 'product' | 'combo' | null;
     name: string;
     sku: string | null;
     category: string;
@@ -112,6 +114,8 @@ interface ReportData {
         average_reorder_days: number | null;
         inactive_count: number;
         top: Array<{
+            customer_id: number | null;
+            last_order_id: number;
             name: string;
             state: string | null;
             city: string | null;
@@ -756,6 +760,48 @@ function Overview({
     );
 }
 
+function ReportAction({
+    href,
+    capability,
+    children,
+    label,
+}: {
+    href: string | null;
+    capability: string;
+    children: ReactNode;
+    label: string;
+}) {
+    const { auth } = usePage<SharedData>().props;
+    if (
+        !href ||
+        !(
+            auth.access?.is_owner ||
+            auth.access?.capabilities.includes(capability)
+        )
+    ) {
+        return <span>{children}</span>;
+    }
+    return (
+        <Link
+            href={href}
+            aria-label={label}
+            className="inline-flex min-h-11 max-w-full items-center gap-2 text-[#18181f] underline decoration-[#cfcac1] underline-offset-4 hover:text-[#b63329] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff4d3d]"
+        >
+            {children}
+            <ArrowUpRight className="size-3.5 shrink-0" aria-hidden="true" />
+        </Link>
+    );
+}
+
+function reportProductUrl(product: ProductPerformance): string | null {
+    if (!product.id) {
+        return null;
+    }
+    return product.product_type === 'combo'
+        ? manufacturer.products.combos.edit(product.id).url
+        : manufacturer.products.edit(product.id).url;
+}
+
 function ProductRanking({ products }: { products: ProductPerformance[] }) {
     return (
         <section>
@@ -796,7 +842,13 @@ function ProductRanking({ products }: { products: ProductPerformance[] }) {
                             </div>
                             <div className="min-w-0 sm:col-span-2 lg:col-span-1">
                                 <h3 className="truncate font-zouth-display text-base font-semibold tracking-[-0.025em] text-[#18181f]">
-                                    {product.name}
+                                    <ReportAction
+                                        href={reportProductUrl(product)}
+                                        capability="collection.manage"
+                                        label={`Editar ${product.name}`}
+                                    >
+                                        {product.name}
+                                    </ReportAction>
                                 </h3>
                                 <p className="mt-1 truncate text-xs text-[#77736c]">
                                     {product.category} ·{' '}
@@ -1090,7 +1142,13 @@ function CollectionReport({ report }: { report: ReportData }) {
                                     </span>
                                     <div className="min-w-0">
                                         <h3 className="truncate font-zouth-display text-sm font-semibold text-[#18181f]">
-                                            {product.name}
+                                            <ReportAction
+                                                href={reportProductUrl(product)}
+                                                capability="collection.manage"
+                                                label={`Ajustar estoque de ${product.name}`}
+                                            >
+                                                {product.name}
+                                            </ReportAction>
                                         </h3>
                                         <p className="mt-1 text-xs text-[#77736c]">
                                             {product.units} peças vendidas
@@ -1167,7 +1225,19 @@ function CustomersReport({ report }: { report: ReportData }) {
                                     </span>
                                     <div className="min-w-0">
                                         <h3 className="truncate font-zouth-display text-base font-semibold text-[#18181f]">
-                                            {customer.name}
+                                            <ReportAction
+                                                href={
+                                                    customer.customer_id
+                                                        ? manufacturer.customers.show(
+                                                              customer.customer_id,
+                                                          ).url
+                                                        : null
+                                                }
+                                                capability="customers.manage"
+                                                label={`Ver cliente ${customer.name}`}
+                                            >
+                                                {customer.name}
+                                            </ReportAction>
                                         </h3>
                                         <p className="mt-1 inline-flex items-center gap-1.5 text-xs text-[#77736c]">
                                             <MapPin
@@ -1179,6 +1249,19 @@ function CustomersReport({ report }: { report: ReportData }) {
                                                 .join(' · ') ||
                                                 'Praça não informada'}
                                         </p>
+                                        <div className="text-xs">
+                                            <ReportAction
+                                                href={
+                                                    manufacturer.orders.show(
+                                                        customer.last_order_id,
+                                                    ).url
+                                                }
+                                                capability="orders.manage"
+                                                label={`Ver último pedido de ${customer.name} neste período`}
+                                            >
+                                                Último pedido no período
+                                            </ReportAction>
+                                        </div>
                                     </div>
                                     <span className="text-xs text-[#77736c]">
                                         {customer.orders}{' '}
@@ -1477,38 +1560,88 @@ function SimpleMetricRail({
 }
 
 export default function ReportsIndex({ report }: Props) {
-    const [activeTab, setActiveTab] = useState<ReportTab>('overview');
+    const [activeTab, setActiveTab] = useRemember<ReportTab>(
+        'overview',
+        'zouth-reports-tab',
+    );
     const [customOpen, setCustomOpen] = useState(
         report.period.key === 'custom',
     );
     const [customStart, setCustomStart] = useState(report.period.start);
     const [customEnd, setCustomEnd] = useState(report.period.end);
+    const [selectedPeriod, setSelectedPeriod] = useState(report.period.key);
+    const [periodLoading, setPeriodLoading] = useState(false);
+    const [periodError, setPeriodError] = useState<string | null>(null);
+    const today = new Date().toLocaleDateString('en-CA');
+    const customError = reportPeriodError(customStart, customEnd, today);
+    useEffect(() => {
+        setSelectedPeriod(report.period.key);
+        setCustomOpen(report.period.key === 'custom');
+        setCustomStart(report.period.start);
+        setCustomEnd(report.period.end);
+        setPeriodError(null);
+    }, [report.period.key, report.period.start, report.period.end]);
     const periodLabel = useMemo(
         () =>
-            periodOptions.find((option) => option.value === report.period.key)
-                ?.label ?? report.period.label,
+            report.period.key === 'custom'
+                ? report.period.label
+                : (periodOptions.find(
+                      (option) => option.value === report.period.key,
+                  )?.label ?? report.period.label),
         [report.period.key, report.period.label],
     );
 
     const changePeriod = (value: string) => {
+        setSelectedPeriod(value);
+        setPeriodError(null);
         if (value === 'custom') {
+            setCustomStart(report.period.start);
+            setCustomEnd(report.period.end);
             setCustomOpen(true);
             return;
         }
         setCustomOpen(false);
+        setPeriodLoading(true);
         router.get(
             manufacturer.reports.index({ query: { period: value } }).url,
             {},
-            { preserveScroll: true, preserveState: true, only: ['report'] },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                only: ['report'],
+                onError: () => {
+                    setSelectedPeriod(report.period.key);
+                    setPeriodError(
+                        'Não foi possível atualizar o período. Tente novamente.',
+                    );
+                },
+                onFinish: () => setPeriodLoading(false),
+            },
         );
     };
     const applyCustomPeriod = () => {
+        if (customError || periodLoading) {
+            return;
+        }
+        setPeriodLoading(true);
+        setPeriodError(null);
         router.get(
             manufacturer.reports.index({
                 query: { period: 'custom', start: customStart, end: customEnd },
             }).url,
             {},
-            { preserveScroll: true, preserveState: true, only: ['report'] },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                only: ['report'],
+                onError: (errors) =>
+                    setPeriodError(
+                        errors.start ??
+                            errors.end ??
+                            'Não foi possível analisar esse período.',
+                    ),
+                onFinish: () => setPeriodLoading(false),
+            },
         );
     };
 
@@ -1539,7 +1672,8 @@ export default function ReportsIndex({ report }: Props) {
                                 aria-hidden="true"
                             />
                             <select
-                                value={report.period.key}
+                                value={selectedPeriod}
+                                disabled={periodLoading}
                                 onChange={(event) =>
                                     changePeriod(event.target.value)
                                 }
@@ -1563,7 +1697,14 @@ export default function ReportsIndex({ report }: Props) {
                                 Início
                                 <input
                                     type="date"
+                                    max={customEnd || today}
+                                    disabled={periodLoading}
                                     value={customStart}
+                                    onInput={(event) =>
+                                        setCustomStart(
+                                            event.currentTarget.value,
+                                        )
+                                    }
                                     onChange={(event) =>
                                         setCustomStart(event.target.value)
                                     }
@@ -1574,8 +1715,13 @@ export default function ReportsIndex({ report }: Props) {
                                 Fim
                                 <input
                                     type="date"
-                                    max={new Date().toISOString().slice(0, 10)}
+                                    min={customStart}
+                                    max={today}
+                                    disabled={periodLoading}
                                     value={customEnd}
+                                    onInput={(event) =>
+                                        setCustomEnd(event.currentTarget.value)
+                                    }
                                     onChange={(event) =>
                                         setCustomEnd(event.target.value)
                                     }
@@ -1585,16 +1731,34 @@ export default function ReportsIndex({ report }: Props) {
                             <button
                                 type="button"
                                 onClick={applyCustomPeriod}
-                                disabled={
-                                    !customStart ||
-                                    !customEnd ||
-                                    customStart > customEnd
-                                }
+                                disabled={customError !== null || periodLoading}
                                 className="h-11 bg-[#18181f] px-6 text-sm font-bold text-[#f6f4f0] transition-colors hover:bg-[#ff4d3d] hover:text-[#18181f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff4d3d] disabled:cursor-not-allowed disabled:opacity-45"
                             >
-                                Analisar período
+                                {periodLoading
+                                    ? 'Analisando…'
+                                    : 'Analisar período'}
                             </button>
+                            <p
+                                className="text-xs text-[#77736c] sm:col-span-3"
+                                role="status"
+                            >
+                                {periodError ??
+                                    customError ??
+                                    (report.period.key === 'custom' &&
+                                    customStart === report.period.start &&
+                                    customEnd === report.period.end
+                                        ? `Período aplicado: ${report.period.label}.`
+                                        : `Os dados abaixo ainda correspondem a ${report.period.label}. Clique em Analisar período para aplicar as datas.`)}
+                            </p>
                         </div>
+                    )}
+                    {!customOpen && (periodLoading || periodError) && (
+                        <p
+                            role="status"
+                            className="py-3 text-sm text-[#77736c]"
+                        >
+                            {periodError ?? 'Atualizando o período analisado…'}
+                        </p>
                     )}
 
                     <nav

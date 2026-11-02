@@ -6,6 +6,7 @@ use App\Enums\OrderStatus;
 use App\Enums\OrderType;
 use App\Enums\ProductMediaType;
 use App\Models\CatalogVisit;
+use App\Models\Customer;
 use App\Models\Manufacturer;
 use App\Models\ManufacturerAffiliation;
 use App\Models\Order;
@@ -122,6 +123,7 @@ class ReportAnalyticsService
                 'statusHistory',
             ])
             ->orderBy('created_at')
+            ->orderBy('id')
             ->get();
     }
 
@@ -238,6 +240,7 @@ class ReportAnalyticsService
 
             return [
                 'id' => $product?->id,
+                'product_type' => $product?->product_type,
                 'name' => $product?->name ?? $first->product_name,
                 'sku' => $product?->sku ?? $first->product_sku,
                 'category' => $product?->category?->name ?? 'Sem categoria',
@@ -329,11 +332,17 @@ class ReportAnalyticsService
                 return $customerOrders->values()->get($index)->created_at->diffInDays($order->created_at);
             });
         });
-        $top = $currentByCustomer->map(function (Collection $customerOrders): array {
+        $customerIds = Customer::query()
+            ->where('manufacturer_id', $manufacturer->id)
+            ->whereIn('id', $orders->pluck('customer_id')->filter()->unique())
+            ->pluck('id');
+        $top = $currentByCustomer->map(function (Collection $customerOrders) use ($customerIds): array {
             /** @var Order $lastOrder */
             $lastOrder = $customerOrders->last();
 
             return [
+                'customer_id' => $customerIds->contains($lastOrder->customer_id) ? $lastOrder->customer_id : null,
+                'last_order_id' => $lastOrder->id,
                 'name' => $lastOrder->customer_name,
                 'state' => $lastOrder->customer_state,
                 'city' => $lastOrder->customer_city,
