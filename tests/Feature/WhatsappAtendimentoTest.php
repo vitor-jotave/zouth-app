@@ -320,6 +320,42 @@ test('contact profile pictures are synchronized from evolution contacts', functi
     Http::assertSentCount(1);
 });
 
+test('missing contact photos are fetched directly without accepting other image hosts', function (?string $url, ?string $expected) {
+    [, $manufacturer] = createWhatsappTestManufacturer();
+    $instance = WhatsappInstance::factory()->connected()->create([
+        'manufacturer_id' => $manufacturer->id,
+        'instance_name' => 'direct-picture-instance',
+    ]);
+    $conversation = WhatsappConversation::factory()->create([
+        'whatsapp_instance_id' => $instance->id,
+        'remote_jid' => '5511999999999@s.whatsapp.net',
+        'is_group' => false,
+        'contact_picture_url' => null,
+    ]);
+
+    Http::fake([
+        '*/chat/findContacts/direct-picture-instance' => Http::response([
+            ['remoteJid' => $conversation->remote_jid, 'profilePicUrl' => null],
+        ]),
+        '*/chat/fetchProfilePictureUrl/direct-picture-instance' => Http::response([
+            'profilePictureUrl' => $url,
+        ]),
+    ]);
+
+    $sync = app(WhatsappContactProfileSyncService::class);
+    $sync->sync($instance);
+    $sync->sync($instance);
+
+    expect($conversation->fresh()->contact_picture_url)->toBe($expected);
+    Http::assertSent(fn ($request) => str_contains($request->url(), '/chat/fetchProfilePictureUrl/')
+        && $request['number'] === $conversation->remote_jid);
+    Http::assertSentCount(2);
+})->with([
+    'WhatsApp CDN' => ['https://pps.whatsapp.net/v/avatar.jpg', 'https://pps.whatsapp.net/v/avatar.jpg'],
+    'foreign host' => ['https://pps.whatsapp.net.example.com/avatar.jpg', null],
+    'no visible photo' => [null, null],
+]);
+
 test('chat page shows not-connected state when no instance', function () {
     $this->withoutVite();
     [$user] = createWhatsappTestManufacturer();

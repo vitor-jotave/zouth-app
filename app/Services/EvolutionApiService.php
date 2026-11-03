@@ -205,6 +205,13 @@ class EvolutionApiService
         return $this->client()->post("/chat/findContacts/{$instanceName}");
     }
 
+    public function fetchContactPicture(string $instanceName, string $remoteJid): Response
+    {
+        return $this->client()->timeout(5)->post("/chat/fetchProfilePictureUrl/{$instanceName}", [
+            'number' => $remoteJid,
+        ]);
+    }
+
     /**
      * Get the instance info/profile.
      */

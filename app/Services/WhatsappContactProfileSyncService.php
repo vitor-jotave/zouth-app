@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\FetchWhatsappContactPicture;
 use App\Models\WhatsappConversation;
 use App\Models\WhatsappInstance;
 use Illuminate\Support\Collection;
@@ -53,6 +54,12 @@ class WhatsappContactProfileSyncService
                     $conversation->update([
                         'contact_picture_url' => $profilePictureUrl,
                     ]);
+                }
+            }
+
+            foreach ($conversations as $conversation) {
+                if (! $conversation->is_group && blank($conversation->contact_picture_url)) {
+                    FetchWhatsappContactPicture::dispatch($conversation->id);
                 }
             }
         } catch (Throwable $exception) {
