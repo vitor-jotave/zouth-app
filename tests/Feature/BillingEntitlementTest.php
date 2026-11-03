@@ -4,6 +4,37 @@ use App\Models\Manufacturer;
 use App\Models\Plan;
 use App\Services\PlanLimitService;
 
+test('permanent courtesy overrides an expired trial for only the configured active manufacturer', function () {
+    $premium = Plan::factory()->withStripe()->create(['is_active' => true]);
+    $basic = Plan::factory()->withStripe()->create();
+    $attributes = [
+        'is_active' => true,
+        'current_plan_id' => $basic->id,
+        'trial_started_at' => now()->subDays(9),
+        'trial_ends_at' => now()->subDays(2),
+    ];
+    $recipient = Manufacturer::factory()->create($attributes);
+    $other = Manufacturer::factory()->create($attributes);
+    $service = app(PlanLimitService::class);
+
+    config([
+        'commercial.courtesy.manufacturer_id' => (string) $recipient->id,
+        'commercial.courtesy.plan_id' => (string) $premium->id,
+    ]);
+
+    expect($service->activePlan($recipient)?->is($premium))->toBeTrue()
+        ->and($service->hasOperationalAccess($recipient))->toBeTrue()
+        ->and($service->genericTrialHasExpired($recipient))->toBeFalse()
+        ->and($recipient->subscriptions()->exists())->toBeFalse()
+        ->and($recipient->fresh()->current_plan_id)->toBe($basic->id)
+        ->and($service->activePlan($other))->toBeNull()
+        ->and($service->hasOperationalAccess($other))->toBeFalse();
+
+    $recipient->update(['is_active' => false]);
+    expect($service->courtesyPlan($recipient))->toBeNull()
+        ->and($service->hasOperationalAccess($recipient))->toBeFalse();
+});
+
 function attachSubscription(Manufacturer $manufacturer, Plan $plan, string $status, ?DateTimeInterface $endsAt = null): void
 {
     $manufacturer->subscriptions()->create([
