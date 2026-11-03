@@ -356,6 +356,32 @@ test('missing contact photos are fetched directly without accepting other image 
     'no visible photo' => [null, null],
 ]);
 
+test('a warm contact list cache does not skip missing photos or duplicate jobs', function () {
+    [, $manufacturer] = createWhatsappTestManufacturer();
+    $instance = WhatsappInstance::factory()->connected()->create([
+        'manufacturer_id' => $manufacturer->id,
+    ]);
+    $conversation = WhatsappConversation::factory()->create([
+        'whatsapp_instance_id' => $instance->id,
+        'is_group' => false,
+        'contact_picture_url' => null,
+    ]);
+    Cache::put("whatsapp-contact-profiles:{$instance->id}", true, now()->addMinutes(10));
+    \Illuminate\Support\Facades\Queue::fake();
+    Http::fake();
+
+    $sync = app(WhatsappContactProfileSyncService::class);
+    $sync->sync($instance);
+    $sync->sync($instance);
+
+    \Illuminate\Support\Facades\Queue::assertPushed(\App\Jobs\FetchWhatsappContactPicture::class, 1);
+    \Illuminate\Support\Facades\Queue::assertPushed(
+        \App\Jobs\FetchWhatsappContactPicture::class,
+        fn ($job) => $job->conversationId === $conversation->id,
+    );
+    Http::assertNothingSent();
+});
+
 test('chat page shows not-connected state when no instance', function () {
     $this->withoutVite();
     [$user] = createWhatsappTestManufacturer();
