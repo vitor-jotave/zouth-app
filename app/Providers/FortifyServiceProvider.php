@@ -80,14 +80,18 @@ class FortifyServiceProvider extends ServiceProvider
      */
     private function configureRateLimiting(): void
     {
-        RateLimiter::for('two-factor', function (Request $request) {
-            return Limit::perMinute(5)->by($request->session()->get('login.id'));
+        $tooManyAttempts = static function (Request $request, array $headers): never {
+            abort(429, trans('auth.throttle', ['seconds' => $headers['Retry-After']]), $headers);
+        };
+
+        RateLimiter::for('two-factor', function (Request $request) use ($tooManyAttempts) {
+            return Limit::perMinute(5)->by($request->session()->get('login.id'))->response($tooManyAttempts);
         });
 
-        RateLimiter::for('login', function (Request $request) {
+        RateLimiter::for('login', function (Request $request) use ($tooManyAttempts) {
             $throttleKey = Str::transliterate(Str::lower($request->input(Fortify::username())).'|'.$request->ip());
 
-            return Limit::perMinute(5)->by($throttleKey);
+            return Limit::perMinute(5)->by($throttleKey)->response($tooManyAttempts);
         });
     }
 }

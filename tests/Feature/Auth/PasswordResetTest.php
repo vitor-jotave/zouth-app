@@ -99,6 +99,7 @@ test('renders the password recovery email with the Zouth identity in Portuguese'
 });
 
 test('password cannot be reset with invalid token', function () {
+    app()->setLocale('pt_BR');
     $user = User::factory()->create();
 
     $response = $this->post(route('password.update'), [
@@ -108,5 +109,5 @@ test('password cannot be reset with invalid token', function () {
         'password_confirmation' => 'NovaSenha1',
     ]);
 
-    $response->assertSessionHasErrors('email');
+    $response->assertSessionHasErrors(['email' => 'O link para redefinir sua senha é inválido ou expirou.']);
 });

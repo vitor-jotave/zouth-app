@@ -90,12 +90,13 @@ test('users with two factor enabled are redirected to two factor challenge', fun
 });
 
 test('users can not authenticate with invalid password', function () {
+    app()->setLocale('pt_BR');
     $user = User::factory()->create();
 
     $this->post(route('login.store'), [
         'email' => $user->email,
         'password' => 'wrong-password',
-    ]);
+    ])->assertSessionHasErrors(['email' => 'E-mail ou senha incorretos.']);
 
     $this->assertGuest();
 });
@@ -110,14 +111,16 @@ test('users can logout', function () {
 });
 
 test('users are rate limited', function () {
+    app()->setLocale('pt_BR');
     $user = User::factory()->create();
 
     RateLimiter::increment(md5('login'.implode('|', [$user->email, '127.0.0.1'])), amount: 5);
 
-    $response = $this->post(route('login.store'), [
+    $response = $this->postJson(route('login.store'), [
         'email' => $user->email,
         'password' => 'wrong-password',
     ]);
 
-    $response->assertTooManyRequests();
+    $response->assertTooManyRequests()->assertHeader('Retry-After');
+    expect($response->json('message'))->toStartWith('Muitas tentativas.');
 });
