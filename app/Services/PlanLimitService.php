@@ -15,11 +15,27 @@ class PlanLimitService
     /** @var list<string> */
     public const ENTITLED_SUBSCRIPTION_STATUSES = ['active', 'trialing'];
 
+    public function courtesyPlan(Manufacturer $manufacturer): ?Plan
+    {
+        $manufacturerId = (int) config('commercial.courtesy.manufacturer_id');
+        $planId = (int) config('commercial.courtesy.plan_id');
+
+        if (! $manufacturer->is_active || $manufacturerId <= 0 || $planId <= 0 || $manufacturer->getKey() !== $manufacturerId) {
+            return null;
+        }
+
+        return Plan::query()->where('is_active', true)->find($planId);
+    }
+
     /**
      * Get the active plan for a manufacturer, or null if none.
      */
     public function activePlan(Manufacturer $manufacturer): ?Plan
     {
+        if ($courtesyPlan = $this->courtesyPlan($manufacturer)) {
+            return $courtesyPlan;
+        }
+
         $plan = $manufacturer->currentPlan;
 
         if ($manufacturer->is_demo) {
@@ -53,6 +69,10 @@ class PlanLimitService
             return false;
         }
 
+        if ($this->courtesyPlan($manufacturer)) {
+            return true;
+        }
+
         if ($manufacturer->is_demo) {
             return $manufacturer->currentPlan !== null;
         }
@@ -70,7 +90,8 @@ class PlanLimitService
 
     public function genericTrialHasExpired(Manufacturer $manufacturer): bool
     {
-        return $manufacturer->trial_started_at !== null
+        return $this->courtesyPlan($manufacturer) === null
+            && $manufacturer->trial_started_at !== null
             && $manufacturer->trial_ends_at !== null
             && $manufacturer->trial_ends_at->isPast()
             && ! $this->subscriptionGrantsAccess($manufacturer->subscription('default'));

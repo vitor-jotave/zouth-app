@@ -37,7 +37,7 @@ class SendTrialLifecycleNotifications extends Command
                 foreach ($manufacturers as $manufacturer) {
                     $owner = $manufacturer->primaryOwner;
 
-                    if (! $owner || $planLimitService->subscriptionGrantsAccess($manufacturer->subscription('default'))) {
+                    if (! $owner || $planLimitService->courtesyPlan($manufacturer) || $planLimitService->subscriptionGrantsAccess($manufacturer->subscription('default'))) {
                         continue;
                     }
 

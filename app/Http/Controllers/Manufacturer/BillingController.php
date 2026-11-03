@@ -37,7 +37,8 @@ class BillingController extends Controller
             ->get();
 
         $subscription = $manufacturer->subscription('default');
-        $currentPlan = $this->limitService->activePlan($manufacturer);
+        $courtesyPlan = $this->limitService->courtesyPlan($manufacturer);
+        $currentPlan = $courtesyPlan ?? $this->limitService->activePlan($manufacturer);
         $displayPlan = $currentPlan;
 
         if (
@@ -80,7 +81,7 @@ class BillingController extends Controller
             'usage' => $displayPlan
                 ? $this->limitService->usage($manufacturer, $displayPlan)
                 : [],
-            'trial' => $manufacturer->trial_started_at ? [
+            'trial' => ! $courtesyPlan && $manufacturer->trial_started_at ? [
                 'active' => $manufacturer->onGenericTrial(),
                 'started_at' => $manufacturer->trial_started_at?->toISOString(),
                 'ends_at' => $manufacturer->trial_ends_at?->toISOString(),
@@ -123,6 +124,11 @@ class BillingController extends Controller
 
         if (! $manufacturer) {
             abort(403);
+        }
+
+        if ($this->limitService->courtesyPlan($manufacturer)) {
+            return redirect()->route('manufacturer.billing.index')
+                ->withErrors(['plan_id' => 'Sua empresa já possui acesso de cortesia, sem cobrança.']);
         }
 
         if (! $plan->is_active) {

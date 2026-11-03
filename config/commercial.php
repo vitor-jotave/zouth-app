@@ -1,6 +1,11 @@
 <?php
 
 return [
+    'courtesy' => [
+        'manufacturer_id' => env('COURTESY_MANUFACTURER_ID'),
+        'plan_id' => env('COURTESY_PLAN_ID'),
+    ],
+
     'sales_contact_url' => env(
         'SALES_CONTACT_URL',
         'mailto:comercial@zouth.app?subject=Demonstra%C3%A7%C3%A3o%20do%20Zouth%20App'
