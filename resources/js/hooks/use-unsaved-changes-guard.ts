@@ -14,6 +14,10 @@ export function useUnsavedChangesGuard(
     const allowNextVisit = useRef(false);
     useEffect(() => {
         const removeBeforeListener = router.on('before', (event) => {
+            if (event.detail.visit.prefetch) {
+                return;
+            }
+
             if (allowNextVisit.current) {
                 allowNextVisit.current = false;
                 return;
