@@ -19,6 +19,21 @@ type ChangelogRelease = {
 
 export const changelog = [
     {
+        id: '2026-11-03-leitura-whatsapp',
+        date: '2026-11-03',
+        title: 'Leituras em dia no atendimento.',
+        summary:
+            'O contador de não lidas acompanha as leituras feitas no WhatsApp.',
+        updates: [
+            {
+                kind: 'correção',
+                title: 'Leituras do WhatsApp no chat',
+                description:
+                    'Quando o WhatsApp sincroniza uma leitura feita no celular, a mensagem recebida deixa de contar como não lida na Zouth. Mensagens novas continuam sinalizadas.',
+            },
+        ],
+    },
+    {
         id: '2026-11-02-editor-catalogo',
         date: '2026-11-02',
         title: 'Mais espaço para criar sua vitrine.',

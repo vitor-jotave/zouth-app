@@ -320,6 +320,68 @@ test('contact profile pictures are synchronized from evolution contacts', functi
     Http::assertSentCount(1);
 });
 
+test('missing contact photos are fetched directly without accepting other image hosts', function (?string $url, ?string $expected) {
+    [, $manufacturer] = createWhatsappTestManufacturer();
+    $instance = WhatsappInstance::factory()->connected()->create([
+        'manufacturer_id' => $manufacturer->id,
+        'instance_name' => 'direct-picture-instance',
+    ]);
+    $conversation = WhatsappConversation::factory()->create([
+        'whatsapp_instance_id' => $instance->id,
+        'remote_jid' => '5511999999999@s.whatsapp.net',
+        'is_group' => false,
+        'contact_picture_url' => null,
+    ]);
+
+    Http::fake([
+        '*/chat/findContacts/direct-picture-instance' => Http::response([
+            ['remoteJid' => $conversation->remote_jid, 'profilePicUrl' => null],
+        ]),
+        '*/chat/fetchProfilePictureUrl/direct-picture-instance' => Http::response([
+            'profilePictureUrl' => $url,
+        ]),
+    ]);
+
+    $sync = app(WhatsappContactProfileSyncService::class);
+    $sync->sync($instance);
+    $sync->sync($instance);
+
+    expect($conversation->fresh()->contact_picture_url)->toBe($expected);
+    Http::assertSent(fn ($request) => str_contains($request->url(), '/chat/fetchProfilePictureUrl/')
+        && $request['number'] === $conversation->remote_jid);
+    Http::assertSentCount(2);
+})->with([
+    'WhatsApp CDN' => ['https://pps.whatsapp.net/v/avatar.jpg', 'https://pps.whatsapp.net/v/avatar.jpg'],
+    'foreign host' => ['https://pps.whatsapp.net.example.com/avatar.jpg', null],
+    'no visible photo' => [null, null],
+]);
+
+test('a warm contact list cache does not skip missing photos or duplicate jobs', function () {
+    [, $manufacturer] = createWhatsappTestManufacturer();
+    $instance = WhatsappInstance::factory()->connected()->create([
+        'manufacturer_id' => $manufacturer->id,
+    ]);
+    $conversation = WhatsappConversation::factory()->create([
+        'whatsapp_instance_id' => $instance->id,
+        'is_group' => false,
+        'contact_picture_url' => null,
+    ]);
+    Cache::put("whatsapp-contact-profiles:{$instance->id}", true, now()->addMinutes(10));
+    \Illuminate\Support\Facades\Queue::fake();
+    Http::fake();
+
+    $sync = app(WhatsappContactProfileSyncService::class);
+    $sync->sync($instance);
+    $sync->sync($instance);
+
+    \Illuminate\Support\Facades\Queue::assertPushed(\App\Jobs\FetchWhatsappContactPicture::class, 1);
+    \Illuminate\Support\Facades\Queue::assertPushed(
+        \App\Jobs\FetchWhatsappContactPicture::class,
+        fn ($job) => $job->conversationId === $conversation->id,
+    );
+    Http::assertNothingSent();
+});
+
 test('chat page shows not-connected state when no instance', function () {
     $this->withoutVite();
     [$user] = createWhatsappTestManufacturer();
@@ -921,6 +983,35 @@ test('webhook updates message status', function () {
     ])->assertOk();
 
     expect($message->fresh()->status->value)->toBe('read');
+});
+
+test('phone read receipts reduce unread count only once and leave newer messages unread', function () {
+    $instance = WhatsappInstance::factory()->connected()->create();
+    $conversation = WhatsappConversation::factory()->create([
+        'whatsapp_instance_id' => $instance->id,
+        'unread_count' => 2,
+    ]);
+    $received = WhatsappMessage::factory()->count(2)->create([
+        'whatsapp_conversation_id' => $conversation->id,
+        'from_me' => false,
+        'status' => 'delivered',
+    ]);
+    $sent = WhatsappMessage::factory()->fromMe()->create([
+        'whatsapp_conversation_id' => $conversation->id,
+        'status' => 'sent',
+    ]);
+
+    foreach ([$sent, $received[0], $received[0]] as $message) {
+        $this->postJson("/webhooks/evolution/{$instance->instance_name}", [
+            'event' => 'messages.update',
+            'data' => ['keyId' => $message->message_id, 'fromMe' => $message->from_me, 'status' => 'READ'],
+        ], ['apikey' => config('evolution.api_key')])->assertOk();
+
+        expect($conversation->fresh()->unread_count)->toBe($message->from_me ? 2 : 1);
+    }
+
+    expect($received[0]->fresh()->status->value)->toBe('read')
+        ->and($received[1]->fresh()->status->value)->toBe('delivered');
 });
 
 test('webhook ignores status broadcast messages', function () {

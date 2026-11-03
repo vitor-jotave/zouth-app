@@ -134,19 +134,29 @@ class EvolutionWebhookController extends Controller
         }
 
         // Create the message (ignore duplicates)
-        $message = WhatsappMessage::firstOrCreate(
-            ['message_id' => $messageId],
-            [
-                'whatsapp_conversation_id' => $conversation->id,
-                'from_me' => $fromMe,
-                'sender_jid' => $data['key']['participant'] ?? ($fromMe ? null : $remoteJid),
-                'body' => $body,
-                'status' => $fromMe ? 'sent' : 'delivered',
-                'message_timestamp' => isset($data['messageTimestamp'])
-                    ? Carbon::createFromTimestamp($data['messageTimestamp'])
-                    : now(),
-            ]
-        );
+        $message = $conversation->getConnection()->transaction(function () use ($conversation, $messageId, $fromMe, $data, $remoteJid, $body): WhatsappMessage {
+            $lockedConversation = WhatsappConversation::query()->whereKey($conversation->id)->lockForUpdate()->firstOrFail();
+
+            $message = WhatsappMessage::firstOrCreate(
+                ['message_id' => $messageId],
+                [
+                    'whatsapp_conversation_id' => $conversation->id,
+                    'from_me' => $fromMe,
+                    'sender_jid' => $data['key']['participant'] ?? ($fromMe ? null : $remoteJid),
+                    'body' => $body,
+                    'status' => $fromMe ? 'sent' : 'delivered',
+                    'message_timestamp' => isset($data['messageTimestamp'])
+                        ? Carbon::createFromTimestamp($data['messageTimestamp'])
+                        : now(),
+                ]
+            );
+
+            if ($message->wasRecentlyCreated && ! $fromMe) {
+                $lockedConversation->increment('unread_count');
+            }
+
+            return $message;
+        });
 
         if (! $message->wasRecentlyCreated) {
             if ($message->whatsapp_conversation_id !== $conversation->id) {
@@ -168,9 +178,6 @@ class EvolutionWebhookController extends Controller
             'last_message_body' => $body ?: $this->mediaLabel($message->media_type),
             'last_message_from_me' => $fromMe,
             'last_message_at' => $message->message_timestamp,
-            'unread_count' => $fromMe
-                ? $conversation->unread_count
-                : $conversation->unread_count + 1,
         ]);
 
         $this->automationRunner->runForIncomingMessage($message);
@@ -275,10 +282,43 @@ class EvolutionWebhookController extends Controller
             return;
         }
 
-        WhatsappMessage::query()
+        $message = WhatsappMessage::query()
             ->where('message_id', $messageId)
             ->whereHas('conversation', fn ($query) => $query->where('whatsapp_instance_id', $instance->id))
-            ->update(['status' => $newStatus]);
+            ->first();
+
+        if (! $message) {
+            return;
+        }
+
+        if ($message->from_me) {
+            $message->update(['status' => $newStatus]);
+
+            return;
+        }
+
+        if ($newStatus !== 'read') {
+            return;
+        }
+
+        $message->getConnection()->transaction(function () use ($message): void {
+            $conversation = $message->conversation()->lockForUpdate()->first();
+
+            if (! $conversation) {
+                return;
+            }
+
+            $newerUnread = $conversation->messages()->where('from_me', false)
+                ->where('id', '>', $message->id)
+                ->where('status', '!=', 'read')->count();
+
+            $updated = $conversation->messages()->whereKey($message->id)
+                ->where('status', '!=', 'read')->update(['status' => 'read']);
+
+            if ($updated && $conversation->unread_count > $newerUnread) {
+                $conversation->decrement('unread_count');
+            }
+        });
     }
 
     /**

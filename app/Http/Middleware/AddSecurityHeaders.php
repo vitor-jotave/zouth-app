@@ -53,7 +53,7 @@ class AddSecurityHeaders
 
     private function imageSources(): string
     {
-        $sources = ["'self'", 'data:', 'blob:'];
+        $sources = ["'self'", 'data:', 'blob:', 'https://pps.whatsapp.net'];
         $s3Url = config('filesystems.disks.s3.url');
 
         if (is_string($s3Url) && $s3Url !== '') {

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\FetchWhatsappContactPicture;
 use App\Models\WhatsappConversation;
 use App\Models\WhatsappInstance;
 use Illuminate\Support\Collection;
@@ -13,6 +14,32 @@ class WhatsappContactProfileSyncService
     public function __construct(private EvolutionApiService $evolution) {}
 
     public function sync(WhatsappInstance $instance): void
+    {
+        $this->syncContacts($instance);
+
+        $instance->conversations()
+            ->where('is_group', false)
+            ->where(fn ($query) => $query->whereNull('contact_picture_url')->orWhere('contact_picture_url', ''))
+            ->select('id')
+            ->chunkById(100, function (Collection $conversations): void {
+                foreach ($conversations as $conversation) {
+                    $key = "whatsapp-contact-picture:{$conversation->id}";
+
+                    if (! Cache::add($key, true, now()->addMinutes(10))) {
+                        continue;
+                    }
+
+                    try {
+                        FetchWhatsappContactPicture::dispatch($conversation->id);
+                    } catch (Throwable $exception) {
+                        Cache::forget($key);
+                        report($exception);
+                    }
+                }
+            });
+    }
+
+    private function syncContacts(WhatsappInstance $instance): void
     {
         $cacheKey = "whatsapp-contact-profiles:{$instance->id}";
 
@@ -55,6 +82,7 @@ class WhatsappContactProfileSyncService
                     ]);
                 }
             }
+
         } catch (Throwable $exception) {
             Cache::forget($cacheKey);
             report($exception);

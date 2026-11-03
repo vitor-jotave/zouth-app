@@ -97,7 +97,7 @@ it('allows configured s3 media hosts in the production content security policy',
     );
 
     expect($response->headers->get('Content-Security-Policy'))
-        ->toContain("img-src 'self' data: blob: https://cdn.zouth.app;")
+        ->toContain("img-src 'self' data: blob: https://pps.whatsapp.net https://cdn.zouth.app;")
         ->toContain("media-src 'self' https: blob:;")
         ->toContain("frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://www.youtube-nocookie.com https://player.vimeo.com https://www.dailymotion.com https://www.loom.com;");
 });

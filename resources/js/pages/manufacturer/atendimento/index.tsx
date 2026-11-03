@@ -240,6 +240,9 @@ export default function AtendimentoIndex({
     quick_replies,
 }: Props) {
     const [conversations, setConversations] = useState(initialConversations);
+    const activeConversationSummary = conversations.find(
+        (conversation) => conversation.id === active_conversation?.id,
+    );
     const [messages, setMessages] = useState(initialMessages);
     const [messageInput, setMessageInput] = useState('');
     const [sending, setSending] = useState(false);
@@ -979,7 +982,15 @@ export default function AtendimentoIndex({
             </Dialog>
             <AtendimentoWorkspace
                 conversations={conversations}
-                activeConversation={active_conversation}
+                activeConversation={
+                    active_conversation && activeConversationSummary
+                        ? {
+                              ...active_conversation,
+                              contact_picture_url:
+                                  activeConversationSummary.contact_picture_url,
+                          }
+                        : active_conversation
+                }
                 messages={messages}
                 funnels={funnels}
                 quickReplies={quick_replies}

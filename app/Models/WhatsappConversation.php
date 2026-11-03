@@ -44,6 +44,15 @@ class WhatsappConversation extends Model
         return $this->hasMany(WhatsappMessage::class);
     }
 
+    public function markIncomingMessagesRead(): void
+    {
+        $this->getConnection()->transaction(function (): void {
+            $conversation = self::query()->whereKey($this->getKey())->lockForUpdate()->firstOrFail();
+            $conversation->messages()->where('from_me', false)->where('status', '!=', 'read')->update(['status' => 'read']);
+            $conversation->update(['unread_count' => 0]);
+        });
+    }
+
     public function funnelRuns(): HasMany
     {
         return $this->hasMany(WhatsappFunnelRun::class);
