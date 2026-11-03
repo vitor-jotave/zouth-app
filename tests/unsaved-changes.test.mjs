@@ -73,10 +73,11 @@ function guard(dirty, answer) {
     });
     exports.useUnsavedChangesGuard(dirty);
     return {
-        navigate(method = 'get') {
+        navigate(method = 'get', prefetch = false) {
             let prevented = false;
             const visit = {
                 method,
+                prefetch,
                 url: new URL('https://example.test/products'),
                 preserveScroll: true,
             };
@@ -122,6 +123,14 @@ test('cancel keeps the current page and protects reload', async () => {
     assert.equal(state.visits.length, 0);
     assert.equal(state.unload().prevented, true);
     assert.equal(state.cleanup(), true);
+});
+
+test('a dirty form allows prefetch but still confirms real navigation', () => {
+    const state = guard(true, false);
+    assert.equal(state.navigate('get', true).prevented, false);
+    assert.deepEqual(state.confirmations, []);
+    assert.equal(state.navigate().prevented, true);
+    assert.deepEqual(state.confirmations, [true]);
 });
 
 test('confirmed discard replays the original visit exactly once without another prompt', async () => {
