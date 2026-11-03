@@ -138,7 +138,7 @@ test('dates are displayed newest first even when manual entries are appended out
     );
     const html = renderToStaticMarkup(React.createElement(OrderedContent));
     assert.ok(
-        html.indexOf('dateTime="2026-11-02"') <
+        html.indexOf(`dateTime="${base.date}"`) <
             html.indexOf('dateTime="2026-10-31"'),
     );
 });

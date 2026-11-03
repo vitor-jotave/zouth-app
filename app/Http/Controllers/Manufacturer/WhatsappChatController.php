@@ -103,7 +103,7 @@ class WhatsappChatController extends Controller
                     ->map(fn (WhatsappMessage $message) => $this->messagePayload($message));
 
                 // Reset unread count when opening conversation
-                $activeConversation->update(['unread_count' => 0]);
+                $activeConversation->markIncomingMessagesRead();
             }
         }
 
@@ -157,7 +157,7 @@ class WhatsappChatController extends Controller
             ->map(fn (WhatsappMessage $message) => $this->messagePayload($message));
 
         // Reset unread
-        $conversation->update(['unread_count' => 0]);
+        $conversation->markIncomingMessagesRead();
 
         return response()->json([
             'messages' => $messages,

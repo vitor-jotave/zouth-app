@@ -985,6 +985,35 @@ test('webhook updates message status', function () {
     expect($message->fresh()->status->value)->toBe('read');
 });
 
+test('phone read receipts reduce unread count only once and leave newer messages unread', function () {
+    $instance = WhatsappInstance::factory()->connected()->create();
+    $conversation = WhatsappConversation::factory()->create([
+        'whatsapp_instance_id' => $instance->id,
+        'unread_count' => 2,
+    ]);
+    $received = WhatsappMessage::factory()->count(2)->create([
+        'whatsapp_conversation_id' => $conversation->id,
+        'from_me' => false,
+        'status' => 'delivered',
+    ]);
+    $sent = WhatsappMessage::factory()->fromMe()->create([
+        'whatsapp_conversation_id' => $conversation->id,
+        'status' => 'sent',
+    ]);
+
+    foreach ([$sent, $received[0], $received[0]] as $message) {
+        $this->postJson("/webhooks/evolution/{$instance->instance_name}", [
+            'event' => 'messages.update',
+            'data' => ['keyId' => $message->message_id, 'fromMe' => $message->from_me, 'status' => 'READ'],
+        ], ['apikey' => config('evolution.api_key')])->assertOk();
+
+        expect($conversation->fresh()->unread_count)->toBe($message->from_me ? 2 : 1);
+    }
+
+    expect($received[0]->fresh()->status->value)->toBe('read')
+        ->and($received[1]->fresh()->status->value)->toBe('delivered');
+});
+
 test('webhook ignores status broadcast messages', function () {
     $instance = WhatsappInstance::factory()->connected()->create();
 
