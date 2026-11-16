@@ -4,10 +4,9 @@ namespace App\Http\Controllers\Rep;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreRepresentativeApplicationRequest;
-use App\Http\Resources\ProductCatalogResource;
 use App\Models\Manufacturer;
 use App\Models\ManufacturerAffiliation;
-use App\Models\Product;
+use App\Services\PlanLimitService;
 use App\Services\RepresentativeNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,6 +18,7 @@ class ManufacturerController extends Controller
 {
     public function __construct(
         private RepresentativeNotificationService $notificationService,
+        private PlanLimitService $limitService,
     ) {}
 
     public function index(Request $request): Response
@@ -38,17 +38,19 @@ class ManufacturerController extends Controller
         }
 
         // Get manufacturers with affiliation status (eager-loaded to avoid N+1)
-        $userAffiliations = ManufacturerAffiliation::where('user_id', $user->id)
-            ->pluck('status', 'manufacturer_id')
-            ->toArray();
-
-        $affiliationIds = ManufacturerAffiliation::where('user_id', $user->id)
-            ->pluck('id', 'manufacturer_id')
-            ->toArray();
+        $affiliations = ManufacturerAffiliation::where('user_id', $user->id)->get()->keyBy('manufacturer_id');
 
         $catalogMediaDisk = (string) config('filesystems.catalog_media_disk', 'public');
-        $manufacturers = $query->get()->map(function ($manufacturer) use ($userAffiliations, $affiliationIds, $catalogMediaDisk) {
-            $logoPath = $manufacturer->catalogSetting?->logo_path ?? $manufacturer->logo_path;
+        $manufacturers = $query->get()->map(function ($manufacturer) use ($affiliations, $catalogMediaDisk) {
+            $catalog = $manufacturer->catalogSetting;
+            $logoPath = $catalog?->logo_path ?? $manufacturer->logo_path;
+            $affiliation = $affiliations->get($manufacturer->id);
+            $shareUrl = $affiliation?->catalogShareUrl($manufacturer);
+            $isCatalogAvailable = $catalog?->public_link_active && $this->limitService->hasOperationalAccess($manufacturer);
+            $showsCover = data_get(collect($catalog?->sections)->firstWhere('type', 'hero'), 'enabled', true);
+            $coverPath = $isCatalogAvailable && $showsCover
+                ? ($catalog->cover_thumbnail_path ?: $catalog->cover_image_path)
+                : null;
 
             return [
                 'id' => $manufacturer->id,
@@ -60,15 +62,19 @@ class ManufacturerController extends Controller
                 'state' => $manufacturer->state,
                 'tagline' => $manufacturer->catalogSetting?->tagline,
                 'logo_url' => $logoPath ? Storage::disk($catalogMediaDisk)->url($logoPath) : null,
-                'affiliation_status' => $userAffiliations[$manufacturer->id] ?? 'none',
-                'affiliation_id' => $affiliationIds[$manufacturer->id] ?? null,
+                'cover_url' => $coverPath ? Storage::disk($catalogMediaDisk)->url($coverPath) : null,
+                'affiliation_status' => $affiliation?->status ?? 'none',
+                'affiliation_id' => $affiliation?->id,
+                'share_url' => $isCatalogAvailable ? $shareUrl : null,
             ];
         });
 
         // Filter by status
         if ($status = $request->input('status')) {
             if ($status === 'available') {
-                $manufacturers = $manufacturers->where('affiliation_status', 'none');
+                $manufacturers = $manufacturers->whereIn('affiliation_status', ['none', 'rejected', 'revoked']);
+            } elseif ($status === 'mine') {
+                $manufacturers = $manufacturers->where('affiliation_status', '!=', 'none');
             } elseif ($status !== 'all') {
                 $manufacturers = $manufacturers->where('affiliation_status', $status);
             }
@@ -158,7 +164,7 @@ class ManufacturerController extends Controller
         return redirect()->back()->with('status', 'Sua apresentação chegou ao fabricante.');
     }
 
-    public function catalog(Manufacturer $manufacturer): Response
+    public function catalog(Manufacturer $manufacturer): RedirectResponse
     {
         $user = auth()->user();
 
@@ -172,20 +178,12 @@ class ManufacturerController extends Controller
             abort(403, 'Você não tem acesso ao catálogo deste fabricante.');
         }
 
-        $products = Product::where('manufacturer_id', $manufacturer->id)
-            ->where('is_active', true)
-            ->with(['category', 'media', 'productVariations.variationType.values', 'variantStocks'])
-            ->orderBy('sort_order')
-            ->orderBy('name')
-            ->paginate(24);
+        abort_unless($this->limitService->hasOperationalAccess($manufacturer) && $affiliation->catalogShareUrl($manufacturer), 404);
 
-        return Inertia::render('rep/manufacturers/catalog', [
-            'manufacturer' => [
-                'id' => $manufacturer->id,
-                'name' => $manufacturer->name,
-                'slug' => $manufacturer->slug,
-            ],
-            'products' => ProductCatalogResource::collection($products),
+        return redirect()->route('public.catalog.show', [
+            'token' => $manufacturer->catalogSetting->public_token,
+            'ref' => $affiliation->tracking_token,
+            'representante' => '1',
         ]);
     }
 }

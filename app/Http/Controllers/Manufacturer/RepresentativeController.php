@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Manufacturer;
 
+use App\Enums\ManufacturerCapability;
+use App\Enums\OrderStatus;
+use App\Enums\OrderType;
 use App\Http\Controllers\Controller;
 use App\Models\Manufacturer;
 use App\Models\ManufacturerAffiliation;
@@ -55,9 +58,7 @@ class RepresentativeController extends Controller
         $affiliationData = $affiliations->map(function (ManufacturerAffiliation $affiliation) use ($manufacturer, $performance): array {
             $profile = $affiliation->user->salesRepresentativeProfile;
             $repPerformance = $performance->get($affiliation->user_id);
-            $catalogUrl = $manufacturer->catalogSetting?->public_link_active
-                ? route('public.catalog.show', ['token' => $manufacturer->catalogSetting->public_token, 'ref' => $affiliation->user_id])
-                : null;
+            $catalogUrl = $affiliation->catalogShareUrl($manufacturer);
 
             return [
                 'id' => $affiliation->id,
@@ -149,6 +150,107 @@ class RepresentativeController extends Controller
                 'segment' => $request->string('segment')->value() ?: 'requests',
                 'search' => $request->string('search')->value(),
             ],
+        ]);
+    }
+
+    public function show(Request $request, ManufacturerAffiliation $affiliation): Response
+    {
+        $this->authorize('viewAny', ManufacturerAffiliation::class);
+        abort_unless($affiliation->manufacturer_id === $request->user()->current_manufacturer_id, 404);
+
+        $affiliation->load(['manufacturer.catalogSetting', 'user:id,name,email', 'user.salesRepresentativeProfile']);
+        $profile = $affiliation->user->salesRepresentativeProfile;
+        $period = $request->string('period')->toString();
+        $period = in_array($period, ['30_days', '90_days', '12_months'], true) ? $period : '30_days';
+        $monthly = $period === '12_months';
+        $bucketCount = $monthly ? 12 : ($period === '90_days' ? 90 : 30);
+        $today = now()->startOfDay();
+        $start = $monthly ? $today->copy()->startOfMonth()->subMonths(11) : $today->copy()->subDays($bucketCount - 1);
+        $previousStart = $monthly ? $start->copy()->subMonths(12) : $start->copy()->subDays($bucketCount);
+        $end = now();
+        $bucketKey = $monthly ? 'Y-m' : 'Y-m-d';
+        $type = $request->string('type')->toString() === 'quote' ? OrderType::Quote : OrderType::Standard;
+        $status = OrderStatus::tryFrom($request->string('status')->toString());
+        $scope = Order::query()->where('manufacturer_id', $affiliation->manufacturer_id)->where('sales_rep_id', $affiliation->user_id);
+        $current = (clone $scope)->whereBetween('created_at', [$start, $end]);
+        $stats = ['orders' => 0, 'in_progress' => 0, 'quotes' => 0, 'net_cents' => 0];
+        $buckets = [];
+
+        foreach ($scope->whereBetween('created_at', [$previousStart, $end])
+            ->with('items:id,order_id,unit_price,quantity')->lazyById() as $order) {
+            $inPeriod = $order->created_at >= $start;
+            if ($order->isQuote()) {
+                $stats['quotes'] += (int) $inPeriod;
+
+                continue;
+            }
+
+            if ($inPeriod) {
+                $stats['orders']++;
+                $stats['in_progress'] += (int) in_array($order->status, [OrderStatus::Confirmed, OrderStatus::Preparing, OrderStatus::Shipped], true);
+            }
+
+            $key = $order->created_at->format($bucketKey);
+            $buckets[$key] ??= ['orders' => 0, 'revenue_cents' => 0];
+            $buckets[$key]['orders']++;
+            if ($order->status !== OrderStatus::Cancelled) {
+                $value = $order->totalCents();
+                $buckets[$key]['revenue_cents'] += $value;
+                $stats['net_cents'] += $inPeriod ? $value : 0;
+            }
+        }
+
+        $series = [];
+        for ($index = 0; $index < $bucketCount; $index++) {
+            $date = $monthly ? $start->copy()->addMonths($index) : $start->copy()->addDays($index);
+            $previous = $monthly ? $previousStart->copy()->addMonths($index) : $previousStart->copy()->addDays($index);
+            $bucket = $buckets[$date->format($bucketKey)] ?? [];
+            $previousBucket = $buckets[$previous->format($bucketKey)] ?? [];
+            $series[] = [
+                'date' => $date->toDateString(),
+                'label' => $date->format($monthly ? 'm/y' : 'd/m'),
+                'tooltip_label' => $monthly ? $date->format('m/Y') : null,
+                'revenue_cents' => $bucket['revenue_cents'] ?? 0,
+                'orders' => $bucket['orders'] ?? 0,
+                'previous_revenue_cents' => $previousBucket['revenue_cents'] ?? 0,
+                'previous_orders' => $previousBucket['orders'] ?? 0,
+            ];
+        }
+
+        return Inertia::render('manufacturer/representatives/show', [
+            'representative' => [
+                'id' => $affiliation->id,
+                'name' => $affiliation->user->name,
+                'email' => $affiliation->user->email,
+                'profile' => $profile?->only(['whatsapp', 'city', 'state', 'territory', 'presentation']),
+                'status' => $affiliation->status,
+                'source' => $affiliation->source,
+                'application_note' => $affiliation->application_note,
+                'requested_at' => $affiliation->requested_at?->toISOString(),
+                'approved_at' => $affiliation->approved_at?->toISOString(),
+                'rejected_at' => $affiliation->rejected_at?->toISOString(),
+                'revoked_at' => $affiliation->revoked_at?->toISOString(),
+                'catalog_url' => $affiliation->manufacturer->is_active && $this->limitService->hasOperationalAccess($affiliation->manufacturer)
+                    ? $affiliation->catalogShareUrl($affiliation->manufacturer) : null,
+            ],
+            'stats' => $stats,
+            'series' => $series,
+            'filters' => ['period' => $period, 'type' => $type->value, 'status' => $status?->value ?? ''],
+            'statuses' => array_map(fn (OrderStatus $option): array => [
+                'value' => $option->value,
+                'label' => (new Order(['order_type' => $type]))->statusLabel($option),
+            ], OrderStatus::cases()),
+            'can_open_orders' => $request->user()->hasManufacturerCapability(ManufacturerCapability::Orders),
+            'history' => $current->where('order_type', $type)->when($status, fn ($query) => $query->where('status', $status))
+                ->with('items:id,order_id,unit_price,quantity')->latest()->orderByDesc('id')->paginate(15)->withQueryString()
+                ->through(fn (Order $order): array => [
+                    'id' => $order->id,
+                    'customer_name' => $order->customer_name,
+                    'status' => $order->status->value,
+                    'status_label' => $order->statusLabel(),
+                    'total_cents' => $order->isQuote() && $order->totalCents() === 0 ? null : $order->totalCents(),
+                    'created_at' => $order->created_at->toISOString(),
+                ]),
         ]);
     }
 

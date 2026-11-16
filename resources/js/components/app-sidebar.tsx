@@ -87,7 +87,7 @@ function useNavItems() {
             common: [
                 ...common,
                 {
-                    title: 'Fabricantes',
+                    title: 'Vitrine',
                     href: rep.manufacturers.index(),
                     icon: Building2,
                 },
@@ -95,6 +95,11 @@ function useNavItems() {
                     title: 'Pedidos',
                     href: rep.orders.index(),
                     icon: ShoppingCart,
+                },
+                {
+                    title: 'Clientes',
+                    href: rep.customers.index(),
+                    icon: Users,
                 },
             ],
             catalogo: [] as NavItem[],

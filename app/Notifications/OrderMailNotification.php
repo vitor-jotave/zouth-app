@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Enums\OrderStatus;
 use App\Models\Order;
 use App\Models\OrderItem;
 use Illuminate\Bus\Queueable;
@@ -36,7 +37,7 @@ abstract class OrderMailNotification extends Notification implements ShouldQueue
      *     note: string
      * }  $content
      */
-    protected function orderMail(string $subject, array $content): MailMessage
+    protected function orderMail(string $subject, array $content, ?OrderStatus $status = null): MailMessage
     {
         $order = $this->order->loadMissing(['manufacturer', 'items']);
         $messageData = [
@@ -44,7 +45,7 @@ abstract class OrderMailNotification extends Notification implements ShouldQueue
             'manufacturerName' => $order->manufacturer->name,
             'orderNumber' => '#'.str_pad((string) $order->id, 5, '0', STR_PAD_LEFT),
             'orderType' => $order->order_type->label(),
-            'statusLabel' => $order->statusLabel(),
+            'statusLabel' => $order->statusLabel($status),
             'customerName' => $order->customer_name,
             'totalItems' => $order->totalItems(),
             'items' => $order->items->map(fn (OrderItem $item): array => [

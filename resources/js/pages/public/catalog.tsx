@@ -1,4 +1,4 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import {
     AlertCircle,
     ArrowRight,
@@ -38,8 +38,10 @@ import {
     type MouseEvent,
     type ReactNode,
 } from 'react';
+import { AssistedSelectionShare } from '@/components/assisted-selection-share';
 import { CatalogHero, catalogHeroSubtitle } from '@/components/catalog-hero';
 import { Pagination } from '@/components/pagination';
+import { RepresentativeShareLink } from '@/components/representative-share-link';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -96,7 +98,12 @@ import {
     type OrderRuleContract,
 } from '@/lib/order-rules';
 import { cn } from '@/lib/utils';
-import { selection as restoreSelection } from '@/routes/public/catalog';
+import {
+    selection as restoreSelection,
+    show as showPublicCatalog,
+} from '@/routes/public/catalog';
+import { store as storePublicOrder } from '@/routes/public/order';
+import rep from '@/routes/rep';
 
 interface Manufacturer {
     id: number;
@@ -217,6 +224,16 @@ interface ProductDisplayOptions {
 
 interface Props {
     preview_mode?: boolean;
+    representative_share_url?: string | null;
+    assisted_selection?: {
+        token: string;
+        items: Array<{
+            product_id: number;
+            quantity: number;
+            selected_variations: Record<string, string>;
+        }>;
+    } | null;
+    assisted_selection_unavailable?: boolean;
     manufacturer: Manufacturer;
     catalog_settings: CatalogSettings;
     products: Paginated<Product>;
@@ -1315,6 +1332,29 @@ function normalizeSelectedFilterVariations(
     );
 }
 
+function catalogAttributionQuery(): Record<string, string> {
+    const query = new URLSearchParams(window.location.search);
+    const attribution: Record<string, string> = {};
+
+    for (const key of [
+        'ref',
+        'representante',
+        'selecao',
+        'utm_source',
+        'utm_medium',
+        'utm_campaign',
+        'utm_content',
+        'utm_term',
+    ]) {
+        const value = query.get(key);
+        if (value) {
+            attribution[key] = value;
+        }
+    }
+
+    return attribution;
+}
+
 function countActiveFilters(filters: CatalogFilters): number {
     const variationCount = Object.values(filters.variations ?? {}).reduce(
         (total, values) => total + values.length,
@@ -1427,12 +1467,16 @@ function CatalogFiltersDrawer({
             return;
         }
 
-        router.get(`/catalog/${catalogToken}`, payload, {
-            preserveState: false,
-            preserveScroll: true,
-            replace: true,
-            onSuccess: () => setOpen(false),
-        });
+        router.get(
+            showPublicCatalog.url(catalogToken),
+            { ...catalogAttributionQuery(), ...payload },
+            {
+                preserveState: false,
+                preserveScroll: true,
+                replace: true,
+                onSuccess: () => setOpen(false),
+            },
+        );
     };
 
     const clearFilters = () => {
@@ -1452,8 +1496,8 @@ function CatalogFiltersDrawer({
         }
 
         router.get(
-            `/catalog/${catalogToken}`,
-            {},
+            showPublicCatalog.url(catalogToken),
+            catalogAttributionQuery(),
             {
                 preserveState: false,
                 preserveScroll: true,
@@ -1720,11 +1764,15 @@ function CatalogCollections({
             return;
         }
 
-        router.get(`/catalog/${catalogToken}`, payload, {
-            preserveState: false,
-            preserveScroll: true,
-            replace: true,
-        });
+        router.get(
+            showPublicCatalog.url(catalogToken),
+            { ...catalogAttributionQuery(), ...payload },
+            {
+                preserveState: false,
+                preserveScroll: true,
+                replace: true,
+            },
+        );
     };
 
     if (variant === 'boutique') {
@@ -3674,7 +3722,25 @@ export default function PublicCatalog({
     order_rules: publishedRules,
     whatsapp_checkout: publishedWhatsapp,
     preview_mode = false,
+    representative_share_url,
+    assisted_selection,
+    assisted_selection_unavailable,
 }: Props) {
+    const representativeBarRef = useRef<HTMLElement>(null);
+    const [representativeBarHeight, setRepresentativeBarHeight] = useState(84);
+
+    useEffect(() => {
+        const bar = representativeBarRef.current;
+        if (!bar) return;
+
+        const measure = () => setRepresentativeBarHeight(bar.offsetHeight);
+        measure();
+        const observer = new ResizeObserver(measure);
+        observer.observe(bar);
+
+        return () => observer.disconnect();
+    }, [representative_share_url]);
+
     const [previewSettings, setPreviewSettings] = useState<
         Partial<CatalogSettings>
     >({});
@@ -3848,36 +3914,42 @@ export default function PublicCatalog({
     const [selectionNotice, setSelectionNotice] = useState('');
     const [restoreAttempt, setRestoreAttempt] = useState(0);
     const [restoreFailed, setRestoreFailed] = useState(false);
-    const selectionStorageKey = `zouth:catalog-selection:${catalog_token}`;
+    const [cartOpen, setCartOpen] = useState(false);
+    const assistedToken = assisted_selection?.token;
+    const selectionIdentity = representative_share_url
+        ? `representative:${catalog_token}:${representative_share_url}`
+        : assistedToken
+          ? `assisted:${catalog_token}:${assistedToken}`
+          : catalog_token;
+    const selectionStorageKey = `zouth:catalog-selection:${selectionIdentity}`;
     const restoredCatalogRef = useRef<string | null>(null);
-    const cartCatalogRef = useRef(catalog_token);
+    const cartCatalogRef = useRef(selectionIdentity);
 
     useEffect(() => {
         if (preview_mode) return;
-        if (restoredCatalogRef.current === catalog_token) return;
-        if (cartCatalogRef.current !== catalog_token) {
-            cartCatalogRef.current = catalog_token;
+        if (restoredCatalogRef.current === selectionIdentity) return;
+        if (cartCatalogRef.current !== selectionIdentity) {
+            cartCatalogRef.current = selectionIdentity;
             setCart([]);
+            setSelectionNotice('');
         }
         const controller = new AbortController();
         const restore = async () => {
             setRestoreFailed(false);
-            let saved;
+            let saved = assisted_selection?.items ?? [];
             try {
-                saved = parseCatalogSelection(
-                    window.localStorage.getItem(selectionStorageKey),
-                );
+                const previousSelection =
+                    window.localStorage.getItem(selectionStorageKey);
+                if (previousSelection !== null)
+                    saved = parseCatalogSelection(previousSelection);
             } catch {
                 setSelectionNotice(
                     'Seu navegador não permite salvar a seleção. Mantenha esta aba aberta até concluir.',
                 );
-                setHydratedCatalog(catalog_token);
-                restoredCatalogRef.current = catalog_token;
-                return;
             }
             if (saved.length === 0) {
-                setHydratedCatalog(catalog_token);
-                restoredCatalogRef.current = catalog_token;
+                setHydratedCatalog(selectionIdentity);
+                restoredCatalogRef.current = selectionIdentity;
                 return;
             }
             setSelectionNotice(
@@ -4000,10 +4072,13 @@ export default function PublicCatalog({
                         ? 'As peças da seleção anterior não estão mais disponíveis. Escolha novas peças para continuar.'
                         : adjusted
                           ? 'Sua seleção foi recuperada com ajustes de disponibilidade. Algumas peças ou quantidades mudaram; revise seu pedido.'
-                          : 'Sua seleção foi recuperada. Preços e disponibilidade foram conferidos; revise as quantidades antes de continuar.',
+                          : assistedToken
+                            ? 'Seleção preparada pelo seu representante. Confira as peças, quantidades e valores antes de finalizar.'
+                            : 'Sua seleção foi recuperada. Preços e disponibilidade foram conferidos; revise as quantidades antes de continuar.',
                 );
-                setHydratedCatalog(catalog_token);
-                restoredCatalogRef.current = catalog_token;
+                setHydratedCatalog(selectionIdentity);
+                restoredCatalogRef.current = selectionIdentity;
+                if (assistedToken && recovered.length > 0) setCartOpen(true);
             } catch {
                 if (!controller.signal.aborted) {
                     setRestoreFailed(true);
@@ -4017,6 +4092,9 @@ export default function PublicCatalog({
         return () => controller.abort();
     }, [
         catalog_token,
+        assisted_selection,
+        assistedToken,
+        selectionIdentity,
         selectionStorageKey,
         catalog_settings.allow_orders_without_stock,
         restoreAttempt,
@@ -4025,7 +4103,7 @@ export default function PublicCatalog({
 
     useEffect(() => {
         if (preview_mode) return;
-        if (hydratedCatalog !== catalog_token) return;
+        if (hydratedCatalog !== selectionIdentity) return;
         try {
             window.localStorage.setItem(
                 selectionStorageKey,
@@ -4044,12 +4122,11 @@ export default function PublicCatalog({
         }
     }, [
         cart,
-        catalog_token,
+        selectionIdentity,
         hydratedCatalog,
         selectionStorageKey,
         preview_mode,
     ]);
-    const [cartOpen, setCartOpen] = useState(false);
     const [quickViewSelection, setQuickViewProduct] = useState<Product | null>(
         null,
     );
@@ -4446,7 +4523,11 @@ export default function PublicCatalog({
             setPreviewNotice(true);
             return;
         }
-        if (whatsapp_checkout.enabled) {
+        if (
+            whatsapp_checkout.enabled ||
+            representative_share_url ||
+            assisted_selection_unavailable
+        ) {
             return;
         }
 
@@ -4457,7 +4538,11 @@ export default function PublicCatalog({
         const params = new URLSearchParams(url.search);
 
         router.post(
-            `/catalog/${catalog_token}/orders`,
+            storePublicOrder.url(catalog_token, {
+                query: assistedToken
+                    ? { selecao: assistedToken }
+                    : { ref: params.get('ref') },
+            }),
             {
                 customer_name: customerName,
                 request_quote: cartRequiresQuote,
@@ -4573,6 +4658,9 @@ export default function PublicCatalog({
                 ['--brand-heading-font' as string]: headingFont,
                 ['--brand-body-font' as string]: bodyFont,
                 ...backgroundStyle,
+                paddingBottom: representative_share_url
+                    ? representativeBarHeight
+                    : undefined,
             }}
         >
             {catalog_settings.background_mode === 'image' &&
@@ -4604,6 +4692,11 @@ export default function PublicCatalog({
             <Head
                 title={`Catalogo - ${catalog_settings.brand_name ?? manufacturer.name}`}
             >
+                {(representative_share_url ||
+                    assistedToken ||
+                    assisted_selection_unavailable) && (
+                    <meta name="robots" content="noindex" />
+                )}
                 <link rel="preconnect" href="https://fonts.bunny.net" />
                 <link
                     href="https://fonts.bunny.net/css?family=sora:400,500,600,700|manrope:400,500,600,700|space-grotesk:400,500,600,700|fraunces:400,600,700|ibm-plex-sans:400,500,600,700"
@@ -4611,6 +4704,21 @@ export default function PublicCatalog({
                 />
             </Head>
 
+            {assisted_selection_unavailable && (
+                <div
+                    role="status"
+                    className="relative mx-auto mt-4 max-w-7xl border border-black/15 bg-white/80 px-6 py-4 text-sm"
+                >
+                    Este link de seleção expirou ou não está mais disponível.
+                    Peça um link atualizado ao representante.
+                    <Link
+                        href={showPublicCatalog(catalog_token)}
+                        className="ml-3 underline underline-offset-4"
+                    >
+                        Abrir o catálogo sem a seleção
+                    </Link>
+                </div>
+            )}
             {selectionNotice && (
                 <div
                     role="status"
@@ -4736,28 +4844,84 @@ export default function PublicCatalog({
             />
 
             {/* Floating cart button */}
-            {cartTotal > 0 && (
-                <button
-                    type="button"
-                    onClick={() => setCartOpen(true)}
-                    className="fixed right-6 bottom-6 z-40 flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-xl transition-transform hover:scale-105"
-                    style={{
-                        backgroundColor: catalog_settings.primary_color,
-                    }}
+            {representative_share_url && (
+                <aside
+                    ref={representativeBarRef}
+                    aria-label="Ações do representante"
+                    className="fixed inset-x-0 bottom-0 z-30 border-t border-[#d8d3cb] bg-[#f6f4f0] font-zouth-body text-[#18181f]"
                 >
-                    <ShoppingCart className="h-5 w-5" />
-                    <span>
-                        {whatsapp_checkout.enabled
-                            ? 'Ver seleção'
-                            : cartRequiresQuote
-                              ? 'Ver orçamento'
-                              : 'Ver pedido'}
-                    </span>
-                    <span className="rounded-full bg-white/20 px-2 py-0.5 font-bold">
-                        {cartTotal}
-                    </span>
-                </button>
+                    <div className="mx-auto grid max-w-7xl gap-2 px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:flex sm:items-start sm:justify-between sm:gap-5 sm:px-6 sm:pt-3 sm:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+                        <Link
+                            href={rep.manufacturers.index({
+                                query: { status: 'mine' },
+                            })}
+                            className="w-fit self-center text-sm font-semibold underline underline-offset-4 focus-visible:outline-2"
+                        >
+                            Voltar à Vitrine
+                        </Link>
+                        <div className="grid min-w-0 grid-cols-2 items-start gap-2 sm:flex">
+                            {!whatsapp_checkout.enabled && (
+                                <Button
+                                    type="button"
+                                    className="col-span-2 min-h-11 rounded-[2px] bg-[#ff4d3d] text-[#18181f] hover:bg-[#f23c2e]"
+                                    onClick={() => setCartOpen(true)}
+                                >
+                                    <ShoppingCart
+                                        className="size-4"
+                                        aria-hidden="true"
+                                    />
+                                    {cartTotal > 0
+                                        ? `Revisar seleção (${cartTotal})`
+                                        : 'Montar seleção'}
+                                </Button>
+                            )}
+                            <RepresentativeShareLink
+                                url={representative_share_url}
+                                label="Copiar link de afiliado"
+                                compact
+                            />
+                            <a
+                                href={`https://wa.me/?text=${encodeURIComponent(`Conheça a coleção de ${catalog_settings.brand_name ?? manufacturer.name}: ${representative_share_url}`)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex min-h-11 items-center justify-center gap-2 rounded-[2px] bg-[#18181f] px-2 text-center text-sm leading-tight font-semibold text-white hover:bg-[#303039] focus-visible:outline-2 focus-visible:outline-offset-2 sm:px-4"
+                            >
+                                <MessageCircle
+                                    aria-hidden="true"
+                                    className="size-4 shrink-0"
+                                />
+                                Compartilhar no WhatsApp
+                            </a>
+                        </div>
+                    </div>
+                </aside>
             )}
+            {cartTotal > 0 &&
+                (!representative_share_url || whatsapp_checkout.enabled) && (
+                    <button
+                        type="button"
+                        onClick={() => setCartOpen(true)}
+                        className="fixed right-6 bottom-6 z-40 flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-xl transition-transform hover:scale-105"
+                        style={{
+                            backgroundColor: catalog_settings.primary_color,
+                            bottom: representative_share_url
+                                ? representativeBarHeight + 16
+                                : undefined,
+                        }}
+                    >
+                        <ShoppingCart className="h-5 w-5" />
+                        <span>
+                            {whatsapp_checkout.enabled
+                                ? 'Ver seleção'
+                                : cartRequiresQuote
+                                  ? 'Ver orçamento'
+                                  : 'Ver pedido'}
+                        </span>
+                        <span className="rounded-full bg-white/20 px-2 py-0.5 font-bold">
+                            {cartTotal}
+                        </span>
+                    </button>
+                )}
 
             {/* Cart Sheet */}
             <Sheet open={cartOpen} onOpenChange={setCartOpen}>
@@ -4775,11 +4939,14 @@ export default function PublicCatalog({
                             className="pr-12 text-[11px] font-semibold tracking-[0.18em] uppercase"
                             style={{ color: catalog_settings.accent_color }}
                         >
-                            {whatsapp_checkout.enabled
-                                ? 'Seleção em construção'
-                                : cartRequiresQuote
-                                  ? 'Orçamento em construção'
-                                  : 'Pedido em construção'}
+                            {representative_share_url &&
+                            !whatsapp_checkout.enabled
+                                ? 'Seleção para o lojista'
+                                : whatsapp_checkout.enabled
+                                  ? 'Seleção em construção'
+                                  : cartRequiresQuote
+                                    ? 'Orçamento em construção'
+                                    : 'Pedido em construção'}
                         </p>
                         <SheetTitle
                             className="pr-12 text-[2.35rem] leading-[0.98] font-semibold tracking-[-0.04em] sm:text-[2.75rem]"
@@ -4798,6 +4965,14 @@ export default function PublicCatalog({
                         <SheetDescription className="text-sm text-[#716f68]">
                             {cartSelectionLabel} · {cartPieceLabel}
                         </SheetDescription>
+                        {assistedToken && selectionNotice && (
+                            <p
+                                role="status"
+                                className="border-l-2 border-[#ff4d3d] pl-3 text-sm text-[#55514a]"
+                            >
+                                {selectionNotice}
+                            </p>
+                        )}
                     </SheetHeader>
 
                     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -4812,8 +4987,10 @@ export default function PublicCatalog({
                                         Sua seleção começa no catálogo.
                                     </p>
                                     <p className="mt-2 text-sm leading-6 text-[#716f68]">
-                                        Escolha as peças e composições que fazem
-                                        sentido para a sua loja.
+                                        {representative_share_url &&
+                                        !whatsapp_checkout.enabled
+                                            ? 'Adicione peças no catálogo para montar a seleção do lojista.'
+                                            : 'Escolha as peças e composições que fazem sentido para a sua loja.'}
                                     </p>
                                 </div>
                             </div>
@@ -5209,7 +5386,32 @@ export default function PublicCatalog({
                                     </div>
                                 )}
 
-                            {whatsapp_checkout.enabled ? (
+                            {representative_share_url &&
+                            !whatsapp_checkout.enabled ? (
+                                <AssistedSelectionShare
+                                    key={JSON.stringify(
+                                        cart.map((item) => [
+                                            item.key,
+                                            item.quantity,
+                                        ]),
+                                    )}
+                                    catalogToken={catalog_token}
+                                    items={cart.map((item) => ({
+                                        product_id: item.product.id,
+                                        quantity: item.quantity,
+                                        selected_variations:
+                                            item.selected_variations ?? {},
+                                    }))}
+                                />
+                            ) : assisted_selection_unavailable ? (
+                                <p
+                                    role="status"
+                                    className="text-sm text-[#716f68]"
+                                >
+                                    Abra o catálogo sem a seleção ou solicite um
+                                    novo link para continuar.
+                                </p>
+                            ) : whatsapp_checkout.enabled ? (
                                 whatsappCheckoutUrl ? (
                                     <Button
                                         asChild

@@ -5,11 +5,14 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 
 class ManufacturerAffiliation extends Model
 {
     /** @use HasFactory<\Database\Factories\ManufacturerAffiliationFactory> */
     use HasFactory;
+
+    protected $hidden = ['tracking_token'];
 
     /**
      * The attributes that are mass assignable.
@@ -37,6 +40,24 @@ class ManufacturerAffiliation extends Model
             'rejected_at' => 'datetime',
             'revoked_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (self $affiliation): void {
+            $affiliation->tracking_token ??= (string) Str::uuid();
+        });
+    }
+
+    public function catalogShareUrl(Manufacturer $manufacturer): ?string
+    {
+        $catalog = $manufacturer->catalogSetting;
+
+        if ($this->status !== 'active' || ! $catalog?->public_link_active || ! $this->tracking_token) {
+            return null;
+        }
+
+        return route('public.catalog.show', ['token' => $catalog->public_token, 'ref' => $this->tracking_token]);
     }
 
     /**

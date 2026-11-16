@@ -31,6 +31,9 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductMediaController;
 use App\Http\Controllers\PublicCatalogController;
 use App\Http\Controllers\PublicOrderController;
+use App\Http\Controllers\Rep\AssistedSelectionController as RepAssistedSelectionController;
+use App\Http\Controllers\Rep\CommercialProfileController as RepCommercialProfileController;
+use App\Http\Controllers\Rep\CustomerController as RepCustomerController;
 use App\Http\Controllers\Rep\DashboardController as RepDashboardController;
 use App\Http\Controllers\Rep\ManufacturerController as RepManufacturerController;
 use App\Http\Controllers\Rep\OrderController as RepOrderController;
@@ -183,6 +186,7 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant', 'manufacturer.enti
             ->middleware('manufacturer.capability:affiliations.manage')
             ->group(function () {
                 Route::get('/', 'index')->name('index');
+                Route::get('{affiliation}', 'show')->whereNumber('affiliation')->name('show');
                 Route::post('{affiliation}/approve', 'approve')->name('approve');
                 Route::post('{affiliation}/reject', 'reject')->name('reject');
                 Route::post('{affiliation}/revoke', 'revoke')->name('revoke');
@@ -376,6 +380,8 @@ Route::middleware(['auth', 'verified', 'superadmin'])->prefix('admin')->name('ad
 // Sales Rep Routes
 Route::middleware(['auth', 'verified', 'sales.rep'])->prefix('rep')->name('rep.')->group(function () {
     Route::get('dashboard', RepDashboardController::class)->name('dashboard');
+    Route::post('catalog/{token}/assisted-selections', RepAssistedSelectionController::class)
+        ->middleware('throttle:20,1')->name('assisted-selections.store');
 
     Route::controller(RepManufacturerController::class)->prefix('manufacturers')->name('manufacturers.')->group(function () {
         Route::get('/', 'index')->name('index');
@@ -385,6 +391,11 @@ Route::middleware(['auth', 'verified', 'sales.rep'])->prefix('rep')->name('rep.'
     Route::get('m/{manufacturer:slug}/catalog', [RepManufacturerController::class, 'catalog'])->name('catalog');
 
     Route::get('orders', [RepOrderController::class, 'index'])->name('orders.index');
+    Route::get('orders/{order}', [RepOrderController::class, 'show'])->name('orders.show');
+    Route::get('customers', [RepCustomerController::class, 'index'])->name('customers.index');
+    Route::get('customers/{customer}', [RepCustomerController::class, 'show'])->name('customers.show');
+    Route::get('commercial-profile', [RepCommercialProfileController::class, 'edit'])->name('commercial-profile.edit');
+    Route::patch('commercial-profile', [RepCommercialProfileController::class, 'update'])->name('commercial-profile.update');
 });
 
 require __DIR__.'/settings.php';

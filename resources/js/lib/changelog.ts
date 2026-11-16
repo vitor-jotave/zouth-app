@@ -19,6 +19,51 @@ type ChangelogRelease = {
 
 export const changelog = [
     {
+        id: '2026-11-16-portal-representantes',
+        date: '2026-11-16',
+        title: 'Mais ferramentas para representar e vender.',
+        summary:
+            'Da descoberta de marcas ao acompanhamento dos pedidos: uma rotina comercial para representantes e fabricantes.',
+        updates: [
+            {
+                kind: 'melhoria',
+                title: 'Vitrine de marcas e links próprios',
+                description:
+                    'Encontre marcas, acompanhe solicitações e abra o catálogo oficial de uma parceira. Copie seu link rastreável ou compartilhe a coleção pelo WhatsApp.',
+            },
+            {
+                kind: 'melhoria',
+                title: 'Dashboard e pedidos do representante',
+                description:
+                    'Veja indicadores e gráficos no início. Acompanhe os pedidos e orçamentos atribuídos em Kanban ou lista, com filtros e acesso às peças, aos valores e ao histórico de status.',
+            },
+            {
+                kind: 'novidade',
+                title: 'Carteira de clientes e perfil comercial',
+                description:
+                    'Consulte os lojistas que fizeram pedidos atribuídos a você, por marca, e mantenha seus dados comerciais atualizados em Meu perfil. O histórico permanece mesmo após o fim da parceria.',
+            },
+            {
+                kind: 'novidade',
+                title: 'Notificações comerciais por e-mail',
+                description:
+                    'Receba avisos quando uma parceria for aprovada, quando entrar um pedido ou orçamento pelo seu link e quando o status mudar.',
+            },
+            {
+                kind: 'novidade',
+                title: 'Carrinho assistido',
+                description:
+                    'Monte uma seleção com peças, variações e quantidades e compartilhe um link válido por 14 dias. O lojista revisa e confirma no checkout, com preços e disponibilidade atualizados.',
+            },
+            {
+                kind: 'novidade',
+                title: 'Dashboard de cada representante no fabricante',
+                description:
+                    'Consulte perfil, vínculo, vendas e orçamentos atribuídos ao representante naquela marca, com gráfico por período e histórico filtrável.',
+            },
+        ],
+    },
+    {
         id: '2026-11-03-leitura-whatsapp',
         date: '2026-11-03',
         title: 'Leituras em dia no atendimento.',

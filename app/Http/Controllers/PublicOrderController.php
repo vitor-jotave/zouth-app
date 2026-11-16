@@ -6,6 +6,7 @@ use App\Enums\UserType;
 use App\Http\Requests\StorePublicOrderRequest;
 use App\Http\Resources\OrderItemResource;
 use App\Http\Resources\OrderStatusHistoryResource;
+use App\Models\AssistedSelection;
 use App\Models\CatalogSetting;
 use App\Models\Manufacturer;
 use App\Models\ManufacturerAffiliation;
@@ -14,6 +15,7 @@ use App\Services\OrderService;
 use App\Services\PlanLimitService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -60,18 +62,28 @@ class PublicOrderController extends Controller
         // Resolve sales rep from tracking ref
         $ref = $request->query('ref');
 
-        if ($ref) {
-            $data['tracking_ref'] = $ref;
+        if ($request->query->has('selecao')) {
+            $selection = AssistedSelection::findForCatalog($catalogSetting, $request->query('selecao'));
+
+            if (! $selection || ! $manufacturer?->is_active) {
+                return redirect()->back()->withErrors([
+                    'checkout' => 'O link da seleção expirou ou não está mais disponível. Solicite um novo link ao representante.',
+                ]);
+            }
+
+            $data['sales_rep_id'] = $selection->affiliation->user_id;
+            $data['tracking_ref'] = $selection->affiliation->tracking_token;
+        } elseif (is_string($ref) && (Str::isUuid($ref) || preg_match('/^[1-9][0-9]{0,17}$/D', $ref))) {
             $salesRep = ManufacturerAffiliation::query()
                 ->where('manufacturer_id', $catalogSetting->manufacturer_id)
                 ->where('status', 'active')
                 ->whereHas('user', fn ($q) => $q->where('user_type', UserType::SalesRep->value))
-                ->with('user')
-                ->get()
-                ->first(fn ($aff) => $aff->user->id == $ref || str_contains(strtolower($aff->user->name), strtolower($ref)));
+                ->where(Str::isUuid($ref) ? 'tracking_token' : 'user_id', $ref)
+                ->first();
 
             if ($salesRep) {
                 $data['sales_rep_id'] = $salesRep->user_id;
+                $data['tracking_ref'] = $ref;
             }
         }
 

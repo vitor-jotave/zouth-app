@@ -654,6 +654,47 @@ it('associates sales rep when ref query param matches an active affiliation', fu
     expect($order->tracking_ref)->toBe((string) $rep->id);
 });
 
+it('attributes only valid active references in the catalog tenant', function (string $scenario) {
+    $rep = User::factory()->create(['user_type' => UserType::SalesRep, 'name' => 'Nome Parcial']);
+    $affiliation = ManufacturerAffiliation::factory()->create([
+        'manufacturer_id' => $scenario === 'other brand' ? Manufacturer::factory()->create()->id : $this->manufacturer->id,
+        'user_id' => $rep->id,
+        'status' => $scenario === 'revoked' ? 'revoked' : 'active',
+    ]);
+    $ref = match ($scenario) {
+        'partial name' => 'Parcial',
+        'invalid' => (string) Illuminate\Support\Str::uuid(),
+        default => $affiliation->tracking_token,
+    };
+
+    if ($scenario === 'valid') {
+        $this->actingAs($rep)->get(route('rep.catalog', $this->manufacturer->slug))
+            ->assertRedirect(route('public.catalog.show', [
+                'token' => $this->catalogSetting->public_token,
+                'ref' => $ref,
+                'representante' => '1',
+            ]));
+        auth()->logout();
+        $this->get(route('public.catalog.show', ['token' => $this->catalogSetting->public_token, 'ref' => $ref]))->assertOk();
+    }
+
+    $this->post(
+        "/catalog/{$this->catalogSetting->public_token}/orders?ref={$ref}",
+        ($this->validCustomerData)([
+            'items' => [['product_id' => $this->product1->id, 'quantity' => 1]],
+        ]),
+    )->assertSessionHasNoErrors();
+
+    $order = Order::sole();
+    expect($order->sales_rep_id)->toBe($scenario === 'valid' ? $rep->id : null)
+        ->and($order->tracking_ref)->toBe($scenario === 'valid' ? $ref : null);
+
+    if ($scenario === 'valid') {
+        $affiliation->update(['status' => 'revoked']);
+        $this->actingAs($rep)->get(route('rep.orders.show', $order))->assertOk();
+    }
+})->with(['valid', 'revoked', 'other brand', 'partial name', 'invalid']);
+
 // ──────────────────────────────────────────────
 // Public order tracking
 // ──────────────────────────────────────────────

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Manufacturer;
 
+use App\Enums\ManufacturerCapability;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
 use App\Http\Controllers\Controller;
@@ -222,8 +223,26 @@ class OrderController extends Controller
             'statusHistory.changedBy',
         ]);
 
+        $representative = null;
+        $affiliationId = $request->integer('representative');
+        if ($affiliationId > 0 && $order->sales_rep_id && $request->user()->hasManufacturerCapability(ManufacturerCapability::Affiliations)) {
+            $representative = ManufacturerAffiliation::query()
+                ->where('manufacturer_id', $order->manufacturer_id)
+                ->where('user_id', $order->sales_rep_id)
+                ->whereKey($affiliationId)->first(['id']);
+        }
+
         return Inertia::render('manufacturer/orders/show', [
             'order' => (new OrderResource($order))->resolve($request),
+            'representative_return' => $representative ? [
+                'id' => $representative->id,
+                'query' => [
+                    'period' => $request->string('period')->limit(12, '')->toString(),
+                    'type' => $request->string('type')->limit(8, '')->toString(),
+                    'status' => OrderStatus::tryFrom($request->string('status')->toString())?->value ?? '',
+                    'page' => max(1, $request->integer('page')),
+                ],
+            ] : null,
         ]);
     }
 

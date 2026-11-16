@@ -9,6 +9,7 @@ use App\Notifications\NewOrderNotification;
 use App\Notifications\OrderAttributedToRepresentativeNotification;
 use App\Notifications\OrderReceivedNotification;
 use App\Notifications\OrderStatusUpdatedNotification;
+use App\Notifications\RepresentativeOrderStatusNotification;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Throwable;
@@ -42,7 +43,7 @@ class OrderNotificationService
             );
         }
 
-        if ($order->salesRep?->email && $order->salesRep->hasVerifiedEmail()) {
+        if ($order->salesRep?->email && $order->salesRep->isSalesRep() && $order->salesRep->hasVerifiedEmail()) {
             $this->safely(
                 $order,
                 'representative_attributed_order',
@@ -53,18 +54,28 @@ class OrderNotificationService
 
     public function notifyStatusChanged(Order $order, OrderStatus $previousStatus): void
     {
-        if (! $order->customer_email || $order->status === $previousStatus) {
+        if ($order->status === $previousStatus) {
             return;
         }
 
-        $order->loadMissing(['manufacturer', 'items']);
+        $order->loadMissing(['manufacturer', 'items', 'salesRep']);
 
-        $this->safely(
-            $order,
-            'customer_order_status_updated',
-            fn () => Notification::route('mail', [$order->customer_email => $order->customer_name])
-                ->notify(new OrderStatusUpdatedNotification($order, $previousStatus)),
-        );
+        if ($order->customer_email) {
+            $this->safely(
+                $order,
+                'customer_order_status_updated',
+                fn () => Notification::route('mail', [$order->customer_email => $order->customer_name])
+                    ->notify(new OrderStatusUpdatedNotification($order, $previousStatus)),
+            );
+        }
+
+        if ($order->salesRep?->email && $order->salesRep->isSalesRep() && $order->salesRep->hasVerifiedEmail()) {
+            $this->safely(
+                $order,
+                'representative_order_status_updated',
+                fn () => $order->salesRep->notify(new RepresentativeOrderStatusNotification($order, $previousStatus)),
+            );
+        }
     }
 
     private function safely(Order $order, string $notification, callable $send): void
