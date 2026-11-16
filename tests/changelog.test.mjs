@@ -33,6 +33,21 @@ function load(path, overrides = {}) {
     return exports;
 }
 const releases = load('lib/changelog.ts');
+test('changelog highlights the representative portal without replacing earlier releases', () => {
+    const [release] = releases.changelog;
+    assert.equal(release.id, '2026-11-16-portal-representantes');
+    assert.equal(release.date, '2026-11-16');
+    assert.equal(release.updates.length, 6);
+    assert.ok(
+        release.updates.some(({ title }) => title === 'Carrinho assistido'),
+    );
+    assert.ok(
+        releases.changelog.some(
+            ({ id }) => id === '2026-11-03-leitura-whatsapp',
+        ),
+    );
+});
+
 test('catalog refinement release records the requested improvements without replacing earlier history', () => {
     const release = releases.changelog.find(
         (entry) => entry.id === '2026-11-02-editor-catalogo',
