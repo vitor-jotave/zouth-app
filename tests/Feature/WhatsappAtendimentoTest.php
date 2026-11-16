@@ -257,23 +257,65 @@ test('instance name must be unique', function () {
         ->assertSessionHasErrors('instance_name');
 });
 
-test('manufacturer user can delete their instance', function () {
+test('disconnecting and pairing the same or a different number preserves chat history', function (string $pairedNumber) {
     [$user, $manufacturer] = createWhatsappTestManufacturer();
-    $instance = WhatsappInstance::factory()->create(['manufacturer_id' => $manufacturer->id]);
-
-    $mock = $this->mock(EvolutionApiService::class);
-    $mock->shouldReceive('logoutInstance')->once()->andReturn(
-        new \Illuminate\Http\Client\Response(new \GuzzleHttp\Psr7\Response(200))
-    );
-    $mock->shouldReceive('deleteInstance')->once()->andReturn(
-        new \Illuminate\Http\Client\Response(new \GuzzleHttp\Psr7\Response(200))
-    );
+    $instance = WhatsappInstance::factory()->connected()->create([
+        'manufacturer_id' => $manufacturer->id,
+        'phone_number' => '5511999999999',
+        'profile_name' => 'Canal anterior',
+    ]);
+    $conversation = WhatsappConversation::factory()->create(['whatsapp_instance_id' => $instance->id]);
+    $message = WhatsappMessage::factory()->create([
+        'whatsapp_conversation_id' => $conversation->id,
+        'body' => 'Histórico anterior ao pareamento',
+    ]);
+    Http::preventStrayRequests();
+    Http::fake([
+        '*/instance/logout/*' => Http::response(),
+        '*/instance/connect/*' => Http::response(['base64' => 'test-qr']),
+        '*/instance/connectionState/*' => Http::response(['instance' => ['state' => 'open']]),
+        '*/instance/fetchInstances*' => Http::response([['ownerJid' => "{$pairedNumber}@s.whatsapp.net"]]),
+    ]);
 
     $this->actingAs($user)
-        ->delete("/manufacturer/atendimento/instances/{$instance->id}")
+        ->delete($url)
         ->assertRedirect();
 
-    $this->assertDatabaseMissing('whatsapp_instances', ['id' => $instance->id]);
+    $this->assertDatabaseHas('whatsapp_instances', [
+        'id' => $instance->id,
+        'status' => 'disconnected',
+        'phone_number' => null,
+        'profile_name' => null,
+    ]);
+    $this->assertDatabaseHas('whatsapp_messages', ['id' => $message->id]);
+    $this->getJson("{$url}/qr")->assertOk()->assertJsonPath('base64', 'test-qr');
+    $this->getJson("{$url}/status")->assertOk()
+        ->assertJsonPath('status', 'connected')
+        ->assertJsonPath('phone_number', $pairedNumber);
+    $this->mock(WhatsappContactProfileSyncService::class)->shouldReceive('sync')->once();
+    $this->getJson('/manufacturer/atendimento/conversations/list')
+        ->assertOk()
+        ->assertJsonPath('conversations.0.id', $conversation->id);
+    $this->getJson("/manufacturer/atendimento/conversations/{$conversation->id}/messages")
+        ->assertOk()
+        ->assertJsonPath('messages.0.body', $message->body);
+    expect($manufacturer->whatsappInstances()->sole()->id)->toBe($instance->id);
+    Http::assertSentCount(4);
+})->with(['5511999999999', '5511888888888']);
+
+test('failed WhatsApp logout leaves the channel and history intact', function () {
+    [$user, $manufacturer] = createWhatsappTestManufacturer();
+    $instance = WhatsappInstance::factory()->connected()->create(['manufacturer_id' => $manufacturer->id]);
+    $conversation = WhatsappConversation::factory()->create(['whatsapp_instance_id' => $instance->id]);
+    Http::preventStrayRequests();
+    Http::fake(['*/instance/logout/*' => Http::response([], 500)]);
+
+    $this->actingAs($user)->delete("/manufacturer/atendimento/instances/{$instance->id}")
+        ->assertRedirect()
+        ->assertSessionHas('error');
+
+    expect($instance->fresh()->isConnected())->toBeTrue();
+    $this->assertDatabaseHas('whatsapp_conversations', ['id' => $conversation->id]);
 });
 
 test('user cannot delete another manufacturer instance', function () {
@@ -285,6 +327,20 @@ test('user cannot delete another manufacturer instance', function () {
     $this->actingAs($user)
         ->delete("/manufacturer/atendimento/instances/{$instance->id}")
         ->assertForbidden();
+});
+
+test('connection status replaces stale connected state while awaiting pairing', function () {
+    [$user, $manufacturer] = createWhatsappTestManufacturer();
+    $instance = WhatsappInstance::factory()->connected()->create(['manufacturer_id' => $manufacturer->id]);
+
+    Http::fake(['*/instance/connectionState/*' => Http::response(['instance' => ['state' => 'connecting']])]);
+
+    $this->actingAs($user)
+        ->getJson("/manufacturer/atendimento/instances/{$instance->id}/status")
+        ->assertOk()
+        ->assertJsonPath('status', 'connecting');
+
+    $this->assertDatabaseHas('whatsapp_instances', ['id' => $instance->id, 'status' => 'connecting']);
 });
 
 test('connection status stores profile data returned by Evolution API v2', function () {

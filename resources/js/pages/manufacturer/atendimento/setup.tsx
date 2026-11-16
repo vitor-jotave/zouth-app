@@ -212,6 +212,7 @@ export default function AtendimentoSetup({ connection_key, instance }: Props) {
 
         router.delete(instances.destroy(instance).url, {
             preserveScroll: true,
+            preserveState: false,
         });
     };
 
