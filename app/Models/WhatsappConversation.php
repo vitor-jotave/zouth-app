@@ -67,8 +67,17 @@ class WhatsappConversation extends Model
     /**
      * Get a display name for this conversation.
      */
-    public function displayName(): string
+    public function displayName(?string ...$ownNames): string
     {
-        return $this->contact_name ?? $this->contact_phone ?? $this->remote_jid;
+        $name = trim($this->contact_name ?? '');
+        if ($name !== '' && ($this->is_group || ! in_array(
+            mb_strtolower($name),
+            array_map(fn (?string $ownName): string => mb_strtolower(trim($ownName ?? '')), $ownNames),
+            true,
+        ))) {
+            return $name;
+        }
+
+        return filled($this->contact_phone) ? $this->contact_phone : $this->remote_jid;
     }
 }

@@ -719,6 +719,32 @@ test('webhook creates conversation and message on messages.upsert', function () 
     ]);
 });
 
+test('outgoing WhatsApp messages never name an unsaved contact after the channel', function () {
+    $instance = WhatsappInstance::factory()->connected()->create(['profile_name' => 'Minha Loja']);
+    $jid = '5511999887766@s.whatsapp.net';
+    $deliver = function (string $id, bool $fromMe, ?string $name) use ($instance, $jid): void {
+        $this->postJson("/webhooks/evolution/{$instance->instance_name}", [
+            'event' => 'messages.upsert',
+            'data' => [
+                'key' => ['id' => $id, 'remoteJid' => $jid, 'fromMe' => $fromMe],
+                'pushName' => $name,
+                'message' => ['conversation' => 'Olá'],
+                'messageTimestamp' => now()->timestamp,
+            ],
+        ], ['apikey' => config('evolution.api_key')])->assertOk();
+    };
+
+    $deliver('before-reply', true, 'Minha Loja');
+    $conversation = $instance->conversations()->sole();
+    expect($conversation->contact_name)->toBeNull()
+        ->and($conversation->displayName())->toBe('5511999887766');
+
+    $deliver('reply', false, '  Maria Silva  ');
+    $deliver('next-outbound', true, 'Minha Loja');
+    $deliver('nameless-reply', false, '   ');
+    expect($conversation->fresh()->contact_name)->toBe('Maria Silva');
+});
+
 test('webhook downloads and stores an incoming voice message', function () {
     Storage::fake('s3');
     $instance = WhatsappInstance::factory()->connected()->create();
