@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\OrderStatus;
+use App\Enums\OrderType;
 use App\Enums\UserType;
 use App\Models\CatalogSetting;
 use App\Models\Manufacturer;
@@ -15,6 +16,7 @@ use App\Notifications\OrderReceivedNotification;
 use App\Notifications\OrderStatusUpdatedNotification;
 use App\Notifications\RepresentativeApplicationReceivedNotification;
 use App\Notifications\RepresentativeApplicationStatusNotification;
+use App\Notifications\RepresentativeOrderStatusNotification;
 use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\Notification;
 
@@ -208,6 +210,62 @@ it('notifies the buyer whenever the manufacturer changes the order status', func
                 && $notification->order->status === OrderStatus::Preparing;
         },
     );
+});
+
+it('notifies only the attributed representative of changes even without a buyer email', function (OrderType $type) {
+    Notification::fake();
+    $representative = User::factory()->create(['user_type' => UserType::SalesRep]);
+    $other = User::factory()->create(['user_type' => UserType::SalesRep]);
+    $order = Order::factory()->forManufacturer($this->manufacturer)->create([
+        'sales_rep_id' => $representative->id,
+        'order_type' => $type,
+        'customer_email' => null,
+    ]);
+
+    $this->actingAs($this->owner)->post(route('manufacturer.orders.update-status', $order), [
+        'status' => OrderStatus::Preparing->value,
+    ])->assertRedirect();
+
+    Notification::assertSentToTimes($representative, RepresentativeOrderStatusNotification::class, 1);
+    Notification::assertNotSentTo($other, RepresentativeOrderStatusNotification::class);
+    Notification::assertSentOnDemandTimes(OrderStatusUpdatedNotification::class, 0);
+
+    $notification = Notification::sent($representative, RepresentativeOrderStatusNotification::class)->sole();
+    expect($notification->shouldSend($representative, 'mail'))->toBeTrue()
+        ->and($notification->shouldSend($other, 'mail'))->toBeFalse();
+    $notification->order->status = OrderStatus::Delivered;
+    $mail = $notification->toMail($representative);
+    expect($mail->viewData['actionUrl'])->toBe(route('rep.orders.show', $order))
+        ->and($mail->viewData['statusLabel'])->toBe($order->statusLabel(OrderStatus::Preparing))
+        ->and(view($mail->view['html'], $mail->viewData)->render())->toContain('ANDAMENTO COMERCIAL')
+        ->and(view($mail->view['text'], $mail->viewData)->render())->toContain($order->statusLabel(OrderStatus::Preparing));
+
+    $this->post(route('manufacturer.orders.update-status', $order), ['status' => OrderStatus::Preparing->value]);
+    Notification::assertSentToTimes($representative, RepresentativeOrderStatusNotification::class, 1);
+
+    $order->update(['sales_rep_id' => null]);
+    expect($notification->shouldSend($representative, 'mail'))->toBeFalse();
+})->with([OrderType::Standard, OrderType::Quote]);
+
+it('notifies the representative when an attributed selection becomes a quote', function () {
+    Notification::fake();
+    $representative = User::factory()->create(['user_type' => UserType::SalesRep]);
+    $affiliation = ManufacturerAffiliation::factory()->active()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'user_id' => $representative->id,
+    ]);
+    $this->product->update(['base_quantity' => 0, 'allow_quote_when_out_of_stock' => true]);
+
+    $this->post(route('public.order.store', [
+        'catalogSetting' => $this->catalogSetting->public_token,
+        'ref' => $affiliation->tracking_token,
+    ]), ($this->orderPayload)(['request_quote' => true]))->assertRedirect();
+
+    $order = Order::query()->sole();
+    expect($order->order_type)->toBe(OrderType::Quote)->and($order->sales_rep_id)->toBe($representative->id);
+    Notification::assertSentToTimes($representative, OrderAttributedToRepresentativeNotification::class, 1);
+    $notification = Notification::sent($representative, OrderAttributedToRepresentativeNotification::class)->sole();
+    expect($notification->toMail($representative)->viewData['actionUrl'])->toBe(route('rep.orders.show', $order));
 });
 
 it('renders order emails with the commercial summary and Zouth identity', function () {
