@@ -167,10 +167,21 @@ test('the shared user menu exposes Changelog between settings and logout', () =>
         },
         '@/routes': { logout: () => '/logout' },
         '@/routes/profile': { edit: () => '/profile' },
+        '@/routes/rep': {
+            default: {
+                commercialProfile: { edit: () => '/commercial-profile' },
+            },
+        },
     });
     const html = renderToStaticMarkup(
         React.createElement(UserMenuContent, { user: { name: 'Teste' } }),
     );
     assert.ok(html.indexOf('Configurações') < html.indexOf('Changelog'));
     assert.ok(html.indexOf('Changelog') < html.indexOf('Sair'));
+    const repHtml = renderToStaticMarkup(
+        React.createElement(UserMenuContent, {
+            user: { name: 'Teste', user_type: 'sales_rep' },
+        }),
+    );
+    assert.match(repHtml, /Meu perfil/);
 });

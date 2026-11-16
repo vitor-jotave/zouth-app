@@ -21,6 +21,8 @@ import { cn } from '@/lib/utils';
 import rep from '@/routes/rep';
 import type { BreadcrumbItem } from '@/types';
 type Stats = {
+    portfolio_customers: number;
+    orders_in_progress: number;
     active_affiliations: number;
     pending_affiliations: number;
     orders_total: number;
@@ -136,6 +138,43 @@ export default function RepDashboard({ stats, recentOrders, activity }: Props) {
                             <ArrowRight className="size-4" aria-hidden="true" />
                         </Link>
                     </header>
+
+                    <section
+                        aria-label="Acompanhamento comercial"
+                        className="grid gap-px border border-border bg-border sm:grid-cols-2"
+                    >
+                        {[
+                            {
+                                label: 'Clientes da carteira',
+                                count: stats.portfolio_customers,
+                                href: rep.customers.index(),
+                            },
+                            {
+                                label: 'Pedidos em andamento',
+                                count: stats.orders_in_progress,
+                                href: rep.orders.index({
+                                    query: { status: 'in_progress' },
+                                }),
+                            },
+                        ].map(({ label, count, href }) => (
+                            <Link
+                                key={label}
+                                href={href}
+                                className="group flex min-h-20 items-center gap-4 bg-background px-5 py-4 hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#ff4d3d]"
+                            >
+                                <span className="font-zouth-display text-2xl font-semibold tabular-nums">
+                                    {count}
+                                </span>
+                                <span className="text-sm font-semibold">
+                                    {label}
+                                </span>
+                                <ArrowRight
+                                    className="ml-auto size-4 shrink-0 group-hover:text-[#b63329]"
+                                    aria-hidden="true"
+                                />
+                            </Link>
+                        ))}
+                    </section>
 
                     <section aria-label="Indicadores comerciais">
                         <div className="mb-4 flex items-center justify-between gap-3">

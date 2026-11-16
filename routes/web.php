@@ -31,6 +31,8 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductMediaController;
 use App\Http\Controllers\PublicCatalogController;
 use App\Http\Controllers\PublicOrderController;
+use App\Http\Controllers\Rep\CommercialProfileController as RepCommercialProfileController;
+use App\Http\Controllers\Rep\CustomerController as RepCustomerController;
 use App\Http\Controllers\Rep\DashboardController as RepDashboardController;
 use App\Http\Controllers\Rep\ManufacturerController as RepManufacturerController;
 use App\Http\Controllers\Rep\OrderController as RepOrderController;
@@ -386,6 +388,10 @@ Route::middleware(['auth', 'verified', 'sales.rep'])->prefix('rep')->name('rep.'
 
     Route::get('orders', [RepOrderController::class, 'index'])->name('orders.index');
     Route::get('orders/{order}', [RepOrderController::class, 'show'])->name('orders.show');
+    Route::get('customers', [RepCustomerController::class, 'index'])->name('customers.index');
+    Route::get('customers/{customer}', [RepCustomerController::class, 'show'])->name('customers.show');
+    Route::get('commercial-profile', [RepCommercialProfileController::class, 'edit'])->name('commercial-profile.edit');
+    Route::patch('commercial-profile', [RepCommercialProfileController::class, 'update'])->name('commercial-profile.update');
 });
 
 require __DIR__.'/settings.php';

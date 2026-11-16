@@ -96,6 +96,11 @@ function useNavItems() {
                     href: rep.orders.index(),
                     icon: ShoppingCart,
                 },
+                {
+                    title: 'Clientes',
+                    href: rep.customers.index(),
+                    icon: Users,
+                },
             ],
             catalogo: [] as NavItem[],
             atendimento: [] as NavItem[],

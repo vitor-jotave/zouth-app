@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Rep;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
 use App\Http\Controllers\Controller;
+use App\Models\Customer;
 use App\Models\Manufacturer;
 use App\Models\ManufacturerAffiliation;
 use App\Models\Order;
@@ -81,6 +82,9 @@ class DashboardController extends Controller
                 ], OrderStatus::cases()),
             ],
             'stats' => [
+                'portfolio_customers' => Customer::query()->whereHas('orders', fn ($query) => $query
+                    ->where('sales_rep_id', $user->id)->whereColumn('orders.manufacturer_id', 'customers.manufacturer_id'))->count(),
+                'orders_in_progress' => (clone $standardOrders)->whereIn('status', [OrderStatus::Confirmed, OrderStatus::Preparing, OrderStatus::Shipped])->count(),
                 'active_affiliations' => (clone $affiliations)->where('status', 'active')->count(),
                 'pending_affiliations' => (clone $affiliations)->where('status', 'pending')->count(),
                 'orders_total' => (clone $standardOrders)->count(),

@@ -100,6 +100,16 @@ class OrderController extends Controller
                 'items' => OrderItemResource::collection($order->items)->resolve($request),
                 'status_history' => OrderStatusHistoryResource::collection($order->statusHistory)->resolve($request),
             ],
+            'from_customer' => $order->customer_id !== null && $request->integer('from_customer') === $order->customer_id
+                ? [
+                    'id' => $order->customer_id,
+                    'search' => mb_substr($request->string('search')->toString(), 0, 100),
+                    'brand' => max(0, $request->integer('brand')),
+                    'portfolio_page' => max(1, $request->integer('portfolio_page')),
+                    'orders_page' => max(1, $request->integer('orders_page')),
+                    'quotes_page' => max(1, $request->integer('quotes_page')),
+                ]
+                : null,
         ]);
     }
 
