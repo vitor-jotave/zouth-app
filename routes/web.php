@@ -385,6 +385,7 @@ Route::middleware(['auth', 'verified', 'sales.rep'])->prefix('rep')->name('rep.'
     Route::get('m/{manufacturer:slug}/catalog', [RepManufacturerController::class, 'catalog'])->name('catalog');
 
     Route::get('orders', [RepOrderController::class, 'index'])->name('orders.index');
+    Route::get('orders/{order}', [RepOrderController::class, 'show'])->name('orders.show');
 });
 
 require __DIR__.'/settings.php';

@@ -258,6 +258,10 @@ it('shows only attributed activity on the sales rep dashboard', function () {
     $attributedOrder = Order::factory()->forManufacturer($activeManufacturer)->create([
         'sales_rep_id' => $representative->id,
         'customer_name' => 'Cliente do representante',
+        'subtotal_cents' => 15000,
+        'discount_cents' => 1000,
+        'total_cents' => 14000,
+        'created_at' => now(),
     ]);
     OrderItem::factory()->for($attributedOrder)->create([
         'product_id' => null,
@@ -274,17 +278,37 @@ it('shows only attributed activity on the sales rep dashboard', function () {
         'quantity' => 1,
     ]);
 
+    Order::factory()->forManufacturer($activeManufacturer)->create([
+        'sales_rep_id' => $representative->id,
+        'order_type' => 'quote',
+        'total_cents' => 90000,
+        'created_at' => now()->subDay(),
+    ]);
+    Order::factory()->forManufacturer($activeManufacturer)->create([
+        'sales_rep_id' => $representative->id,
+        'status' => 'cancelled',
+        'total_cents' => 80000,
+        'created_at' => now()->subDays(2),
+    ]);
+
     $this->actingAs($representative)
         ->get(route('rep.dashboard'))
         ->assertInertia(fn (Assert $page) => $page
             ->component('rep/dashboard')
             ->where('stats.active_affiliations', 1)
             ->where('stats.pending_affiliations', 1)
-            ->where('stats.orders_total', 1)
-            ->where('stats.orders_this_month', 1)
-            ->where('stats.gross_sales', 150)
+            ->where('stats.orders_total', 2)
+            ->where('stats.orders_this_month', now()->subDays(2)->isSameMonth(now()) ? 2 : 1)
+            ->where('stats.quotes_total', 1)
+            ->where('stats.net_sales', 140)
+            ->has('activity.series', 30)
+            ->where('activity.series.29.revenue_cents', 14000)
+            ->where('activity.series.29.orders', 1)
+            ->where('activity.series.28.orders', 0)
+            ->where('activity.series.27.orders', 0)
+            ->where('activity.statuses.5.count', 1)
             ->where('stats.available_manufacturers', 1)
-            ->has('recentOrders', 1)
+            ->has('recentOrders', 3)
             ->where('recentOrders.0.customer_name', 'Cliente do representante')
         );
 });
