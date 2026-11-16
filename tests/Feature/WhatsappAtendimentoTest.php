@@ -1,20 +1,55 @@
 <?php
 
 use App\Models\Manufacturer;
+use App\Models\Product;
+use App\Models\ProductMedia;
 use App\Models\User;
 use App\Models\WhatsappConversation;
 use App\Models\WhatsappInstance;
 use App\Models\WhatsappMessage;
 use App\Services\EvolutionApiService;
+use App\Services\ProductCatalogPdfService;
 use App\Services\WhatsappContactProfileSyncService;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 
 beforeEach(function () {
     config()->set('evolution.api_key', 'test-evolution-api-key');
     config()->set('evolution.webhook_rate_limit', 1000);
     config()->set('evolution.webhook_invalid_rate_limit', 60);
+});
+
+test('chat collection PDF uses A4 pagination and omits unselected product details', function () {
+    $manufacturer = Manufacturer::factory()->create();
+    config(['filesystems.catalog_media_disk' => 'public']);
+    $disk = Storage::fake('public');
+    $photos = Storage::fake('s3');
+    $photo = 'collection/vestido.jpg';
+    $photos->put($photo, file_get_contents(database_path('seeders/assets/demo-showroom/vestido-azul.jpg')));
+    $products = Product::factory()->count(3)->make()
+        ->each(fn (Product $product) => $product->setRelation('media', collect([
+            new ProductMedia(['type' => \App\Enums\ProductMediaType::Image, 'path' => $photo]),
+        ])));
+    $generator = app(ProductCatalogPdfService::class);
+    $options = ['include_photo' => true, 'include_price' => true, 'include_description' => true, 'include_sku' => true];
+    $full = $disk->get($generator->generate($manufacturer, $products, $options)['path']);
+
+    expect($full)->toStartWith('%PDF-1.4')
+        ->toContain('/MediaBox [0 0 595.28 841.89]', '/Type /Pages /Count 2');
+
+    $hidden = array_fill_keys(array_keys($options), false);
+    $compact = $disk->get($generator->generate($manufacturer, $products, $hidden)['path']);
+    $products->each(fn (Product $product) => $product->forceFill([
+        'sku' => 'NEW-123',
+        'price_cents' => 59500,
+        'description' => 'Este texto não deve aparecer.',
+    ])->setRelation('media', collect()));
+    $edited = $disk->get($generator->generate($manufacturer, $products, $hidden)['path']);
+
+    expect($compact)->toContain('/Type /Pages /Count 1')->toBe($edited);
 });
 
 function createWhatsappTestManufacturer(): array
@@ -31,6 +66,81 @@ function createWhatsappTestManufacturer(): array
 
     return [$user, $manufacturer];
 }
+
+it('sends attachments as native WhatsApp media based on file contents', function (string $type) {
+    [$user, $manufacturer] = createWhatsappTestManufacturer();
+    $instance = WhatsappInstance::factory()->connected()->create(['manufacturer_id' => $manufacturer->id]);
+    $conversation = WhatsappConversation::factory()->create(['whatsapp_instance_id' => $instance->id]);
+    $disk = Storage::fake('s3');
+    if ($type !== 'audio') {
+        $disk->buildTemporaryUrlsUsing(fn (string $path): string => 'https://media.example.test/'.$path.'?signed=1');
+    }
+    Http::fake(['*/message/*' => Http::response(['key' => ['id' => 'attachment-'.$type]], 201)]);
+
+    $content = match ($type) {
+        'image' => base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jP1sAAAAASUVORK5CYII='),
+        'document' => '%PDF-1.4'."\n".'%%EOF',
+        default => null,
+    };
+    if ($type === 'audio' || $type === 'video') {
+        $source = tempnam(sys_get_temp_dir(), 'chat-attachment-test-');
+        try {
+            Process::run(['ffmpeg', '-nostdin', '-loglevel', 'error', '-y', ...($type === 'audio'
+                ? ['-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=mono', '-t', '0.2', '-c:a', 'libopus', '-f', 'webm']
+                : ['-f', 'lavfi', '-i', 'color=c=blue:s=96x64:r=15', '-t', '0.2', '-c:v', 'libx264', '-f', 'mp4']), $source])->throw();
+            $content = file_get_contents($source);
+        } finally {
+            unlink($source);
+        }
+    }
+    $fake = UploadedFile::fake()->createWithContent('arquivo.txt', $content);
+    $upload = new UploadedFile($fake->getPathname(), 'arquivo.txt', null, null, true);
+    $response = $this->actingAs($user)->withHeader('Accept', 'application/json')
+        ->post(route('manufacturer.atendimento.conversations.attachments', $conversation), [
+            'attachment' => $upload,
+            'recorded' => $type === 'audio',
+        ])->assertSuccessful()->assertJsonPath('message.media_type', $type);
+
+    $message = $conversation->messages()->sole();
+    expect($response->json('message.media_url'))->toBe(route('manufacturer.atendimento.messages.media', $message));
+    expect($disk->allFiles("whatsapp-chat/{$manufacturer->id}"))->toHaveCount(1);
+    $storedAudio = $type === 'audio' ? $disk->get($disk->allFiles("whatsapp-chat/{$manufacturer->id}")[0]) : null;
+    if ($type === 'audio') {
+        expect($storedAudio)->toStartWith('OggS')->toContain('OpusHead');
+    }
+    Http::assertSent(function ($request) use ($type, $conversation, $storedAudio): bool {
+        return $request['number'] === $conversation->remote_jid
+            && ($type === 'audio'
+                ? str_contains($request->url(), '/message/sendWhatsAppAudio/') && base64_decode($request['audio'], true) === $storedAudio
+                : str_contains($request->url(), '/message/sendMedia/') && $request['mediatype'] === $type && str_contains($request['media'], '?signed=1'));
+    });
+})->with(['image', 'audio', 'video', 'document']);
+
+it('does not store or send blocked file types or read attachments from another manufacturer', function () {
+    [$user, $manufacturer] = createWhatsappTestManufacturer();
+    $conversation = WhatsappConversation::factory()->create([
+        'whatsapp_instance_id' => WhatsappInstance::factory()->connected()->create(['manufacturer_id' => $manufacturer->id])->id,
+    ]);
+    $foreignConversation = WhatsappConversation::factory()->create();
+    Storage::fake('s3');
+    Http::fake();
+    $file = UploadedFile::fake()->createWithContent('arquivo.svg', '<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    $this->actingAs($user)->withHeader('Accept', 'application/json')
+        ->post(route('manufacturer.atendimento.conversations.attachments', $foreignConversation), ['attachment' => $file])
+        ->assertForbidden();
+    $this->post(route('manufacturer.atendimento.conversations.attachments', $conversation), ['attachment' => $file])
+        ->assertUnprocessable()->assertJsonValidationErrors('attachment');
+    expect(Storage::disk('s3')->allFiles())->toBe([]);
+    Http::assertNothingSent();
+});
+
+it('allows the browser to request the microphone for authorized chat users only', function () {
+    $this->withoutVite();
+    [$owner] = createWhatsappTestManufacturer();
+    $this->get('/login')->assertHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    $this->actingAs($owner)->get(route('manufacturer.atendimento.index'))
+        ->assertHeader('Permissions-Policy', 'camera=(), microphone=(self), geolocation=()');
+});
 
 // ─── Instance Setup ──────────────────────────────────────────────
 
@@ -180,23 +290,66 @@ test('instance name must be unique', function () {
         ->assertSessionHasErrors('instance_name');
 });
 
-test('manufacturer user can delete their instance', function () {
+test('disconnecting and pairing the same or a different number preserves chat history', function (string $pairedNumber) {
     [$user, $manufacturer] = createWhatsappTestManufacturer();
-    $instance = WhatsappInstance::factory()->create(['manufacturer_id' => $manufacturer->id]);
+    $instance = WhatsappInstance::factory()->connected()->create([
+        'manufacturer_id' => $manufacturer->id,
+        'phone_number' => '5511999999999',
+        'profile_name' => 'Canal anterior',
+    ]);
+    $conversation = WhatsappConversation::factory()->create(['whatsapp_instance_id' => $instance->id]);
+    $message = WhatsappMessage::factory()->create([
+        'whatsapp_conversation_id' => $conversation->id,
+        'body' => 'Histórico anterior ao pareamento',
+    ]);
+    Http::preventStrayRequests();
+    Http::fake([
+        '*/instance/logout/*' => Http::response(),
+        '*/instance/connect/*' => Http::response(['base64' => 'test-qr']),
+        '*/instance/connectionState/*' => Http::response(['instance' => ['state' => 'open']]),
+        '*/instance/fetchInstances*' => Http::response([['ownerJid' => "{$pairedNumber}@s.whatsapp.net"]]),
+    ]);
 
-    $mock = $this->mock(EvolutionApiService::class);
-    $mock->shouldReceive('logoutInstance')->once()->andReturn(
-        new \Illuminate\Http\Client\Response(new \GuzzleHttp\Psr7\Response(200))
-    );
-    $mock->shouldReceive('deleteInstance')->once()->andReturn(
-        new \Illuminate\Http\Client\Response(new \GuzzleHttp\Psr7\Response(200))
-    );
-
+    $url = "/manufacturer/atendimento/instances/{$instance->id}";
     $this->actingAs($user)
-        ->delete("/manufacturer/atendimento/instances/{$instance->id}")
+        ->delete($url)
         ->assertRedirect();
 
-    $this->assertDatabaseMissing('whatsapp_instances', ['id' => $instance->id]);
+    $this->assertDatabaseHas('whatsapp_instances', [
+        'id' => $instance->id,
+        'status' => 'disconnected',
+        'phone_number' => null,
+        'profile_name' => null,
+    ]);
+    $this->assertDatabaseHas('whatsapp_messages', ['id' => $message->id]);
+    $this->getJson("{$url}/qr")->assertOk()->assertJsonPath('base64', 'test-qr');
+    $this->getJson("{$url}/status")->assertOk()
+        ->assertJsonPath('status', 'connected')
+        ->assertJsonPath('phone_number', $pairedNumber);
+    $this->mock(WhatsappContactProfileSyncService::class)->shouldReceive('sync')->once();
+    $this->getJson('/manufacturer/atendimento/conversations/list')
+        ->assertOk()
+        ->assertJsonPath('conversations.0.id', $conversation->id);
+    $this->getJson("/manufacturer/atendimento/conversations/{$conversation->id}/messages")
+        ->assertOk()
+        ->assertJsonPath('messages.0.body', $message->body);
+    expect($manufacturer->whatsappInstances()->sole()->id)->toBe($instance->id);
+    Http::assertSentCount(4);
+})->with(['5511999999999', '5511888888888']);
+
+test('failed WhatsApp logout leaves the channel and history intact', function () {
+    [$user, $manufacturer] = createWhatsappTestManufacturer();
+    $instance = WhatsappInstance::factory()->connected()->create(['manufacturer_id' => $manufacturer->id]);
+    $conversation = WhatsappConversation::factory()->create(['whatsapp_instance_id' => $instance->id]);
+    Http::preventStrayRequests();
+    Http::fake(['*/instance/logout/*' => Http::response([], 500)]);
+
+    $this->actingAs($user)->delete("/manufacturer/atendimento/instances/{$instance->id}")
+        ->assertRedirect()
+        ->assertSessionHas('error');
+
+    expect($instance->fresh()->isConnected())->toBeTrue();
+    $this->assertDatabaseHas('whatsapp_conversations', ['id' => $conversation->id]);
 });
 
 test('user cannot delete another manufacturer instance', function () {
@@ -208,6 +361,20 @@ test('user cannot delete another manufacturer instance', function () {
     $this->actingAs($user)
         ->delete("/manufacturer/atendimento/instances/{$instance->id}")
         ->assertForbidden();
+});
+
+test('connection status replaces stale connected state while awaiting pairing', function () {
+    [$user, $manufacturer] = createWhatsappTestManufacturer();
+    $instance = WhatsappInstance::factory()->connected()->create(['manufacturer_id' => $manufacturer->id]);
+
+    Http::fake(['*/instance/connectionState/*' => Http::response(['instance' => ['state' => 'connecting']])]);
+
+    $this->actingAs($user)
+        ->getJson("/manufacturer/atendimento/instances/{$instance->id}/status")
+        ->assertOk()
+        ->assertJsonPath('status', 'connecting');
+
+    $this->assertDatabaseHas('whatsapp_instances', ['id' => $instance->id, 'status' => 'connecting']);
 });
 
 test('connection status stores profile data returned by Evolution API v2', function () {
@@ -506,6 +673,38 @@ test('sending a message calls evolution api and stores locally', function () {
     ]);
 });
 
+test('a rejected chat send reconciles a stale channel without automatically resending', function (string $type, string $state, string $expectedStatus) {
+    [$user, $manufacturer] = createWhatsappTestManufacturer();
+    $instance = WhatsappInstance::factory()->connected()->create(['manufacturer_id' => $manufacturer->id]);
+    $conversation = WhatsappConversation::factory()->create(['whatsapp_instance_id' => $instance->id]);
+    $disk = Storage::fake('s3');
+    $disk->buildTemporaryUrlsUsing(fn (string $path): string => 'https://media.example.test/'.$path);
+    Http::preventStrayRequests();
+    Http::fake([
+        '*/message/*' => Http::response([], 500),
+        '*/instance/connectionState/*' => Http::response(['instance' => ['state' => $state]]),
+    ]);
+
+    $url = "/manufacturer/atendimento/conversations/{$conversation->id}";
+    $this->actingAs($user);
+    $response = $type === 'attachment'
+        ? $this->withHeader('Accept', 'application/json')->post("{$url}/attachments", [
+            'attachment' => UploadedFile::fake()->createWithContent('arquivo.pdf', "%PDF-1.4\n%%EOF"),
+        ])
+        : $this->postJson("{$url}/messages", ['body' => 'Olá']);
+
+    $response->assertUnprocessable()->assertJsonFragment([
+        $type === 'attachment' ? 'message' : 'error' => 'O canal de WhatsApp está desconectado ou aguardando pareamento. Abra Atendimento → Canais para reconectar.',
+    ]);
+    $this->assertDatabaseHas('whatsapp_instances', ['id' => $instance->id, 'status' => $expectedStatus]);
+    expect($conversation->messages()->count())->toBe(0)
+        ->and($disk->allFiles())->toBeEmpty();
+    Http::assertSentCount(2);
+})->with([
+    ['text', 'close', 'disconnected'],
+    ['attachment', 'connecting', 'connecting'],
+]);
+
 test('sending a message requires body', function () {
     [$user, $manufacturer] = createWhatsappTestManufacturer();
     $instance = WhatsappInstance::factory()->connected()->create(['manufacturer_id' => $manufacturer->id]);
@@ -717,6 +916,32 @@ test('webhook creates conversation and message on messages.upsert', function () 
         'body' => 'Oi, preciso de ajuda!',
         'from_me' => false,
     ]);
+});
+
+test('outgoing WhatsApp messages never name an unsaved contact after the channel', function () {
+    $instance = WhatsappInstance::factory()->connected()->create(['profile_name' => 'Minha Loja']);
+    $jid = '5511999887766@s.whatsapp.net';
+    $deliver = function (string $id, bool $fromMe, ?string $name) use ($instance, $jid): void {
+        $this->postJson("/webhooks/evolution/{$instance->instance_name}", [
+            'event' => 'messages.upsert',
+            'data' => [
+                'key' => ['id' => $id, 'remoteJid' => $jid, 'fromMe' => $fromMe],
+                'pushName' => $name,
+                'message' => ['conversation' => 'Olá'],
+                'messageTimestamp' => now()->timestamp,
+            ],
+        ], ['apikey' => config('evolution.api_key')])->assertOk();
+    };
+
+    $deliver('before-reply', true, 'Minha Loja');
+    $conversation = $instance->conversations()->sole();
+    expect($conversation->contact_name)->toBeNull()
+        ->and($conversation->displayName())->toBe('5511999887766');
+
+    $deliver('reply', false, '  Maria Silva  ');
+    $deliver('next-outbound', true, 'Minha Loja');
+    $deliver('nameless-reply', false, '   ');
+    expect($conversation->fresh()->contact_name)->toBe('Maria Silva');
 });
 
 test('webhook downloads and stores an incoming voice message', function () {

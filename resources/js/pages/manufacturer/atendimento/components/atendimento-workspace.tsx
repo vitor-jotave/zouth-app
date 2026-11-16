@@ -26,6 +26,12 @@ import type {
     WhatsappFunnel,
 } from '../index';
 import type { QuickReply } from '../quick-reply-types';
+import { ChatAttachments } from './chat-attachments';
+import {
+    ContactLabelChips,
+    ContactLabelEditor,
+    type ContactLabel,
+} from './contact-labels';
 import {
     MessageReactionBadges,
     MessageReactionMenu,
@@ -37,6 +43,8 @@ type InboxMode = 'all' | 'unread';
 interface AtendimentoWorkspaceProps {
     conversations: Conversation[];
     activeConversation: ActiveConversation | null;
+    contactLabels: ContactLabel[];
+    assignedLabels: ContactLabel[];
     messages: Message[];
     funnels: WhatsappFunnel[];
     quickReplies: QuickReply[];
@@ -60,6 +68,7 @@ interface AtendimentoWorkspaceProps {
         trigger: FunnelTriggerLocation,
     ) => void;
     onSendMessage: () => void;
+    onAttachmentSent: (conversationId: number, message: Message) => void;
     onReactToMessage: (message: Message, reaction: string) => void;
 }
 
@@ -231,6 +240,8 @@ function ContactAvatar({
 export function AtendimentoWorkspace({
     conversations,
     activeConversation,
+    contactLabels,
+    assignedLabels,
     messages,
     funnels,
     quickReplies,
@@ -251,6 +262,7 @@ export function AtendimentoWorkspace({
     onOpenProducts,
     onOpenFunnel,
     onSendMessage,
+    onAttachmentSent,
     onReactToMessage,
 }: AtendimentoWorkspaceProps) {
     const [inboxMode, setInboxMode] = useState<InboxMode>('all');
@@ -595,19 +607,44 @@ export function AtendimentoWorkspace({
                                     </div>
                                 </div>
                             </div>
-                            <button
-                                type="button"
-                                onClick={onOpenProducts}
-                                disabled={
-                                    sending || sendingProduct || funnelRunning
-                                }
-                                className="hidden min-h-10 items-center gap-2 border border-[#f6f4f0]/14 px-4 text-xs font-bold text-[#f6f4f0] hover:border-[#ff4d3d] disabled:cursor-not-allowed disabled:opacity-45 sm:flex"
-                            >
-                                <Shirt className="size-4 text-[#ff4d3d]" />
-                                Apresentar coleção
-                            </button>
+                            <div className="flex shrink-0 items-center gap-2">
+                                {!activeConversation.is_group && (
+                                    <ContactLabelEditor
+                                        key={activeConversation.id}
+                                        contact={{
+                                            id: activeConversation.id,
+                                            name: activeConversation.display_name,
+                                            labels: assignedLabels,
+                                        }}
+                                        labels={contactLabels}
+                                        compact
+                                        chat
+                                    />
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={onOpenProducts}
+                                    disabled={
+                                        sending ||
+                                        sendingProduct ||
+                                        funnelRunning
+                                    }
+                                    className="hidden min-h-10 items-center gap-2 border border-[#f6f4f0]/14 px-4 text-xs font-bold text-[#f6f4f0] hover:border-[#ff4d3d] disabled:cursor-not-allowed disabled:opacity-45 sm:flex"
+                                >
+                                    <Shirt className="size-4 text-[#ff4d3d]" />
+                                    Apresentar coleção
+                                </button>
+                            </div>
                         </header>
 
+                        {!activeConversation.is_group &&
+                            assignedLabels.length > 0 && (
+                                <div className="flex max-h-20 shrink-0 flex-wrap items-center gap-2 overflow-y-auto border-b border-white/12 px-4 py-2 sm:px-6">
+                                    <ContactLabelChips
+                                        labels={assignedLabels}
+                                    />
+                                </div>
+                            )}
                         <ScrollArea className="min-h-0 flex-1">
                             <div className="mx-auto flex min-h-full max-w-4xl flex-col justify-end gap-4 px-4 py-7 sm:px-7">
                                 {messages.length === 0 && (
@@ -895,106 +932,127 @@ export function AtendimentoWorkspace({
                                     })}
                                 </div>
                                 <div className="flex items-end gap-2">
-                                    <label className="relative min-w-0 flex-1">
-                                        <span className="sr-only">
-                                            Escreva uma resposta
-                                        </span>
-                                        {suggestedQuickReplies.length > 0 && (
-                                            <div
-                                                role="listbox"
-                                                aria-label="Mensagens rápidas"
-                                                className="absolute right-0 bottom-full left-0 z-30 mb-2 border border-[#f6f4f0]/14 bg-[#18181f] p-1 shadow-[0_16px_48px_rgba(0,0,0,0.32)]"
-                                            >
-                                                <div className="flex items-center justify-between border-b border-[#f6f4f0]/10 px-3 py-2">
-                                                    <p className="text-[0.62rem] font-bold tracking-[0.16em] text-[#98968d] uppercase">
-                                                        Mensagens rápidas
-                                                    </p>
-                                                    <span className="text-[0.62rem] text-[#6f6c65]">
-                                                        ↑↓ escolhe · Enter
-                                                        insere
-                                                    </span>
-                                                </div>
-                                                {suggestedQuickReplies.map(
-                                                    (
-                                                        quickReply,
-                                                        indexValue,
-                                                    ) => (
-                                                        <button
-                                                            key={quickReply.id}
-                                                            type="button"
-                                                            role="option"
-                                                            aria-selected={
-                                                                indexValue ===
-                                                                highlightedQuickReply
-                                                            }
-                                                            onMouseDown={(
-                                                                event,
-                                                            ) => {
-                                                                event.preventDefault();
-                                                                insertQuickReply(
-                                                                    quickReply,
-                                                                );
-                                                            }}
-                                                            className={`grid w-full grid-cols-[8.5rem_minmax(0,1fr)] items-center gap-3 px-3 py-2.5 text-left ${
-                                                                indexValue ===
-                                                                highlightedQuickReply
-                                                                    ? 'bg-[#2a1725]'
-                                                                    : 'hover:bg-white/[0.035]'
-                                                            }`}
-                                                        >
-                                                            <span className="truncate font-zouth-display text-sm font-semibold text-[#ff4d3d]">
-                                                                {'{'}
-                                                                {
-                                                                    quickReply.shortcut
-                                                                }
-                                                                {'}'}
-                                                            </span>
-                                                            <span className="truncate text-xs text-[#cac4ba]">
-                                                                {
-                                                                    quickReply.title
-                                                                }
-                                                            </span>
-                                                        </button>
-                                                    ),
-                                                )}
-                                            </div>
-                                        )}
-                                        <textarea
-                                            ref={inputRef}
-                                            value={messageInput}
-                                            onChange={handleMessageChange}
-                                            onKeyDown={handleComposerKeyDown}
-                                            onSelect={(event) =>
-                                                setComposerCursor(
-                                                    event.currentTarget
-                                                        .selectionStart ??
-                                                        event.currentTarget
-                                                            .value.length,
-                                                )
-                                            }
-                                            rows={2}
-                                            placeholder={
-                                                funnelRunning
-                                                    ? 'Cadência em andamento…'
-                                                    : 'Escreva uma resposta…'
-                                            }
-                                            disabled={sending || funnelRunning}
-                                            className="block min-h-14 w-full resize-none rounded-[2px] border border-[#f6f4f0]/14 bg-[#101015] px-3 py-2.5 text-sm leading-5 text-[#f6f4f0] outline-none placeholder:text-[#98968d] focus:border-[#ff4d3d] focus:ring-2 focus:ring-[#ff4d3d]/20 disabled:cursor-not-allowed disabled:opacity-50"
-                                        />
-                                    </label>
-                                    <button
-                                        type="button"
-                                        onClick={onSendMessage}
+                                    <ChatAttachments
+                                        key={activeConversation.id}
+                                        conversationId={activeConversation.id}
                                         disabled={
-                                            !messageInput.trim() ||
                                             sending ||
+                                            sendingProduct ||
                                             funnelRunning
                                         }
-                                        className="flex size-14 shrink-0 items-center justify-center bg-[#ff4d3d] text-[#18181f] hover:bg-[#ff6a5c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f6f4f0] disabled:cursor-not-allowed disabled:opacity-35"
-                                        aria-label="Enviar mensagem"
+                                        onSent={onAttachmentSent}
+                                        hasText={messageInput.trim().length > 0}
                                     >
-                                        <Send className="size-5" />
-                                    </button>
+                                        <label className="relative min-w-0 flex-1">
+                                            <span className="sr-only">
+                                                Escreva uma resposta
+                                            </span>
+                                            {suggestedQuickReplies.length >
+                                                0 && (
+                                                <div
+                                                    role="listbox"
+                                                    aria-label="Mensagens rápidas"
+                                                    className="absolute right-0 bottom-full left-0 z-30 mb-2 border border-[#f6f4f0]/14 bg-[#18181f] p-1 shadow-[0_16px_48px_rgba(0,0,0,0.32)]"
+                                                >
+                                                    <div className="flex items-center justify-between border-b border-[#f6f4f0]/10 px-3 py-2">
+                                                        <p className="text-[0.62rem] font-bold tracking-[0.16em] text-[#98968d] uppercase">
+                                                            Mensagens rápidas
+                                                        </p>
+                                                        <span className="text-[0.62rem] text-[#6f6c65]">
+                                                            ↑↓ escolhe · Enter
+                                                            insere
+                                                        </span>
+                                                    </div>
+                                                    {suggestedQuickReplies.map(
+                                                        (
+                                                            quickReply,
+                                                            indexValue,
+                                                        ) => (
+                                                            <button
+                                                                key={
+                                                                    quickReply.id
+                                                                }
+                                                                type="button"
+                                                                role="option"
+                                                                aria-selected={
+                                                                    indexValue ===
+                                                                    highlightedQuickReply
+                                                                }
+                                                                onMouseDown={(
+                                                                    event,
+                                                                ) => {
+                                                                    event.preventDefault();
+                                                                    insertQuickReply(
+                                                                        quickReply,
+                                                                    );
+                                                                }}
+                                                                className={`grid w-full grid-cols-[8.5rem_minmax(0,1fr)] items-center gap-3 px-3 py-2.5 text-left ${
+                                                                    indexValue ===
+                                                                    highlightedQuickReply
+                                                                        ? 'bg-[#2a1725]'
+                                                                        : 'hover:bg-white/[0.035]'
+                                                                }`}
+                                                            >
+                                                                <span className="truncate font-zouth-display text-sm font-semibold text-[#ff4d3d]">
+                                                                    {'{'}
+                                                                    {
+                                                                        quickReply.shortcut
+                                                                    }
+                                                                    {'}'}
+                                                                </span>
+                                                                <span className="truncate text-xs text-[#cac4ba]">
+                                                                    {
+                                                                        quickReply.title
+                                                                    }
+                                                                </span>
+                                                            </button>
+                                                        ),
+                                                    )}
+                                                </div>
+                                            )}
+                                            <textarea
+                                                ref={inputRef}
+                                                value={messageInput}
+                                                onChange={handleMessageChange}
+                                                onKeyDown={
+                                                    handleComposerKeyDown
+                                                }
+                                                onSelect={(event) =>
+                                                    setComposerCursor(
+                                                        event.currentTarget
+                                                            .selectionStart ??
+                                                            event.currentTarget
+                                                                .value.length,
+                                                    )
+                                                }
+                                                rows={2}
+                                                placeholder={
+                                                    funnelRunning
+                                                        ? 'Cadência em andamento…'
+                                                        : 'Escreva uma resposta…'
+                                                }
+                                                disabled={
+                                                    sending || funnelRunning
+                                                }
+                                                className="block min-h-14 w-full resize-none rounded-[2px] border border-[#f6f4f0]/14 bg-[#101015] px-3 py-2.5 text-sm leading-5 text-[#f6f4f0] outline-none placeholder:text-[#98968d] focus:border-[#ff4d3d] focus:ring-2 focus:ring-[#ff4d3d]/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                            />
+                                        </label>
+                                        {messageInput.trim() && (
+                                            <button
+                                                type="button"
+                                                onClick={onSendMessage}
+                                                disabled={
+                                                    !messageInput.trim() ||
+                                                    sending ||
+                                                    funnelRunning
+                                                }
+                                                className="flex size-14 shrink-0 items-center justify-center bg-[#ff4d3d] text-[#18181f] hover:bg-[#ff6a5c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f6f4f0] disabled:cursor-not-allowed disabled:opacity-35"
+                                                aria-label="Enviar mensagem"
+                                            >
+                                                <Send className="size-5" />
+                                            </button>
+                                        )}
+                                    </ChatAttachments>
                                 </div>
                                 <p className="mt-1.5 hidden text-[0.62rem] text-[#6f6c65] sm:block">
                                     Enter envia · Shift + Enter cria uma nova

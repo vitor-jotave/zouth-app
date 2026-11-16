@@ -21,6 +21,7 @@ use App\Http\Controllers\Manufacturer\RepresentativeInvitationController;
 use App\Http\Controllers\Manufacturer\UserController as ManufacturerUserController;
 use App\Http\Controllers\Manufacturer\WhatsappAutomationController;
 use App\Http\Controllers\Manufacturer\WhatsappChatController;
+use App\Http\Controllers\Manufacturer\WhatsappContactController;
 use App\Http\Controllers\Manufacturer\WhatsappFunnelController;
 use App\Http\Controllers\Manufacturer\WhatsappInstanceController;
 use App\Http\Controllers\Manufacturer\WhatsappQuickReplyController;
@@ -301,10 +302,17 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant', 'manufacturer.enti
             Route::delete('instances/{instance}', [WhatsappInstanceController::class, 'destroy'])->name('instances.destroy');
 
             Route::get('/', [WhatsappChatController::class, 'index'])->name('index');
+            Route::get('contatos', [WhatsappContactController::class, 'index'])->name('contacts.index');
+            Route::post('contatos/etiquetas', [WhatsappContactController::class, 'storeLabel'])->name('contacts.labels.store');
+            Route::put('contatos/{conversation}/etiquetas/{label}', [WhatsappContactController::class, 'updateLabel'])->name('contacts.labels.update');
+            Route::post('pedidos/{order}/abrir', [WhatsappContactController::class, 'openOrder'])
+                ->middleware('manufacturer.capability:orders.manage')->name('orders.open');
             Route::get('products', [WhatsappChatController::class, 'products'])->name('products');
             Route::get('conversations/list', [WhatsappChatController::class, 'conversationsList'])->name('conversations.list');
             Route::get('conversations/{conversation}/messages', [WhatsappChatController::class, 'messages'])->name('conversations.messages');
             Route::post('conversations/{conversation}/messages', [WhatsappChatController::class, 'sendMessage'])->name('conversations.send');
+            Route::post('conversations/{conversation}/attachments', [WhatsappChatController::class, 'sendAttachment'])
+                ->middleware('throttle:20,1')->name('conversations.attachments');
             Route::get('messages/{message}/media', [WhatsappChatController::class, 'media'])->name('messages.media');
             Route::post('messages/{message}/reaction', [WhatsappChatController::class, 'react'])->name('messages.reaction');
             Route::post('conversations/{conversation}/products/pdf', [WhatsappChatController::class, 'sendProductsPdf'])->name('conversations.products.pdf');

@@ -206,6 +206,11 @@ function useNavItems() {
                     collapseSidebarOnNavigate: true,
                 },
                 {
+                    title: 'Contatos',
+                    href: manufacturer.atendimento.contacts.index(),
+                    icon: Users,
+                },
+                {
                     title: 'Funis',
                     href: '/manufacturer/atendimento/funis',
                     icon: Route,

@@ -12,6 +12,7 @@ use App\Models\ManufacturerAffiliation;
 use App\Models\Order;
 use App\Services\OrderService;
 use App\Services\TenantManager;
+use App\Support\WhatsappContactPhone;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -234,6 +235,10 @@ class OrderController extends Controller
 
         return Inertia::render('manufacturer/orders/show', [
             'order' => (new OrderResource($order))->resolve($request),
+            'whatsapp_contact' => $request->user()->hasManufacturerCapability(ManufacturerCapability::Whatsapp) ? [
+                'valid_phone' => WhatsappContactPhone::normalize($order->customer_phone) !== null,
+                'connected' => $request->user()->currentManufacturer->whatsappInstances()->first()?->isConnected() ?? false,
+            ] : null,
             'representative_return' => $representative ? [
                 'id' => $representative->id,
                 'query' => [

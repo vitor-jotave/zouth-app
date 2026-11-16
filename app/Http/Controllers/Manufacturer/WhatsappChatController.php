@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Manufacturer;
 
 use App\Enums\ProductMediaType;
+use App\Enums\WhatsappInstanceStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\SendWhatsappAttachmentRequest;
 use App\Http\Requests\SendWhatsappMessageRequest;
 use App\Http\Requests\SendWhatsappProductMessageRequest;
 use App\Http\Requests\SendWhatsappProductPdfRequest;
@@ -11,12 +13,15 @@ use App\Http\Requests\SendWhatsappReactionRequest;
 use App\Http\Resources\WhatsappProductResource;
 use App\Models\Product;
 use App\Models\ProductMedia;
+use App\Models\WhatsappContactLabel;
 use App\Models\WhatsappConversation;
 use App\Models\WhatsappFunnel;
+use App\Models\WhatsappInstance;
 use App\Models\WhatsappMessage;
 use App\Models\WhatsappQuickReply;
 use App\Services\EvolutionApiService;
 use App\Services\ProductCatalogPdfService;
+use App\Services\WhatsappChatAttachment;
 use App\Services\WhatsappContactProfileSyncService;
 use App\Services\WhatsappMessageReactionService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -24,6 +29,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -32,6 +38,8 @@ use Throwable;
 class WhatsappChatController extends Controller
 {
     use AuthorizesRequests;
+
+    private const CHANNEL_OFFLINE = 'O canal de WhatsApp está desconectado ou aguardando pareamento. Abra Atendimento → Canais para reconectar.';
 
     public function __construct(
         protected EvolutionApiService $evolution,
@@ -78,7 +86,7 @@ class WhatsappChatController extends Controller
                 'contact_name' => $conversation->contact_name,
                 'contact_phone' => $conversation->contact_phone,
                 'contact_picture_url' => $conversation->contact_picture_url,
-                'display_name' => $conversation->displayName(),
+                'display_name' => $conversation->displayName($instance->profile_name, $manufacturer->name),
                 'last_message_body' => $conversation->last_message_body,
                 'last_message_from_me' => $conversation->last_message_from_me,
                 'last_message_at' => $conversation->last_message_at?->toIso8601String(),
@@ -117,8 +125,12 @@ class WhatsappChatController extends Controller
                 'contact_name' => $activeConversation->contact_name,
                 'contact_phone' => $activeConversation->contact_phone,
                 'contact_picture_url' => $activeConversation->contact_picture_url,
-                'display_name' => $activeConversation->displayName(),
+                'display_name' => $activeConversation->displayName($instance->profile_name, $manufacturer->name),
             ] : null,
+            'contact_labels' => fn () => WhatsappContactLabel::query()->where('manufacturer_id', $manufacturer->id)->orderBy('name')->get(['id', 'name', 'color']),
+            'active_contact_labels' => fn () => $activeConversation && ! $activeConversation->is_group
+                ? $activeConversation->contactLabels()->where('manufacturer_id', $manufacturer->id)->orderBy('name')->get(['whatsapp_contact_labels.id', 'name', 'color'])->map(fn (WhatsappContactLabel $label): array => $label->only(['id', 'name', 'color']))
+                : [],
             'messages' => $messages,
             'quick_replies' => $quickReplies,
             'funnels' => WhatsappFunnel::query()
@@ -174,6 +186,10 @@ class WhatsappChatController extends Controller
         $body = $request->validated('body');
         $instance = $conversation->instance;
 
+        if (! $instance->isConnected()) {
+            return response()->json(['error' => self::CHANNEL_OFFLINE], 422);
+        }
+
         $response = $this->evolution->sendText(
             $instance->instance_name,
             $conversation->remote_jid,
@@ -181,6 +197,10 @@ class WhatsappChatController extends Controller
         );
 
         if (! $response->successful()) {
+            if ($this->channelNeedsPairing($instance)) {
+                return response()->json(['error' => self::CHANNEL_OFFLINE], 422);
+            }
+
             return response()->json(['error' => 'Erro ao enviar mensagem.'], 422);
         }
 
@@ -208,6 +228,89 @@ class WhatsappChatController extends Controller
         ]);
     }
 
+    public function sendAttachment(SendWhatsappAttachmentRequest $request, WhatsappConversation $conversation, WhatsappChatAttachment $attachments): JsonResponse
+    {
+        $this->authorize('sendMessage', $conversation);
+        $instance = $conversation->instance;
+        if (! $instance->isConnected()) {
+            return response()->json(['message' => self::CHANNEL_OFFLINE], 422);
+        }
+
+        $disk = Storage::disk('s3');
+        try {
+            $media = $attachments->store($request->file('attachment'), $instance->manufacturer_id, $request->boolean('recorded'));
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json(['message' => 'Não foi possível preparar o anexo. Tente novamente.'], 502);
+        }
+
+        try {
+            if ($media['type'] === 'audio') {
+                $audio = $disk->get($media['path']);
+                if ($audio === null || $audio === '') {
+                    throw new \RuntimeException('Não foi possível ler o áudio preparado.');
+                }
+
+                $response = $this->evolution->sendWhatsAppAudio($instance->instance_name, $conversation->remote_jid, base64_encode($audio));
+            } else {
+                $url = $disk->temporaryUrl($media['path'], now()->addMinutes(10));
+                $response = $this->evolution->sendMedia($instance->instance_name, $conversation->remote_jid, $media['type'], $media['mime'], $url, $media['name'], '');
+            }
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json(['message' => 'Não foi possível confirmar o envio. Confira o histórico antes de tentar de novo.'], 502);
+        }
+
+        if (! $response->successful()) {
+            $disk->delete($media['path']);
+
+            logger()->warning('Evolution recusou mídia do chat.', [
+                'conversation_id' => $conversation->id,
+                'media_type' => $media['type'],
+                'status' => $response->status(),
+            ]);
+
+            if ($this->channelNeedsPairing($instance)) {
+                return response()->json(['message' => self::CHANNEL_OFFLINE], 422);
+            }
+
+            return response()->json(['message' => $media['type'] === 'audio'
+                ? 'O WhatsApp não aceitou este áudio. Tente novamente.'
+                : 'O WhatsApp não aceitou este anexo. Tente novamente.'], 422);
+        }
+
+        $message = $conversation->messages()->updateOrCreate(
+            ['message_id' => $response->json('key.id') ?: Str::uuid()->toString()],
+            [
+                'from_me' => true,
+                'body' => '',
+                'media_type' => $media['type'],
+                'media_url' => $disk->url($media['path']),
+                'media_mimetype' => $media['mime'],
+                'media_file_name' => $media['name'],
+                'status' => 'sent',
+                'message_timestamp' => now(),
+            ],
+        );
+        $preview = match ($media['type']) {
+            'audio' => 'Mensagem de voz',
+            'image' => 'Foto',
+            'video' => 'Vídeo',
+            default => $media['name'],
+        };
+        $conversation->update([
+            'last_message_body' => $preview,
+            'last_message_from_me' => true,
+            'last_message_at' => $message->message_timestamp,
+        ]);
+
+        return response()->json(['message' => $this->messagePayload($message)]);
+    }
+
     public function media(WhatsappMessage $message): StreamedResponse
     {
         $message->loadMissing('conversation');
@@ -230,6 +333,7 @@ class WhatsappChatController extends Controller
                 'Cache-Control' => 'private, max-age=3600',
                 'Content-Type' => $message->media_mimetype ?: 'application/octet-stream',
             ],
+            $message->media_type === 'document' && str_starts_with($path, 'whatsapp-chat/') ? 'attachment' : 'inline',
         );
     }
 
@@ -479,7 +583,7 @@ class WhatsappChatController extends Controller
                 'contact_name' => $conversation->contact_name,
                 'contact_phone' => $conversation->contact_phone,
                 'contact_picture_url' => $conversation->contact_picture_url,
-                'display_name' => $conversation->displayName(),
+                'display_name' => $conversation->displayName($instance->profile_name, $manufacturer->name),
                 'last_message_body' => $conversation->last_message_body,
                 'last_message_from_me' => $conversation->last_message_from_me,
                 'last_message_at' => $conversation->last_message_at?->toIso8601String(),
@@ -492,6 +596,35 @@ class WhatsappChatController extends Controller
     /**
      * @param  array{include_photo: bool, include_price: bool, include_description: bool, include_sku: bool}  $options
      */
+    private function channelNeedsPairing(WhatsappInstance $instance): bool
+    {
+        try {
+            $response = $this->evolution->connectionState($instance->instance_name);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return false;
+        }
+
+        if (! $response->successful()) {
+            return false;
+        }
+
+        $status = match ($response->json('instance.state') ?? $response->json('state')) {
+            'connecting' => WhatsappInstanceStatus::Connecting,
+            'close', 'refused' => WhatsappInstanceStatus::Disconnected,
+            default => null,
+        };
+
+        if ($status === null) {
+            return false;
+        }
+
+        $instance->update(['status' => $status]);
+
+        return true;
+    }
+
     private function buildProductCaption(Product $product, array $options): string
     {
         $lines = ["*{$product->name}*"];

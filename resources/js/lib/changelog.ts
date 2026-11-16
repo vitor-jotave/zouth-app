@@ -19,6 +19,51 @@ type ChangelogRelease = {
 
 export const changelog = [
     {
+        id: '2026-11-16-atendimento-whatsapp',
+        date: '2026-11-16',
+        title: 'Um atendimento mais completo no WhatsApp.',
+        summary:
+            'Organize seus contatos, responda com áudio e compartilhe uma seleção de peças sem sair do Chat.',
+        updates: [
+            {
+                kind: 'novidade',
+                title: 'Contatos e etiquetas',
+                description:
+                    'Encontre conversas na aba Contatos e organize os lojistas com etiquetas, disponíveis na lista e no Chat.',
+            },
+            {
+                kind: 'novidade',
+                title: 'Atendimento direto do pedido',
+                description:
+                    'Use Abrir no atendimento para chegar à conversa do lojista sem duplicar o contato nem enviar uma mensagem automática.',
+            },
+            {
+                kind: 'novidade',
+                title: 'Mensagens de voz e anexos',
+                description:
+                    'Grave uma mensagem de voz direto no Chat, confira a gravação e envie quando quiser. Ao anexar um arquivo, a Zouth identifica se é foto, vídeo, áudio ou documento.',
+            },
+            {
+                kind: 'correção',
+                title: 'Nome certo na conversa',
+                description:
+                    'O nome do fabricante não aparece mais no lugar do nome do contato. Se não houver nome disponível, o Chat mostra o número ou o identificador.',
+            },
+            {
+                kind: 'correção',
+                title: 'Reconexão sem perder o histórico',
+                description:
+                    'Se o canal cair, o Chat orienta a reconectar. As conversas já salvas permanecem na Zouth ao parear o mesmo número ou outro.',
+            },
+            {
+                kind: 'melhoria',
+                title: 'Novo PDF para apresentar a coleção',
+                description:
+                    'Envie as peças selecionadas em um PDF A4 com a logo da Zouth e um item por linha. Você escolhe se quer incluir foto, preço, referência e descrição.',
+            },
+        ],
+    },
+    {
         id: '2026-11-16-portal-representantes',
         date: '2026-11-16',
         title: 'Mais ferramentas para representar e vender.',

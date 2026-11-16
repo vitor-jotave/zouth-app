@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\ManufacturerCapability;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Vite;
@@ -25,7 +26,8 @@ class AddSecurityHeaders
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('X-Frame-Options', 'SAMEORIGIN');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
-        $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+        $microphone = $request->user()?->hasManufacturerCapability(ManufacturerCapability::Whatsapp) ? 'self' : '';
+        $response->headers->set('Permissions-Policy', "camera=(), microphone=({$microphone}), geolocation=()");
 
         if (app()->environment('production')) {
             $imageSources = $this->imageSources();

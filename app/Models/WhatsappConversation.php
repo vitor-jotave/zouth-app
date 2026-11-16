@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class WhatsappConversation extends Model
@@ -44,6 +45,11 @@ class WhatsappConversation extends Model
         return $this->hasMany(WhatsappMessage::class);
     }
 
+    public function contactLabels(): BelongsToMany
+    {
+        return $this->belongsToMany(WhatsappContactLabel::class, 'whatsapp_contact_label_links', 'conversation_id', 'label_id');
+    }
+
     public function markIncomingMessagesRead(): void
     {
         $this->getConnection()->transaction(function (): void {
@@ -61,8 +67,17 @@ class WhatsappConversation extends Model
     /**
      * Get a display name for this conversation.
      */
-    public function displayName(): string
+    public function displayName(?string ...$ownNames): string
     {
-        return $this->contact_name ?? $this->contact_phone ?? $this->remote_jid;
+        $name = trim($this->contact_name ?? '');
+        if ($name !== '' && ($this->is_group || ! in_array(
+            mb_strtolower($name),
+            array_map(fn (?string $ownName): string => mb_strtolower(trim($ownName ?? '')), $ownNames),
+            true,
+        ))) {
+            return $name;
+        }
+
+        return filled($this->contact_phone) ? $this->contact_phone : $this->remote_jid;
     }
 }

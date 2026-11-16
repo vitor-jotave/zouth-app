@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Enums\ProductMediaType;
-use App\Models\CatalogSetting;
 use App\Models\Manufacturer;
 use App\Models\Product;
 use App\Models\ProductMedia;
@@ -20,9 +19,17 @@ class ProductCatalogPdfService
 
     private const PAGE_HEIGHT = 1754;
 
-    private const MARGIN = 80;
+    private const A4_WIDTH_POINTS = 595.28;
 
-    private const PRODUCTS_PER_PAGE = 4;
+    private const A4_HEIGHT_POINTS = 841.89;
+
+    private const MARGIN = 112;
+
+    private const CHARCOAL = '#18181F';
+
+    private const MUTED = '#4C4B52';
+
+    private const RULE = '#B9B6B2';
 
     /**
      * @param  Collection<int, Product>  $products
@@ -35,11 +42,18 @@ class ProductCatalogPdfService
         $brandName = $catalogSetting?->brand_name ?: $manufacturer->name;
         $pagePaths = [];
 
-        foreach ($products->values()->chunk(self::PRODUCTS_PER_PAGE) as $pageIndex => $pageProducts) {
-            $pagePaths[] = $this->renderPage($manufacturer, $catalogSetting, $brandName, $pageProducts, $options, $pageIndex);
-        }
+        $pages = $products->values()->chunk($options['include_photo'] ? 2 : 5);
+        try {
+            foreach ($pages as $pageIndex => $pageProducts) {
+                $pagePaths[] = $this->renderPage($brandName, $pageProducts, $options, $products->count(), $pageIndex + 1, $pages->count());
+            }
 
-        $pdfContent = $this->buildPdfFromJpegs($pagePaths);
+            $pdfContent = $this->buildPdfFromJpegs($pagePaths);
+        } finally {
+            foreach ($pagePaths as $pagePath) {
+                @unlink($pagePath);
+            }
+        }
         $fileName = 'catalogo-produtos-'.Str::slug($brandName).'-'.now()->format('Ymd-His').'-'.Str::lower(Str::random(6)).'.pdf';
         $path = 'whatsapp-product-catalogs/'.$fileName;
         $disk = $this->catalogMediaDisk();
@@ -47,10 +61,6 @@ class ProductCatalogPdfService
         Storage::disk($disk)->put($path, $pdfContent, [
             'ContentType' => 'application/pdf',
         ]);
-
-        foreach ($pagePaths as $pagePath) {
-            @unlink($pagePath);
-        }
 
         return [
             'path' => $path,
@@ -64,33 +74,35 @@ class ProductCatalogPdfService
      * @param  array{include_photo: bool, include_price: bool, include_description: bool, include_sku: bool}  $options
      */
     private function renderPage(
-        Manufacturer $manufacturer,
-        ?CatalogSetting $catalogSetting,
         string $brandName,
         Collection $products,
         array $options,
-        int $pageIndex
+        int $productCount,
+        int $page,
+        int $pageCount
     ): string {
         $image = imagecreatetruecolor(self::PAGE_WIDTH, self::PAGE_HEIGHT);
         imagefill($image, 0, 0, $this->color($image, '#FFFFFF'));
 
-        $primaryColor = $catalogSetting?->primary_color ?: '#0F766E';
-        $secondaryColor = $catalogSetting?->secondary_color ?: '#0F172A';
+        $right = self::PAGE_WIDTH - self::MARGIN;
+        $this->drawLogo($image, self::MARGIN, 99);
+        $this->drawRightText($image, $this->fitText(mb_strtoupper($brandName), 25, 560, true), 25, $right, 137, self::CHARCOAL, true);
+        $this->drawRule($image, 182);
+        $this->drawText($image, 'Seleção de peças', 51, self::MARGIN, 309, self::CHARCOAL, true);
+        $this->drawText($image, 'Atacado · '.$productCount.($productCount === 1 ? ' peça' : ' peças'), 27, self::MARGIN, 366, self::MUTED);
 
-        imagefilledrectangle($image, 0, 0, self::PAGE_WIDTH, 170, $this->color($image, '#F8FAFC'));
-        $this->drawLogo($image, $catalogSetting, self::MARGIN, 48);
-        $this->drawText($image, $brandName, 30, 260, 68, $secondaryColor, true);
-        $this->drawText($image, 'Produtos selecionados para atendimento', 18, 260, 105, '#64748B');
-
-        $startY = 220;
-        $cardHeight = 330;
-
+        $rowHeight = $options['include_photo'] ? 595 : 237;
         foreach ($products->values() as $index => $product) {
-            $this->drawProduct($image, $product, $options, self::MARGIN, $startY + ($index * ($cardHeight + 24)), self::PAGE_WIDTH - (self::MARGIN * 2), $cardHeight, $primaryColor, $secondaryColor);
+            $rowTop = 421 + ($index * $rowHeight);
+            if ($index > 0) {
+                $this->drawRule($image, $rowTop - 20);
+            }
+            $this->drawProduct($image, $product, $options, $rowTop);
         }
 
-        $this->drawText($image, 'Gerado em '.now()->format('d/m/Y H:i').' - '.$manufacturer->name, 13, self::MARGIN, self::PAGE_HEIGHT - 45, '#94A3B8');
-        $this->drawText($image, 'Página '.($pageIndex + 1), 13, self::PAGE_WIDTH - 150, self::PAGE_HEIGHT - 45, '#94A3B8');
+        $this->drawRule($image, 1608);
+        $this->drawText($image, $this->fitText($brandName, 22, 760), 22, self::MARGIN, 1659, self::MUTED);
+        $this->drawRightText($image, sprintf('%02d / %02d', $page, $pageCount), 22, $right, 1659, self::MUTED);
 
         $directory = storage_path('app/private/whatsapp-product-catalog-pages');
         File::ensureDirectoryExists($directory);
@@ -105,65 +117,56 @@ class ProductCatalogPdfService
     /**
      * @param  array{include_photo: bool, include_price: bool, include_description: bool, include_sku: bool}  $options
      */
-    private function drawProduct(GdImage $image, Product $product, array $options, int $x, int $y, int $width, int $height, string $primaryColor, string $secondaryColor): void
+    private function drawProduct(GdImage $image, Product $product, array $options, int $y): void
     {
-        imagefilledrectangle($image, $x, $y, $x + $width, $y + $height, $this->color($image, '#FFFFFF'));
-        imagerectangle($image, $x, $y, $x + $width, $y + $height, $this->color($image, '#E2E8F0'));
-
-        $textX = $x + 36;
+        $textX = self::MARGIN;
+        $right = self::PAGE_WIDTH - self::MARGIN;
 
         if ($options['include_photo']) {
             $media = $this->primaryImage($product);
-
-            if ($media) {
-                $productImage = $this->imageFromStorage('s3', $media->path);
-
-                if ($productImage) {
-                    $this->drawFittedImage($image, $productImage, $x + 28, $y + 32, 250, 250);
-                    unset($productImage);
-                } else {
-                    $this->drawImagePlaceholder($image, $x + 28, $y + 32, 250, 250);
-                }
+            $productImage = $media ? $this->imageFromStorage('s3', $media->path) : null;
+            if ($productImage) {
+                $this->drawFittedImage($image, $productImage, self::MARGIN, $y, 315, 534);
             } else {
-                $this->drawImagePlaceholder($image, $x + 28, $y + 32, 250, 250);
+                $this->drawImagePlaceholder($image, self::MARGIN, $y, 315, 534);
             }
 
-            $textX = $x + 315;
+            $textX += 350;
         }
 
-        $currentY = $y + 50;
-        $this->drawWrappedText($image, $product->name, 24, $textX, $currentY, $width - ($textX - $x) - 36, $secondaryColor, true, 2);
-        $currentY += 72;
-
-        if ($options['include_price'] && $product->price_cents !== null) {
-            imagefilledrectangle($image, $textX, $currentY - 24, $textX + 190, $currentY + 18, $this->color($image, '#ECFDF5'));
-            $this->drawText($image, $this->formatPrice($product->price_cents), 18, $textX + 16, $currentY + 5, $primaryColor, true);
-            $currentY += 58;
+        $currentY = $y + ($options['include_photo'] ? 85 : 47);
+        $price = $options['include_price'] && $product->price_cents !== null ? $this->formatPrice($product->price_cents) : null;
+        $priceWidth = $price === null ? 0 : $this->textWidth($price, 26, true) + 26;
+        $nameLines = $options['include_photo'] ? 2 : 1;
+        $currentY += $this->drawWrappedText($image, $product->name, 32, $textX, $currentY, $right - $textX - $priceWidth, self::CHARCOAL, true, $nameLines) * 44;
+        if ($price !== null) {
+            $this->drawRightText($image, $price, 26, $right, $y + ($options['include_photo'] ? 85 : 47), self::CHARCOAL, true);
         }
 
         if ($options['include_sku'] && filled($product->sku)) {
-            $this->drawText($image, 'SKU: '.$product->sku, 15, $textX, $currentY, '#64748B');
-            $currentY += 34;
+            $this->drawText($image, $this->fitText('REF. '.$product->sku, 23, $right - $textX), 23, $textX, $currentY, self::MUTED);
+            $currentY += 48;
         }
 
         if ($options['include_description'] && filled($product->description)) {
-            $this->drawWrappedText($image, (string) $product->description, 16, $textX, $currentY, $width - ($textX - $x) - 36, '#334155', false, 4);
+            $this->drawWrappedText($image, (string) $product->description, 23, $textX, $currentY + 12, $right - $textX, self::MUTED, false, $options['include_photo'] ? 7 : 2);
         }
     }
 
-    private function drawLogo(GdImage $image, ?CatalogSetting $catalogSetting, int $x, int $y): void
+    private function drawLogo(GdImage $image, int $x, int $y): void
     {
-        $logo = $catalogSetting?->logo_path ? $this->imageFromStorage($this->catalogMediaDisk(), $catalogSetting->logo_path) : null;
+        $logo = imagecreatefrompng(public_path('brand/zouth/assets/logo-duotone-dark.png'));
+        imagecopyresampled($image, $logo, $x, $y, 0, 0, 218, 38, imagesx($logo), imagesy($logo));
+    }
 
-        if ($logo) {
-            $this->drawFittedImage($image, $logo, $x, $y, 140, 70);
-            unset($logo);
+    private function drawRule(GdImage $image, int $y): void
+    {
+        imageline($image, self::MARGIN, $y, self::PAGE_WIDTH - self::MARGIN, $y, $this->color($image, self::RULE));
+    }
 
-            return;
-        }
-
-        imagefilledrectangle($image, $x, $y, $x + 140, $y + 70, $this->color($image, '#0F172A'));
-        $this->drawText($image, 'Zouth', 22, $x + 24, $y + 44, '#FFFFFF', true);
+    private function drawRightText(GdImage $image, string $text, int $size, int $right, int $baseline, string $color, bool $bold = false): void
+    {
+        $this->drawText($image, $text, $size, $right - $this->textWidth($text, $size, $bold), $baseline, $color, $bold);
     }
 
     private function catalogMediaDisk(): string
@@ -173,22 +176,31 @@ class ProductCatalogPdfService
 
     private function drawImagePlaceholder(GdImage $image, int $x, int $y, int $width, int $height): void
     {
-        imagefilledrectangle($image, $x, $y, $x + $width, $y + $height, $this->color($image, '#F1F5F9'));
-        imagerectangle($image, $x, $y, $x + $width, $y + $height, $this->color($image, '#CBD5E1'));
-        $this->drawText($image, 'Sem foto', 15, $x + 78, $y + 132, '#64748B');
+        imagefilledrectangle($image, $x, $y, $x + $width - 1, $y + $height - 1, $this->color($image, '#F6F4F0'));
+        $label = 'Sem foto';
+        $this->drawText($image, $label, 19, $x + intdiv($width - $this->textWidth($label, 19), 2), $y + intdiv($height, 2), self::MUTED);
     }
 
     private function drawFittedImage(GdImage $canvas, GdImage $source, int $x, int $y, int $width, int $height): void
     {
         $sourceWidth = imagesx($source);
         $sourceHeight = imagesy($source);
-        $ratio = min($width / $sourceWidth, $height / $sourceHeight);
-        $targetWidth = (int) round($sourceWidth * $ratio);
-        $targetHeight = (int) round($sourceHeight * $ratio);
+        $fitRatio = min($width / $sourceWidth, $height / $sourceHeight);
+        $fillRatio = max($width / $sourceWidth, $height / $sourceHeight);
+        if ($fitRatio / $fillRatio >= 0.73) {
+            $cropWidth = (int) round($width / $fillRatio);
+            $cropHeight = (int) round($height / $fillRatio);
+            imagecopyresampled($canvas, $source, $x, $y, intdiv($sourceWidth - $cropWidth, 2), intdiv($sourceHeight - $cropHeight, 2), $width, $height, $cropWidth, $cropHeight);
+
+            return;
+        }
+
+        $targetWidth = (int) round($sourceWidth * $fitRatio);
+        $targetHeight = (int) round($sourceHeight * $fitRatio);
         $targetX = $x + (int) floor(($width - $targetWidth) / 2);
         $targetY = $y + (int) floor(($height - $targetHeight) / 2);
 
-        imagefilledrectangle($canvas, $x, $y, $x + $width, $y + $height, $this->color($canvas, '#F8FAFC'));
+        imagefilledrectangle($canvas, $x, $y, $x + $width - 1, $y + $height - 1, $this->color($canvas, '#F6F4F0'));
         imagecopyresampled($canvas, $source, $targetX, $targetY, 0, 0, $targetWidth, $targetHeight, $sourceWidth, $sourceHeight);
     }
 
@@ -249,13 +261,37 @@ class ProductCatalogPdfService
             ->first(fn (ProductMedia $media) => $media->type === ProductMediaType::Image);
     }
 
-    private function drawWrappedText(GdImage $image, string $text, int $size, int $x, int $y, int $maxWidth, string $color, bool $bold = false, int $maxLines = 3): void
+    private function drawWrappedText(GdImage $image, string $text, int $size, int $x, int $y, int $maxWidth, string $color, bool $bold = false, int $maxLines = 3): int
     {
         $lines = $this->wrapText($text, $size, $maxWidth, $bold);
+        $visible = array_slice($lines, 0, $maxLines);
 
-        foreach (array_slice($lines, 0, $maxLines) as $index => $line) {
-            $this->drawText($image, $line, $size, $x, $y + ($index * ($size + 12)), $color, $bold);
+        foreach ($visible as $index => $line) {
+            $suffix = $index === $maxLines - 1 && count($lines) > $maxLines ? '…' : '';
+            $this->drawText($image, $this->fitText($line.$suffix, $size, $maxWidth, $bold), $size, $x, $y + ($index * ($size + 12)), $color, $bold);
         }
+
+        return count($visible);
+    }
+
+    private function fitText(string $text, int $size, int $maxWidth, bool $bold = false): string
+    {
+        if ($this->textWidth($text, $size, $bold) <= $maxWidth) {
+            return $text;
+        }
+
+        $left = 0;
+        $right = mb_strlen($text);
+        while ($left < $right) {
+            $length = intdiv($left + $right + 1, 2);
+            if ($this->textWidth(rtrim(mb_substr($text, 0, $length)).'…', $size, $bold) <= $maxWidth) {
+                $left = $length;
+            } else {
+                $right = $length - 1;
+            }
+        }
+
+        return rtrim(mb_substr($text, 0, $left)).'…';
     }
 
     /**
@@ -292,7 +328,13 @@ class ProductCatalogPdfService
         $font = $this->fontPath($bold);
 
         if ($font) {
-            imagettftext($image, $size, 0, $x, $y, $this->color($image, $color), $font, $text);
+            $ink = $this->color($image, $color);
+            imagettftext($image, $size, 0, $x, $y, $ink, $font, $text);
+            imagettftext($image, $size, 0, $x + 1, $y, $ink, $font, $text);
+            if ($bold) {
+                imagettftext($image, $size, 0, $x, $y + 1, $ink, $font, $text);
+                imagettftext($image, $size, 0, $x + 1, $y + 1, $ink, $font, $text);
+            }
 
             return;
         }
@@ -310,17 +352,19 @@ class ProductCatalogPdfService
 
         $box = imagettfbbox($size, 0, $font, $text);
 
-        return abs($box[2] - $box[0]);
+        return abs($box[2] - $box[0]) + 1;
     }
 
     private function fontPath(bool $bold = false): ?string
     {
         $paths = $bold
             ? [
+                public_path('brand/zouth/assets/sora-variable.ttf'),
                 '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
                 '/Library/Fonts/Arial Bold.ttf',
             ]
             : [
+                public_path('brand/zouth/assets/manrope-variable.ttf'),
                 '/System/Library/Fonts/Supplemental/Arial.ttf',
                 '/Library/Fonts/Arial.ttf',
                 '/System/Library/Fonts/Supplemental/Arial Unicode.ttf',
@@ -355,6 +399,8 @@ class ProductCatalogPdfService
         $objects = [];
         $pageObjectIds = [];
         $nextObjectId = 3;
+        $pageWidth = self::A4_WIDTH_POINTS;
+        $pageHeight = self::A4_HEIGHT_POINTS;
 
         foreach ($jpegPaths as $index => $jpegPath) {
             [$width, $height] = getimagesize($jpegPath);
@@ -363,11 +409,11 @@ class ProductCatalogPdfService
             $contentObjectId = $nextObjectId++;
             $pageObjectId = $nextObjectId++;
             $imageName = 'Im'.($index + 1);
-            $content = "q\n{$width} 0 0 {$height} 0 0 cm\n/{$imageName} Do\nQ";
+            $content = "q\n{$pageWidth} 0 0 {$pageHeight} 0 0 cm\n/{$imageName} Do\nQ";
 
             $objects[$imageObjectId] = "<< /Type /XObject /Subtype /Image /Width {$width} /Height {$height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ".strlen($jpegData)." >>\nstream\n{$jpegData}\nendstream";
             $objects[$contentObjectId] = '<< /Length '.strlen($content)." >>\nstream\n{$content}\nendstream";
-            $objects[$pageObjectId] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {$width} {$height}] /Resources << /XObject << /{$imageName} {$imageObjectId} 0 R >> >> /Contents {$contentObjectId} 0 R >>";
+            $objects[$pageObjectId] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {$pageWidth} {$pageHeight}] /Resources << /XObject << /{$imageName} {$imageObjectId} 0 R >> >> /Contents {$contentObjectId} 0 R >>";
             $pageObjectIds[] = $pageObjectId;
         }
 

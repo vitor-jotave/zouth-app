@@ -13,7 +13,7 @@ use Illuminate\Validation\ValidationException;
 class WhatsappFunnelAudioProcessor
 {
     /** @return array{media_path: string, file_name: string, mimetype: string} */
-    public function store(UploadedFile $file, string $field): array
+    public function store(UploadedFile $file, string $field, string $directory = 'whatsapp-funnels/audio', ?string $visibility = null): array
     {
         $temporaryPath = tempnam(sys_get_temp_dir(), 'zouth-voice-');
 
@@ -39,7 +39,7 @@ class WhatsappFunnelAudioProcessor
             }
 
             $path = Storage::disk('s3')->putFileAs(
-                'whatsapp-funnels/audio', new File($temporaryPath), Str::uuid().'.ogg',
+                $directory, new File($temporaryPath), Str::uuid().'.ogg', $visibility ? ['visibility' => $visibility] : [],
             );
 
             if ($path === false) {

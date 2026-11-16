@@ -114,6 +114,8 @@ class EvolutionWebhookController extends Controller
 
         $isGroup = str_ends_with($remoteJid, '@g.us');
         $body = $this->messageBody($data);
+        $pushName = $data['pushName'] ?? null;
+        $contactName = ! $fromMe && is_string($pushName) && trim($pushName) !== '' ? trim($pushName) : null;
 
         // Find or create conversation
         $conversation = WhatsappConversation::firstOrCreate(
@@ -123,14 +125,14 @@ class EvolutionWebhookController extends Controller
             ],
             [
                 'is_group' => $isGroup,
-                'contact_name' => $data['pushName'] ?? null,
+                'contact_name' => $contactName,
                 'contact_phone' => $isGroup ? null : preg_replace('/@.*/', '', $remoteJid),
             ]
         );
 
         // Update contact name if available
-        if (! empty($data['pushName']) && ! $fromMe) {
-            $conversation->update(['contact_name' => $data['pushName']]);
+        if ($contactName !== null && $conversation->contact_name !== $contactName) {
+            $conversation->update(['contact_name' => $contactName]);
         }
 
         // Create the message (ignore duplicates)

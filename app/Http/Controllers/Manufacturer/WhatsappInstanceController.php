@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class WhatsappInstanceController extends Controller
 {
@@ -166,7 +167,9 @@ class WhatsappInstanceController extends Controller
                         ?? $instanceData['profilePictureUrl']
                         ?? $instance->profile_picture_url,
                 ]);
-            } elseif (in_array($state, ['close', 'refused'])) {
+            } elseif ($state === 'connecting') {
+                $instance->update(['status' => 'connecting']);
+            } elseif (in_array($state, ['close', 'refused'], true)) {
                 $instance->update(['status' => 'disconnected']);
             }
         }
@@ -182,18 +185,31 @@ class WhatsappInstanceController extends Controller
     }
 
     /**
-     * Delete/disconnect a WhatsApp instance.
+     * Disconnect the WhatsApp session without removing the workspace's history.
      */
     public function destroy(WhatsappInstance $instance): RedirectResponse
     {
         $this->authorize('delete', $instance);
 
-        // Try to logout/delete on Evolution API (ignore failures)
-        $this->evolution->logoutInstance($instance->instance_name);
-        $this->evolution->deleteInstance($instance->instance_name);
+        try {
+            $response = $this->evolution->logoutInstance($instance->instance_name);
+        } catch (Throwable $exception) {
+            report($exception);
 
-        $instance->delete();
+            return redirect()->back()->with('error', 'Não foi possível desconectar o canal. Tente novamente.');
+        }
 
-        return redirect()->back()->with('status', 'Instância do WhatsApp removida com sucesso.');
+        if (! $response->successful()) {
+            return redirect()->back()->with('error', 'Não foi possível desconectar o canal. Tente novamente.');
+        }
+
+        $instance->update([
+            'status' => 'disconnected',
+            'phone_number' => null,
+            'profile_name' => null,
+            'profile_picture_url' => null,
+        ]);
+
+        return redirect()->back()->with('status', 'Canal desconectado. Seu histórico continua salvo na Zouth.');
     }
 }
