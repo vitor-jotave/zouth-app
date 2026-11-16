@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\UserType;
+use App\Models\CatalogSetting;
 use App\Models\Manufacturer;
 use App\Models\ManufacturerAffiliation;
 use App\Models\User;
@@ -190,25 +191,40 @@ it('filters manufacturers by affiliation status', function () {
 });
 
 it('allows access to catalog for active affiliations', function () {
-    ManufacturerAffiliation::create([
+    $affiliation = ManufacturerAffiliation::create([
         'manufacturer_id' => $this->manufacturer->id,
         'user_id' => $this->salesRep->id,
         'status' => 'active',
     ]);
+    $catalog = CatalogSetting::factory()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'public_link_active' => true,
+    ]);
+    $parameters = ['token' => $catalog->public_token, 'ref' => $affiliation->tracking_token];
 
-    $response = $this->actingAs($this->salesRep)
-        ->get("/rep/m/{$this->manufacturer->slug}/catalog");
+    $this->actingAs($this->salesRep)->get(route('rep.catalog', $this->manufacturer->slug))
+        ->assertRedirect(route('public.catalog.show', $parameters + ['representante' => '1']));
+    $this->get(route('public.catalog.show', $parameters))->assertInertia(fn ($page) => $page
+        ->where('representative_share_url', null));
+    $this->get(route('public.catalog.show', $parameters + ['representante' => '1']))
+        ->assertHeader('Cache-Control', 'no-store, private')
+        ->assertInertia(fn ($page) => $page
+            ->component('public/catalog')
+            ->where('representative_share_url', route('public.catalog.show', $parameters))
+            ->has('manufacturer', fn ($manufacturer) => $manufacturer
+                ->where('id', $this->manufacturer->id)
+                ->where('name', 'Acme Corporation')
+                ->where('slug', 'acme')
+                ->etc()
+            )
+        );
 
-    $response->assertOk();
-    $response->assertInertia(fn ($page) => $page
-        ->component('rep/manufacturers/catalog')
-        ->has('manufacturer', fn ($manufacturer) => $manufacturer
-            ->where('id', $this->manufacturer->id)
-            ->where('name', 'Acme Corporation')
-            ->where('slug', 'acme')
-            ->etc()
-        )
-    );
+    $otherRep = User::factory()->create(['user_type' => UserType::SalesRep]);
+    $this->actingAs($otherRep)->get(route('public.catalog.show', $parameters + ['representante' => '1']))
+        ->assertInertia(fn ($page) => $page->where('representative_share_url', null));
+    auth()->logout();
+    $this->get(route('public.catalog.show', $parameters + ['representante' => '1']))
+        ->assertInertia(fn ($page) => $page->where('representative_share_url', null));
 });
 
 it('denies access to catalog without active affiliation', function () {
@@ -216,6 +232,38 @@ it('denies access to catalog without active affiliation', function () {
         ->get("/rep/m/{$this->manufacturer->slug}/catalog");
 
     $response->assertForbidden();
+});
+
+it('shares only published operational catalogs using an opaque affiliation reference', function () {
+    $affiliation = ManufacturerAffiliation::factory()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'user_id' => $this->salesRep->id,
+        'status' => 'active',
+    ]);
+    $catalog = CatalogSetting::factory()->create([
+        'manufacturer_id' => $this->manufacturer->id,
+        'public_link_active' => true,
+        'hide_prices' => true,
+        'cover_image_path' => 'catalog/campaign.jpg',
+        'cover_thumbnail_path' => 'catalog/campaign-thumb.jpg',
+    ]);
+    $url = route('public.catalog.show', ['token' => $catalog->public_token, 'ref' => $affiliation->tracking_token]);
+
+    $this->actingAs($this->salesRep)
+        ->get(route('rep.manufacturers.index', ['status' => 'mine']))
+        ->assertInertia(fn ($page) => $page
+            ->where('manufacturers.data.0.share_url', $url)
+            ->where('manufacturers.data.0.cover_url', Illuminate\Support\Facades\Storage::disk(config('filesystems.catalog_media_disk', 'public'))->url('catalog/campaign-thumb.jpg')));
+    $this->get(route('rep.catalog', $this->manufacturer->slug))
+        ->assertRedirect($url.'&representante=1');
+
+    $catalog->update(['public_link_active' => false]);
+    $this->get(route('rep.manufacturers.index', ['status' => 'mine']))
+        ->assertInertia(fn ($page) => $page
+            ->where('manufacturers.data.0.share_url', null)
+            ->where('manufacturers.data.0.cover_url', null));
+    $this->get(route('rep.catalog', $this->manufacturer->slug))
+        ->assertNotFound();
 });
 
 it('denies access to catalog with pending affiliation', function () {

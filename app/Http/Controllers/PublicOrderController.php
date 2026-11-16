@@ -14,6 +14,7 @@ use App\Services\OrderService;
 use App\Services\PlanLimitService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -60,18 +61,17 @@ class PublicOrderController extends Controller
         // Resolve sales rep from tracking ref
         $ref = $request->query('ref');
 
-        if ($ref) {
-            $data['tracking_ref'] = $ref;
+        if (is_string($ref) && (Str::isUuid($ref) || preg_match('/^[1-9][0-9]{0,17}$/D', $ref))) {
             $salesRep = ManufacturerAffiliation::query()
                 ->where('manufacturer_id', $catalogSetting->manufacturer_id)
                 ->where('status', 'active')
                 ->whereHas('user', fn ($q) => $q->where('user_type', UserType::SalesRep->value))
-                ->with('user')
-                ->get()
-                ->first(fn ($aff) => $aff->user->id == $ref || str_contains(strtolower($aff->user->name), strtolower($ref)));
+                ->where(Str::isUuid($ref) ? 'tracking_token' : 'user_id', $ref)
+                ->first();
 
             if ($salesRep) {
                 $data['sales_rep_id'] = $salesRep->user_id;
+                $data['tracking_ref'] = $ref;
             }
         }
 

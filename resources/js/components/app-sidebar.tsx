@@ -87,7 +87,7 @@ function useNavItems() {
             common: [
                 ...common,
                 {
-                    title: 'Fabricantes',
+                    title: 'Vitrine',
                     href: rep.manufacturers.index(),
                     icon: Building2,
                 },

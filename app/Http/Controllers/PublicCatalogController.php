@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\UserType;
 use App\Enums\WhatsappInstanceStatus;
 use App\Http\Requests\RestoreCatalogSelectionRequest;
 use App\Http\Resources\CatalogSettingResource;
 use App\Http\Resources\ProductCatalogResource;
 use App\Models\CatalogSetting;
 use App\Models\CatalogVisit;
+use App\Models\ManufacturerAffiliation;
 use App\Models\OrderRule;
 use App\Models\Product;
 use App\Models\ProductCategory;
@@ -21,6 +23,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class PublicCatalogController extends Controller
 {
@@ -60,7 +63,7 @@ class PublicCatalogController extends Controller
             ->header('Cache-Control', 'no-store, private');
     }
 
-    public function show(Request $request, string $token): Response
+    public function show(Request $request, string $token): Response|HttpResponse
     {
         $setting = CatalogSetting::query()
             ->with('manufacturer')
@@ -75,6 +78,15 @@ class PublicCatalogController extends Controller
                     'name' => $setting->manufacturer->name,
                 ],
             ]);
+        }
+
+        $representativeView = $request->query('representante') === '1';
+        $shareUrl = $representativeView ? $this->representativeShareUrl($request, $setting) : null;
+
+        if ($shareUrl !== null) {
+            return $this->renderCatalog($request, $setting, representativeShareUrl: $shareUrl)
+                ->toResponse($request)
+                ->header('Cache-Control', 'private, no-store');
         }
 
         // Track visit without breaking the render if it fails
@@ -100,7 +112,24 @@ class PublicCatalogController extends Controller
         return $this->renderCatalog($request, $setting);
     }
 
-    private function renderCatalog(Request $request, CatalogSetting $setting, bool $preview = false): Response
+    private function representativeShareUrl(Request $request, CatalogSetting $setting): ?string
+    {
+        $user = $request->user();
+        $ref = $request->query('ref');
+
+        if ($user?->user_type !== UserType::SalesRep || ! $user->hasVerifiedEmail() || ! is_string($ref) || ! Str::isUuid($ref)) {
+            return null;
+        }
+
+        return ManufacturerAffiliation::query()
+            ->whereBelongsTo($setting->manufacturer)
+            ->where('user_id', $user->id)
+            ->where('status', 'active')
+            ->where('tracking_token', $ref)
+            ->first()?->catalogShareUrl($setting->manufacturer);
+    }
+
+    private function renderCatalog(Request $request, CatalogSetting $setting, bool $preview = false, ?string $representativeShareUrl = null): Response
     {
         $search = $preview ? '' : trim((string) $request->input('search', ''));
         $categoryId = ! $preview && $request->filled('category_id') ? (string) $request->input('category_id') : null;
@@ -232,6 +261,7 @@ class PublicCatalogController extends Controller
 
         return Inertia::render('public/catalog', [
             'preview_mode' => $preview,
+            'representative_share_url' => $representativeShareUrl,
             'manufacturer' => [
                 'id' => $setting->manufacturer->id,
                 'name' => $setting->manufacturer->name,

@@ -1,4 +1,4 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import {
     AlertCircle,
     ArrowRight,
@@ -40,6 +40,7 @@ import {
 } from 'react';
 import { CatalogHero, catalogHeroSubtitle } from '@/components/catalog-hero';
 import { Pagination } from '@/components/pagination';
+import { RepresentativeShareLink } from '@/components/representative-share-link';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -96,7 +97,12 @@ import {
     type OrderRuleContract,
 } from '@/lib/order-rules';
 import { cn } from '@/lib/utils';
-import { selection as restoreSelection } from '@/routes/public/catalog';
+import {
+    selection as restoreSelection,
+    show as showPublicCatalog,
+} from '@/routes/public/catalog';
+import { store as storePublicOrder } from '@/routes/public/order';
+import rep from '@/routes/rep';
 
 interface Manufacturer {
     id: number;
@@ -217,6 +223,7 @@ interface ProductDisplayOptions {
 
 interface Props {
     preview_mode?: boolean;
+    representative_share_url?: string | null;
     manufacturer: Manufacturer;
     catalog_settings: CatalogSettings;
     products: Paginated<Product>;
@@ -1315,6 +1322,28 @@ function normalizeSelectedFilterVariations(
     );
 }
 
+function catalogAttributionQuery(): Record<string, string> {
+    const query = new URLSearchParams(window.location.search);
+    const attribution: Record<string, string> = {};
+
+    for (const key of [
+        'ref',
+        'representante',
+        'utm_source',
+        'utm_medium',
+        'utm_campaign',
+        'utm_content',
+        'utm_term',
+    ]) {
+        const value = query.get(key);
+        if (value) {
+            attribution[key] = value;
+        }
+    }
+
+    return attribution;
+}
+
 function countActiveFilters(filters: CatalogFilters): number {
     const variationCount = Object.values(filters.variations ?? {}).reduce(
         (total, values) => total + values.length,
@@ -1427,12 +1456,16 @@ function CatalogFiltersDrawer({
             return;
         }
 
-        router.get(`/catalog/${catalogToken}`, payload, {
-            preserveState: false,
-            preserveScroll: true,
-            replace: true,
-            onSuccess: () => setOpen(false),
-        });
+        router.get(
+            showPublicCatalog.url(catalogToken),
+            { ...catalogAttributionQuery(), ...payload },
+            {
+                preserveState: false,
+                preserveScroll: true,
+                replace: true,
+                onSuccess: () => setOpen(false),
+            },
+        );
     };
 
     const clearFilters = () => {
@@ -1452,8 +1485,8 @@ function CatalogFiltersDrawer({
         }
 
         router.get(
-            `/catalog/${catalogToken}`,
-            {},
+            showPublicCatalog.url(catalogToken),
+            catalogAttributionQuery(),
             {
                 preserveState: false,
                 preserveScroll: true,
@@ -1720,11 +1753,15 @@ function CatalogCollections({
             return;
         }
 
-        router.get(`/catalog/${catalogToken}`, payload, {
-            preserveState: false,
-            preserveScroll: true,
-            replace: true,
-        });
+        router.get(
+            showPublicCatalog.url(catalogToken),
+            { ...catalogAttributionQuery(), ...payload },
+            {
+                preserveState: false,
+                preserveScroll: true,
+                replace: true,
+            },
+        );
     };
 
     if (variant === 'boutique') {
@@ -3674,7 +3711,23 @@ export default function PublicCatalog({
     order_rules: publishedRules,
     whatsapp_checkout: publishedWhatsapp,
     preview_mode = false,
+    representative_share_url,
 }: Props) {
+    const representativeBarRef = useRef<HTMLElement>(null);
+    const [representativeBarHeight, setRepresentativeBarHeight] = useState(84);
+
+    useEffect(() => {
+        const bar = representativeBarRef.current;
+        if (!bar) return;
+
+        const measure = () => setRepresentativeBarHeight(bar.offsetHeight);
+        measure();
+        const observer = new ResizeObserver(measure);
+        observer.observe(bar);
+
+        return () => observer.disconnect();
+    }, [representative_share_url]);
+
     const [previewSettings, setPreviewSettings] = useState<
         Partial<CatalogSettings>
     >({});
@@ -4457,7 +4510,9 @@ export default function PublicCatalog({
         const params = new URLSearchParams(url.search);
 
         router.post(
-            `/catalog/${catalog_token}/orders`,
+            storePublicOrder.url(catalog_token, {
+                query: { ref: params.get('ref') },
+            }),
             {
                 customer_name: customerName,
                 request_quote: cartRequiresQuote,
@@ -4573,6 +4628,9 @@ export default function PublicCatalog({
                 ['--brand-heading-font' as string]: headingFont,
                 ['--brand-body-font' as string]: bodyFont,
                 ...backgroundStyle,
+                paddingBottom: representative_share_url
+                    ? representativeBarHeight
+                    : undefined,
             }}
         >
             {catalog_settings.background_mode === 'image' &&
@@ -4604,6 +4662,9 @@ export default function PublicCatalog({
             <Head
                 title={`Catalogo - ${catalog_settings.brand_name ?? manufacturer.name}`}
             >
+                {representative_share_url && (
+                    <meta name="robots" content="noindex" />
+                )}
                 <link rel="preconnect" href="https://fonts.bunny.net" />
                 <link
                     href="https://fonts.bunny.net/css?family=sora:400,500,600,700|manrope:400,500,600,700|space-grotesk:400,500,600,700|fraunces:400,600,700|ibm-plex-sans:400,500,600,700"
@@ -4736,6 +4797,43 @@ export default function PublicCatalog({
             />
 
             {/* Floating cart button */}
+            {representative_share_url && (
+                <aside
+                    ref={representativeBarRef}
+                    aria-label="Ações do representante"
+                    className="fixed inset-x-0 bottom-0 z-30 border-t border-[#d8d3cb] bg-[#f6f4f0] font-zouth-body text-[#18181f]"
+                >
+                    <div className="mx-auto grid max-w-7xl gap-2 px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:flex sm:items-start sm:justify-between sm:gap-5 sm:px-6 sm:pt-3 sm:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+                        <Link
+                            href={rep.manufacturers.index({
+                                query: { status: 'mine' },
+                            })}
+                            className="w-fit self-center text-sm font-semibold underline underline-offset-4 focus-visible:outline-2"
+                        >
+                            Voltar à Vitrine
+                        </Link>
+                        <div className="grid min-w-0 grid-cols-2 items-start gap-2 sm:flex">
+                            <RepresentativeShareLink
+                                url={representative_share_url}
+                                label="Copiar link de afiliado"
+                                compact
+                            />
+                            <a
+                                href={`https://wa.me/?text=${encodeURIComponent(`Conheça a coleção de ${catalog_settings.brand_name ?? manufacturer.name}: ${representative_share_url}`)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex min-h-11 items-center justify-center gap-2 rounded-[2px] bg-[#18181f] px-2 text-center text-sm leading-tight font-semibold text-white hover:bg-[#303039] focus-visible:outline-2 focus-visible:outline-offset-2 sm:px-4"
+                            >
+                                <MessageCircle
+                                    aria-hidden="true"
+                                    className="size-4 shrink-0"
+                                />
+                                Compartilhar no WhatsApp
+                            </a>
+                        </div>
+                    </div>
+                </aside>
+            )}
             {cartTotal > 0 && (
                 <button
                     type="button"
@@ -4743,6 +4841,9 @@ export default function PublicCatalog({
                     className="fixed right-6 bottom-6 z-40 flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-xl transition-transform hover:scale-105"
                     style={{
                         backgroundColor: catalog_settings.primary_color,
+                        bottom: representative_share_url
+                            ? representativeBarHeight + 16
+                            : undefined,
                     }}
                 >
                     <ShoppingCart className="h-5 w-5" />

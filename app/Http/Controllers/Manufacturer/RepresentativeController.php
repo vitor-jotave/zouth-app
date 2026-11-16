@@ -55,9 +55,7 @@ class RepresentativeController extends Controller
         $affiliationData = $affiliations->map(function (ManufacturerAffiliation $affiliation) use ($manufacturer, $performance): array {
             $profile = $affiliation->user->salesRepresentativeProfile;
             $repPerformance = $performance->get($affiliation->user_id);
-            $catalogUrl = $manufacturer->catalogSetting?->public_link_active
-                ? route('public.catalog.show', ['token' => $manufacturer->catalogSetting->public_token, 'ref' => $affiliation->user_id])
-                : null;
+            $catalogUrl = $affiliation->catalogShareUrl($manufacturer);
 
             return [
                 'id' => $affiliation->id,
