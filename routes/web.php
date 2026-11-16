@@ -31,6 +31,7 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductMediaController;
 use App\Http\Controllers\PublicCatalogController;
 use App\Http\Controllers\PublicOrderController;
+use App\Http\Controllers\Rep\AssistedSelectionController as RepAssistedSelectionController;
 use App\Http\Controllers\Rep\CommercialProfileController as RepCommercialProfileController;
 use App\Http\Controllers\Rep\CustomerController as RepCustomerController;
 use App\Http\Controllers\Rep\DashboardController as RepDashboardController;
@@ -378,6 +379,8 @@ Route::middleware(['auth', 'verified', 'superadmin'])->prefix('admin')->name('ad
 // Sales Rep Routes
 Route::middleware(['auth', 'verified', 'sales.rep'])->prefix('rep')->name('rep.')->group(function () {
     Route::get('dashboard', RepDashboardController::class)->name('dashboard');
+    Route::post('catalog/{token}/assisted-selections', RepAssistedSelectionController::class)
+        ->middleware('throttle:20,1')->name('assisted-selections.store');
 
     Route::controller(RepManufacturerController::class)->prefix('manufacturers')->name('manufacturers.')->group(function () {
         Route::get('/', 'index')->name('index');

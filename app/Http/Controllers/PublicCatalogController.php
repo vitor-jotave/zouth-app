@@ -7,6 +7,7 @@ use App\Enums\WhatsappInstanceStatus;
 use App\Http\Requests\RestoreCatalogSelectionRequest;
 use App\Http\Resources\CatalogSettingResource;
 use App\Http\Resources\ProductCatalogResource;
+use App\Models\AssistedSelection;
 use App\Models\CatalogSetting;
 use App\Models\CatalogVisit;
 use App\Models\ManufacturerAffiliation;
@@ -109,6 +110,12 @@ class PublicCatalogController extends Controller
             report($e);
         }
 
+        if ($request->query->has('selecao')) {
+            return $this->renderCatalog($request, $setting)
+                ->toResponse($request)
+                ->header('Cache-Control', 'private, no-store');
+        }
+
         return $this->renderCatalog($request, $setting);
     }
 
@@ -131,6 +138,8 @@ class PublicCatalogController extends Controller
 
     private function renderCatalog(Request $request, CatalogSetting $setting, bool $preview = false, ?string $representativeShareUrl = null): Response
     {
+        $hasSharedSelection = ! $preview && $representativeShareUrl === null && $request->query->has('selecao');
+        $assistedSelection = $hasSharedSelection ? AssistedSelection::findForCatalog($setting, $request->query('selecao')) : null;
         $search = $preview ? '' : trim((string) $request->input('search', ''));
         $categoryId = ! $preview && $request->filled('category_id') ? (string) $request->input('category_id') : null;
         $variationFilters = $preview ? [] : $this->normalizeVariationFilters($request->input('variations', []));
@@ -262,6 +271,11 @@ class PublicCatalogController extends Controller
         return Inertia::render('public/catalog', [
             'preview_mode' => $preview,
             'representative_share_url' => $representativeShareUrl,
+            'assisted_selection' => $assistedSelection ? [
+                'token' => $assistedSelection->token,
+                'items' => $assistedSelection->items,
+            ] : null,
+            'assisted_selection_unavailable' => $hasSharedSelection && $assistedSelection === null,
             'manufacturer' => [
                 'id' => $setting->manufacturer->id,
                 'name' => $setting->manufacturer->name,

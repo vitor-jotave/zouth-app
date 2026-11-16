@@ -9,6 +9,7 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('auth:clear-resets')->daily();
+Schedule::command('model:prune', ['--model' => [\App\Models\AssistedSelection::class]])->daily();
 Schedule::command('queue:prune-batches')->daily();
 Schedule::command('queue:prune-failed --hours=168')->daily();
 Schedule::command('app:anonymize-catalog-visits')->daily();
