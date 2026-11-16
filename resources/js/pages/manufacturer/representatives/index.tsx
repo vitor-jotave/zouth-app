@@ -625,6 +625,17 @@ function FocusPanel({ item }: { item: SelectedItem | null }) {
                 </Fact>
             </div>
 
+            <Button
+                asChild
+                variant="outline"
+                className="mt-5 min-h-11 w-full justify-between rounded-[2px] shadow-none"
+            >
+                <Link href={manufacturer.representatives.show(affiliation.id)}>
+                    Ver dashboard
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+            </Button>
+
             {!isPending && affiliation.performance.orders_count > 0 && (
                 <a
                     href={`#sales-history-${affiliation.id}`}

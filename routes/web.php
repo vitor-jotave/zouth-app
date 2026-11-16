@@ -186,6 +186,7 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant', 'manufacturer.enti
             ->middleware('manufacturer.capability:affiliations.manage')
             ->group(function () {
                 Route::get('/', 'index')->name('index');
+                Route::get('{affiliation}', 'show')->whereNumber('affiliation')->name('show');
                 Route::post('{affiliation}/approve', 'approve')->name('approve');
                 Route::post('{affiliation}/reject', 'reject')->name('reject');
                 Route::post('{affiliation}/revoke', 'revoke')->name('revoke');

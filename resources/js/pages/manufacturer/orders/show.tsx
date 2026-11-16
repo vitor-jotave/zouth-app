@@ -101,6 +101,10 @@ type Order = {
 
 type Props = {
     order: Order;
+    representative_return?: {
+        id: number;
+        query: { period: string; type: string; status: string; page: number };
+    } | null;
 };
 
 const operationalStatusOrder = [
@@ -249,7 +253,7 @@ function DetailRow({
     );
 }
 
-export default function OrderShow({ order }: Props) {
+export default function OrderShow({ order, representative_return }: Props) {
     const isQuote = order.order_type === 'quote';
     const [internalNotes, setInternalNotes] = useDraftState(
         `order-notes:${order.id}`,
@@ -282,9 +286,19 @@ export default function OrderShow({ order }: Props) {
     const notesAreDirty = internalNotes !== savedNotes;
     useUnsavedChangesGuard(notesAreDirty);
 
+    const back = representative_return
+        ? manufacturer.representatives.show(representative_return.id, {
+              query: representative_return.query,
+          })
+        : manufacturer.orders.index();
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Visão geral', href: dashboard().url },
-        { title: 'Pedidos', href: manufacturer.orders.index().url },
+        {
+            title: representative_return
+                ? 'Dashboard do representante'
+                : 'Pedidos',
+            href: back.url,
+        },
         {
             title: `#${String(order.id).padStart(4, '0')}`,
             href: manufacturer.orders.show(order.id).url,
@@ -327,11 +341,13 @@ export default function OrderShow({ order }: Props) {
 
             <div className="mx-auto flex w-full max-w-[1720px] flex-1 flex-col px-5 py-8 sm:px-7 md:px-9 lg:pt-8 lg:pb-12 xl:px-12 2xl:px-14">
                 <Link
-                    href={manufacturer.orders.index().url}
+                    href={back}
                     className="mb-7 inline-flex min-h-11 w-fit items-center gap-2 text-sm font-bold text-foreground transition-colors hover:text-[#d9382b] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#ff4d3d]"
                 >
                     <ArrowLeft className="size-4" aria-hidden="true" />
-                    Voltar para pedidos
+                    {representative_return
+                        ? 'Voltar ao dashboard do representante'
+                        : 'Voltar para pedidos'}
                 </Link>
 
                 <AppPageHeader
