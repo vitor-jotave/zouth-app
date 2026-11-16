@@ -311,6 +311,8 @@ Route::middleware(['auth', 'verified', 'manufacturer.tenant', 'manufacturer.enti
             Route::get('conversations/list', [WhatsappChatController::class, 'conversationsList'])->name('conversations.list');
             Route::get('conversations/{conversation}/messages', [WhatsappChatController::class, 'messages'])->name('conversations.messages');
             Route::post('conversations/{conversation}/messages', [WhatsappChatController::class, 'sendMessage'])->name('conversations.send');
+            Route::post('conversations/{conversation}/attachments', [WhatsappChatController::class, 'sendAttachment'])
+                ->middleware('throttle:20,1')->name('conversations.attachments');
             Route::get('messages/{message}/media', [WhatsappChatController::class, 'media'])->name('messages.media');
             Route::post('messages/{message}/reaction', [WhatsappChatController::class, 'react'])->name('messages.reaction');
             Route::post('conversations/{conversation}/products/pdf', [WhatsappChatController::class, 'sendProductsPdf'])->name('conversations.products.pdf');

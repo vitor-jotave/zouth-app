@@ -1021,6 +1021,17 @@ export default function AtendimentoIndex({
                 }}
                 onOpenFunnel={openFunnelPreview}
                 onSendMessage={sendMessage}
+                onAttachmentSent={(conversationId, message) => {
+                    if (previousConversationIdRef.current !== conversationId)
+                        return;
+                    shouldScrollMessagesRef.current = true;
+                    messageScrollBehaviorRef.current = 'smooth';
+                    setMessages((current) =>
+                        current.some((entry) => entry.id === message.id)
+                            ? current
+                            : [...current, message],
+                    );
+                }}
                 onReactToMessage={reactToMessage}
             />
 
