@@ -37,6 +37,7 @@ import { show as showFunnelRun } from '@/routes/manufacturer/atendimento/funnel-
 import { reaction as messageReactionRoute } from '@/routes/manufacturer/atendimento/messages';
 import type { BreadcrumbItem } from '@/types';
 import { AtendimentoWorkspace } from './components/atendimento-workspace';
+import type { ContactLabel } from './components/contact-labels';
 import type { QuickReply } from './quick-reply-types';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -149,6 +150,8 @@ interface Props {
     messages: Message[];
     funnels: WhatsappFunnel[];
     quick_replies: QuickReply[];
+    contact_labels?: ContactLabel[];
+    active_contact_labels?: ContactLabel[];
 }
 
 function xsrfToken(): string {
@@ -238,6 +241,8 @@ export default function AtendimentoIndex({
     messages: initialMessages,
     funnels,
     quick_replies,
+    contact_labels = [],
+    active_contact_labels = [],
 }: Props) {
     const [conversations, setConversations] = useState(initialConversations);
     const activeConversationSummary = conversations.find(
@@ -992,6 +997,8 @@ export default function AtendimentoIndex({
                         : active_conversation
                 }
                 messages={messages}
+                contactLabels={contact_labels}
+                assignedLabels={active_contact_labels}
                 funnels={funnels}
                 quickReplies={quick_replies}
                 funnelActionFeedback={funnelActionFeedback}

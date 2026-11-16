@@ -27,6 +27,11 @@ import type {
 } from '../index';
 import type { QuickReply } from '../quick-reply-types';
 import {
+    ContactLabelChips,
+    ContactLabelEditor,
+    type ContactLabel,
+} from './contact-labels';
+import {
     MessageReactionBadges,
     MessageReactionMenu,
 } from './message-reaction-menu';
@@ -37,6 +42,8 @@ type InboxMode = 'all' | 'unread';
 interface AtendimentoWorkspaceProps {
     conversations: Conversation[];
     activeConversation: ActiveConversation | null;
+    contactLabels: ContactLabel[];
+    assignedLabels: ContactLabel[];
     messages: Message[];
     funnels: WhatsappFunnel[];
     quickReplies: QuickReply[];
@@ -231,6 +238,8 @@ function ContactAvatar({
 export function AtendimentoWorkspace({
     conversations,
     activeConversation,
+    contactLabels,
+    assignedLabels,
     messages,
     funnels,
     quickReplies,
@@ -595,19 +604,44 @@ export function AtendimentoWorkspace({
                                     </div>
                                 </div>
                             </div>
-                            <button
-                                type="button"
-                                onClick={onOpenProducts}
-                                disabled={
-                                    sending || sendingProduct || funnelRunning
-                                }
-                                className="hidden min-h-10 items-center gap-2 border border-[#f6f4f0]/14 px-4 text-xs font-bold text-[#f6f4f0] hover:border-[#ff4d3d] disabled:cursor-not-allowed disabled:opacity-45 sm:flex"
-                            >
-                                <Shirt className="size-4 text-[#ff4d3d]" />
-                                Apresentar coleção
-                            </button>
+                            <div className="flex shrink-0 items-center gap-2">
+                                {!activeConversation.is_group && (
+                                    <ContactLabelEditor
+                                        key={activeConversation.id}
+                                        contact={{
+                                            id: activeConversation.id,
+                                            name: activeConversation.display_name,
+                                            labels: assignedLabels,
+                                        }}
+                                        labels={contactLabels}
+                                        compact
+                                        chat
+                                    />
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={onOpenProducts}
+                                    disabled={
+                                        sending ||
+                                        sendingProduct ||
+                                        funnelRunning
+                                    }
+                                    className="hidden min-h-10 items-center gap-2 border border-[#f6f4f0]/14 px-4 text-xs font-bold text-[#f6f4f0] hover:border-[#ff4d3d] disabled:cursor-not-allowed disabled:opacity-45 sm:flex"
+                                >
+                                    <Shirt className="size-4 text-[#ff4d3d]" />
+                                    Apresentar coleção
+                                </button>
+                            </div>
                         </header>
 
+                        {!activeConversation.is_group &&
+                            assignedLabels.length > 0 && (
+                                <div className="flex max-h-20 shrink-0 flex-wrap items-center gap-2 overflow-y-auto border-b border-white/12 px-4 py-2 sm:px-6">
+                                    <ContactLabelChips
+                                        labels={assignedLabels}
+                                    />
+                                </div>
+                            )}
                         <ScrollArea className="min-h-0 flex-1">
                             <div className="mx-auto flex min-h-full max-w-4xl flex-col justify-end gap-4 px-4 py-7 sm:px-7">
                                 {messages.length === 0 && (

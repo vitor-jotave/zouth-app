@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class WhatsappConversation extends Model
@@ -42,6 +43,11 @@ class WhatsappConversation extends Model
     public function messages(): HasMany
     {
         return $this->hasMany(WhatsappMessage::class);
+    }
+
+    public function contactLabels(): BelongsToMany
+    {
+        return $this->belongsToMany(WhatsappContactLabel::class, 'whatsapp_contact_label_links', 'conversation_id', 'label_id');
     }
 
     public function markIncomingMessagesRead(): void

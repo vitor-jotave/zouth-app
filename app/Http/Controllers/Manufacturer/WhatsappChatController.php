@@ -11,6 +11,7 @@ use App\Http\Requests\SendWhatsappReactionRequest;
 use App\Http\Resources\WhatsappProductResource;
 use App\Models\Product;
 use App\Models\ProductMedia;
+use App\Models\WhatsappContactLabel;
 use App\Models\WhatsappConversation;
 use App\Models\WhatsappFunnel;
 use App\Models\WhatsappMessage;
@@ -119,6 +120,10 @@ class WhatsappChatController extends Controller
                 'contact_picture_url' => $activeConversation->contact_picture_url,
                 'display_name' => $activeConversation->displayName(),
             ] : null,
+            'contact_labels' => fn () => WhatsappContactLabel::query()->where('manufacturer_id', $manufacturer->id)->orderBy('name')->get(['id', 'name', 'color']),
+            'active_contact_labels' => fn () => $activeConversation && ! $activeConversation->is_group
+                ? $activeConversation->contactLabels()->where('manufacturer_id', $manufacturer->id)->orderBy('name')->get(['whatsapp_contact_labels.id', 'name', 'color'])->map(fn (WhatsappContactLabel $label): array => $label->only(['id', 'name', 'color']))
+                : [],
             'messages' => $messages,
             'quick_replies' => $quickReplies,
             'funnels' => WhatsappFunnel::query()

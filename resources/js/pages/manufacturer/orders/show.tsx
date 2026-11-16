@@ -1,4 +1,4 @@
-import { Head, Link, router } from '@inertiajs/react';
+import { Form, Head, Link, router } from '@inertiajs/react';
 import {
     ArrowLeft,
     ArrowUpRight,
@@ -10,6 +10,7 @@ import {
     FileText,
     Mail,
     MapPin,
+    MessageSquare,
     Package,
     Phone,
     RotateCcw,
@@ -101,6 +102,7 @@ type Order = {
 
 type Props = {
     order: Order;
+    whatsapp_contact?: { valid_phone: boolean; connected: boolean } | null;
     representative_return?: {
         id: number;
         query: { period: string; type: string; status: string; page: number };
@@ -253,7 +255,11 @@ function DetailRow({
     );
 }
 
-export default function OrderShow({ order, representative_return }: Props) {
+export default function OrderShow({
+    order,
+    representative_return,
+    whatsapp_contact,
+}: Props) {
     const isQuote = order.order_type === 'quote';
     const [internalNotes, setInternalNotes] = useDraftState(
         `order-notes:${order.id}`,
@@ -576,6 +582,65 @@ export default function OrderShow({ order, representative_return }: Props) {
                                         >
                                             {formattedPhone}
                                         </a>
+                                    </DetailRow>
+                                )}
+                                {whatsapp_contact && (
+                                    <DetailRow
+                                        icon={MessageSquare}
+                                        label="Atendimento"
+                                    >
+                                        {!whatsapp_contact.valid_phone ? (
+                                            <span className="text-muted-foreground">
+                                                Este pedido não tem um telefone
+                                                válido.
+                                            </span>
+                                        ) : !whatsapp_contact.connected ? (
+                                            <Link
+                                                href={manufacturer.atendimento.channels()}
+                                                className="font-semibold underline underline-offset-4"
+                                            >
+                                                Conecte um canal para abrir a
+                                                conversa
+                                            </Link>
+                                        ) : (
+                                            <Form
+                                                action={manufacturer.atendimento.orders.open(
+                                                    order.id,
+                                                )}
+                                            >
+                                                {({ processing, errors }) => (
+                                                    <>
+                                                        <Button
+                                                            type="submit"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            disabled={
+                                                                processing
+                                                            }
+                                                            className="min-h-10 whitespace-normal"
+                                                        >
+                                                            {processing
+                                                                ? 'Abrindo…'
+                                                                : 'Abrir no atendimento'}
+                                                            <ArrowUpRight
+                                                                className="size-3.5"
+                                                                aria-hidden="true"
+                                                            />
+                                                        </Button>
+                                                        {errors.atendimento && (
+                                                            <p
+                                                                role="alert"
+                                                                className="mt-2 text-destructive"
+                                                            >
+                                                                {
+                                                                    errors.atendimento
+                                                                }
+                                                            </p>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </Form>
+                                        )}
                                     </DetailRow>
                                 )}
                                 {order.customer_email && (
