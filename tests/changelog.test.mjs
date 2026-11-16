@@ -33,9 +33,28 @@ function load(path, overrides = {}) {
     return exports;
 }
 const releases = load('lib/changelog.ts');
-test('changelog highlights the representative portal without replacing earlier releases', () => {
+test('changelog opens with the WhatsApp attendance release', () => {
     const [release] = releases.changelog;
-    assert.equal(release.id, '2026-11-16-portal-representantes');
+    assert.equal(release.id, '2026-11-16-atendimento-whatsapp');
+    assert.equal(release.date, '2026-11-16');
+    for (const title of [
+        'Contatos e etiquetas',
+        'Atendimento direto do pedido',
+        'Mensagens de voz e anexos',
+        'Nome certo na conversa',
+        'Reconexão sem perder o histórico',
+        'Novo PDF para apresentar a coleção',
+    ]) {
+        assert.ok(
+            release.updates.some((entry) => entry.title === title),
+            title,
+        );
+    }
+});
+test('changelog highlights the representative portal without replacing earlier releases', () => {
+    const release = releases.changelog.find(
+        ({ id }) => id === '2026-11-16-portal-representantes',
+    );
     assert.equal(release.date, '2026-11-16');
     assert.equal(release.updates.length, 6);
     assert.ok(
