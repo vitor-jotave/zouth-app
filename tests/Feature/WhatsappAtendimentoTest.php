@@ -1,11 +1,14 @@
 <?php
 
 use App\Models\Manufacturer;
+use App\Models\Product;
+use App\Models\ProductMedia;
 use App\Models\User;
 use App\Models\WhatsappConversation;
 use App\Models\WhatsappInstance;
 use App\Models\WhatsappMessage;
 use App\Services\EvolutionApiService;
+use App\Services\ProductCatalogPdfService;
 use App\Services\WhatsappContactProfileSyncService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
@@ -17,6 +20,36 @@ beforeEach(function () {
     config()->set('evolution.api_key', 'test-evolution-api-key');
     config()->set('evolution.webhook_rate_limit', 1000);
     config()->set('evolution.webhook_invalid_rate_limit', 60);
+});
+
+test('chat collection PDF uses A4 pagination and omits unselected product details', function () {
+    $manufacturer = Manufacturer::factory()->create();
+    config(['filesystems.catalog_media_disk' => 'public']);
+    $disk = Storage::fake('public');
+    $photos = Storage::fake('s3');
+    $photo = 'collection/vestido.jpg';
+    $photos->put($photo, file_get_contents(database_path('seeders/assets/demo-showroom/vestido-azul.jpg')));
+    $products = Product::factory()->count(3)->make()
+        ->each(fn (Product $product) => $product->setRelation('media', collect([
+            new ProductMedia(['type' => \App\Enums\ProductMediaType::Image, 'path' => $photo]),
+        ])));
+    $generator = app(ProductCatalogPdfService::class);
+    $options = ['include_photo' => true, 'include_price' => true, 'include_description' => true, 'include_sku' => true];
+    $full = $disk->get($generator->generate($manufacturer, $products, $options)['path']);
+
+    expect($full)->toStartWith('%PDF-1.4')
+        ->toContain('/MediaBox [0 0 595.28 841.89]', '/Type /Pages /Count 2');
+
+    $hidden = array_fill_keys(array_keys($options), false);
+    $compact = $disk->get($generator->generate($manufacturer, $products, $hidden)['path']);
+    $products->each(fn (Product $product) => $product->forceFill([
+        'sku' => 'NEW-123',
+        'price_cents' => 59500,
+        'description' => 'Este texto não deve aparecer.',
+    ])->setRelation('media', collect()));
+    $edited = $disk->get($generator->generate($manufacturer, $products, $hidden)['path']);
+
+    expect($compact)->toContain('/Type /Pages /Count 1')->toBe($edited);
 });
 
 function createWhatsappTestManufacturer(): array
@@ -277,6 +310,7 @@ test('disconnecting and pairing the same or a different number preserves chat hi
         '*/instance/fetchInstances*' => Http::response([['ownerJid' => "{$pairedNumber}@s.whatsapp.net"]]),
     ]);
 
+    $url = "/manufacturer/atendimento/instances/{$instance->id}";
     $this->actingAs($user)
         ->delete($url)
         ->assertRedirect();
